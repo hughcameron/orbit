@@ -18,7 +18,7 @@ Generate a validated specification from interview results or conversation contex
 ### 1. Gather Interview Context
 
 - If an interview file path is provided: Read it
-- If no file path: Check conversation history for a recent `/orb:interview` session
+- If no file path: Check conversation history for a recent `/orb:design` or `/orb:discovery` session
 - If neither: Ask the user what to crystallise
 
 ### 2. Assess Ambiguity
@@ -31,7 +31,7 @@ Score clarity before generating:
 
 **Formula:** `ambiguity = 1 - (goal * 0.40 + constraints * 0.30 + criteria * 0.30)`
 
-**Threshold:** Ambiguity must be ≤ 0.2. If higher, suggest returning to `/orb:interview`.
+**Threshold:** Ambiguity must be ≤ 0.2. If higher, suggest returning to `/orb:design` or `/orb:discovery`.
 
 ```
 Ambiguity Assessment:

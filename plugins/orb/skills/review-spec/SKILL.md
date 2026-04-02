@@ -79,4 +79,4 @@ Save the review to: `specs/YYYY-MM-DD-<topic>/review-spec-<date>.md`
 
 - **APPROVE**: "I couldn't find problems" (not "this is good")
 - **REQUEST_CHANGES**: Specific changes needed before implementation
-- **BLOCK**: Plan needs rework — return to `/orb:interview`
+- **BLOCK**: Plan needs rework — return to `/orb:design` or `/orb:discovery`

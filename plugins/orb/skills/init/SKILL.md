@@ -47,7 +47,8 @@ If `CLAUDE.md` does not exist, create it. If it exists, append to it — but onl
 This project uses the orbit workflow: Card → Interview → Spec → Review → Ship.
 
 - `/orb:card` — capture a feature need with expected behaviours
-- `/orb:interview` — clarify requirements via Socratic Q&A
+- `/orb:discovery` — explore a vague idea through Socratic Q&A
+- `/orb:design` — refine a feature card into technical decisions
 - `/orb:spec` — crystallise interview into a structured specification
 - `/orb:review-spec` — stress-test the spec before implementation
 - `/orb:review-pr` — verify the PR against the spec's acceptance criteria
@@ -76,4 +77,4 @@ This skill is idempotent. Running it again on an already-initialised project:
 
 ---
 
-**Next step:** Write feature cards with `/orb:card`, then start an interview with `/orb:interview`.
+**Next step:** Write feature cards with `/orb:card`, then refine them with `/orb:design`.

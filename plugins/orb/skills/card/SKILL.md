@@ -91,4 +91,4 @@ Cards don't have a status field. Instead:
 
 ---
 
-**Next step:** Start an interview with `/orb:interview` to refine this card into a specification.
+**Next step:** Refine this card with `/orb:design` to work out the technical approach.
