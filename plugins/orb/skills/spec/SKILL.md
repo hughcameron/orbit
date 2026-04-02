@@ -1,7 +1,6 @@
 ---
 name: spec
 description: Generate a structured YAML specification with numbered ACs from interview results
-disable-model-invocation: true
 ---
 
 # /orb:spec

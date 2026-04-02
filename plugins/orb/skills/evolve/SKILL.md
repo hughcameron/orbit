@@ -1,7 +1,6 @@
 ---
 name: evolve
 description: Iterate a spec based on evaluation results — wonder, reflect, mutate, converge
-disable-model-invocation: true
 ---
 
 # /orb:evolve

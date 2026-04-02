@@ -1,7 +1,6 @@
 ---
 name: init
 description: Set up a project for the orbit workflow — creates directories, CLAUDE.md snippet, and first card
-disable-model-invocation: true
 ---
 
 # /orb:init

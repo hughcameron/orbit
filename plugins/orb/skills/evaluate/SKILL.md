@@ -1,7 +1,6 @@
 ---
 name: evaluate
 description: Three-stage evaluation — mechanical checks, semantic AC verification, consensus deliberation
-disable-model-invocation: true
 ---
 
 # /orb:evaluate
