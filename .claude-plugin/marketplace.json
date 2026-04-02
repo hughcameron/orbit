@@ -1,0 +1,16 @@
+{
+  "name": "orbit",
+  "owner": {
+    "name": "Hugh Cameron"
+  },
+  "metadata": {
+    "description": "Opinionated specification-driven workflow for Claude Code"
+  },
+  "plugins": [
+    {
+      "name": "orb",
+      "source": "./plugins/orb",
+      "description": "Card → Interview → Spec → Implement → Review → Release workflow"
+    }
+  ]
+}
