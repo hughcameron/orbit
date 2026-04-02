@@ -2,7 +2,7 @@
 
 An opinionated specification-driven workflow for [Claude Code](https://claude.ai/claude-code).
 
-**Card → Interview → Spec → Implement → Review → Ship.**
+**Card → Design → Spec → Implement → Review → Ship.**
 
 Every feature starts as a card. Every card becomes a spec. Every spec has acceptance criteria. Every AC maps to a test. The chain is auditable from either end.
 
@@ -24,12 +24,14 @@ This creates the directory structure (`cards/`, `specs/`, `decisions/`), adds a 
 ## Workflow
 
 ```
-Card ──→ Interview ──→ Spec ──→ Implement ──→ Review ──→ Ship
-  │                      │                        │         │
-  │ who, why, scenarios  │ goal, ACs, constraints │ tests   │ card updated
-  │                      │                        │ AC IDs  │ with releases
-  └──────────────────────┴────────────────────────┴─────────┘
-                   artifacts are the handoff
+Card ──→ Design ──→ Spec ──→ Implement ──→ Review ──→ Ship
+  │                   │                       │         │
+  │ who, why, refs    │ goal, ACs, decisions  │ tests   │ card updated
+  │ scenarios         │ constraints           │ AC IDs  │ with releases
+  └───────────────────┴───────────────────────┴─────────┘
+                  artifacts are the handoff
+
+No card? Start with /orb:discovery instead.
 ```
 
 ### Workflow skills
@@ -38,7 +40,8 @@ Card ──→ Interview ──→ Spec ──→ Implement ──→ Review ─
 |-------|---------|
 | `/orb:init` | Set up a project — directories, CLAUDE.md, first card |
 | `/orb:card` | Write a feature card with scenarios |
-| `/orb:interview` | Socratic Q&A to clarify requirements |
+| `/orb:discovery` | Explore a vague idea through Socratic Q&A |
+| `/orb:design` | Refine a card into technical decisions and constraints |
 | `/orb:spec` | Generate a structured spec from an interview |
 | `/orb:review-spec` | Stress-test a spec before implementation |
 | `/orb:review-pr` | Verify a PR against the spec + AC coverage |
