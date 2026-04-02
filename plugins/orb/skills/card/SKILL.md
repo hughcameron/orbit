@@ -1,7 +1,6 @@
 ---
 name: card
 description: Write a feature card — capture who needs what, why, and expected behaviours as scenarios
-disable-model-invocation: true
 ---
 
 # /orb:card

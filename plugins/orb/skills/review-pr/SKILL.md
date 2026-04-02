@@ -3,7 +3,6 @@ name: review-pr
 description: Context-separated PR review — runs tests, checks AC coverage, verifies implementation
 context: fork
 agent: general-purpose
-disable-model-invocation: true
 ---
 
 # /orb:review-pr

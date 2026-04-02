@@ -3,7 +3,6 @@ name: review-spec
 description: Context-separated spec review — spawns a fresh agent to stress-test a plan before implementation
 context: fork
 agent: general-purpose
-disable-model-invocation: true
 ---
 
 # /orb:review-spec

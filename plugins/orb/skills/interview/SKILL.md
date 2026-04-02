@@ -1,7 +1,6 @@
 ---
 name: interview
 description: Socratic interview — clarify requirements via Q&A, save the record as markdown
-disable-model-invocation: true
 ---
 
 # /orb:interview
