@@ -39,6 +39,7 @@ Use **AskUserQuestion** to gather:
    - **when**: Action or event
    - **then**: Observable outcome (in user language, not engineering language)
 6. **Priority**: now / next / later (optional)
+7. **References**: Are there existing tools, libraries, or approaches that inspire this feature? (optional) — these are not solutions, they're prior art that provides context. Examples: "uv: fast, minimal output", "cargo: step-by-step compile progress".
 
 ### 3. Write the Card
 
@@ -62,6 +63,9 @@ scenarios:
     then: "<observable outcome>"
 
 priority: "now"
+
+references:                          # optional — prior art and inspiration
+  - "<tool/approach>: <what's relevant about it>"
 ```
 
 ### 4. Quality Check
