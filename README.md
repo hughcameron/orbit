@@ -103,6 +103,16 @@ Decisions use the [MADR](https://adr.github.io/madr/) format and live in `decisi
 
 Review skills (`/orb:review-spec`, `/orb:review-pr`) run in a forked context — a fresh agent session with no shared conversation history. A reviewer who watched you build something has confirmation bias. A fresh agent reads the spec and diff cold.
 
+### Session hooks
+
+orbit includes a `SessionStart` hook that checks for in-flight specs and suggests the next workflow step. For example:
+
+```
+orbit: 2026-04-02-step-progress — spec ready. Next: implement or /orb:review-spec specs/2026-04-02-step-progress/spec.yaml
+```
+
+The hook is silent when no orbit directories exist or when there's nothing in-flight.
+
 ## Directory structure
 
 orbit prescribes this structure at your project root:
