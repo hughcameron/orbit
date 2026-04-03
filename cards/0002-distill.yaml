@@ -1,0 +1,36 @@
+feature: Distill cards from unstructured input
+as_a: author
+i_want: to extract structured feature cards from memos, discovery interviews, or research output
+so_that: existing work product becomes actionable cards without re-interviewing
+
+scenarios:
+  - name: Distill a memo into a card
+    given: a memo exists at cards/memos/2026-04-04-search-ux.md
+    when: I run /orb:distill cards/memos/2026-04-04-search-ux.md
+    then: one or more draft cards are presented for my approval
+
+  - name: Distill a discovery interview
+    given: a discovery interview exists at specs/2026-04-01-topic/interview.md
+    when: I run /orb:distill specs/2026-04-01-topic/interview.md
+    then: distinct features are identified and offered as separate cards
+
+  - name: Multiple cards from one source
+    given: a source document contains multiple distinct feature ideas
+    when: distill identifies them
+    then: each is presented as a separate card for individual approval or rejection
+
+  - name: Human approval before writing
+    given: distill has extracted candidate cards
+    when: it presents them to me
+    then: I can approve, edit, or reject each one before any file is written
+
+  - name: Card references its source
+    given: a card is created via distill
+    when: I look at the card
+    then: the references field includes the path to the source document
+
+priority: "next"
+
+references:
+  - "/orb:card: interactive interview produces one card"
+  - "/orb:discovery: Socratic Q&A produces interview.md — a common distill input"
