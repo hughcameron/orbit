@@ -1,0 +1,30 @@
+feature: Capture rough ideas as memos
+as_a: author
+i_want: to jot down a rough idea in markdown and have it live in the card pipeline
+so_that: I don't lose ideas that aren't yet structured enough for a full card
+
+scenarios:
+  - name: Quick capture from a note-taking app
+    given: I have a half-formed idea written in Obsidian or similar
+    when: I save it as cards/memos/YYYY-MM-DD-slug.md
+    then: it's part of the orbit workflow and discoverable alongside cards
+
+  - name: Memo is freeform
+    given: I'm capturing an idea quickly
+    when: I write the memo
+    then: there is no required structure — any markdown is valid
+
+  - name: Session hook surfaces memos
+    given: memos exist in cards/memos/
+    when: a new session starts
+    then: the SessionStart hook mentions outstanding memos
+
+  - name: Memo referenced after distill
+    given: a memo has been distilled into a card
+    when: I look at the resulting card
+    then: the card's references field points back to the memo
+
+priority: "next"
+
+references:
+  - "cards/done/ pattern: replaced by status field in card YAML"
