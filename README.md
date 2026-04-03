@@ -45,8 +45,6 @@ No card? Start with /orb:discovery instead.
 | `/orb:spec` | Generate a structured spec from an interview |
 | `/orb:review-spec` | Stress-test a spec before implementation |
 | `/orb:review-pr` | Verify a PR against the spec + AC coverage |
-| `/orb:evaluate` | 3-stage verification (mechanical → semantic → consensus) |
-| `/orb:evolve` | Iterate a spec based on evaluation results |
 
 ### Persona skills
 
@@ -56,10 +54,6 @@ These are loaded by workflow skills — you don't invoke them directly.
 |---------|------|
 | `interviewer` | Socratic questioner |
 | `spec-architect` | Spec extraction with numbered ACs |
-| `advocate` | Case FOR a solution |
-| `contrarian` | Challenge assumptions |
-| `judge` | Render final verdict |
-| `evaluator` | Run the 3-stage pipeline |
 | `ontologist` | Identify essential nature |
 | `simplifier` | Cut complexity |
 | `hacker` | Unconventional workarounds |
@@ -103,7 +97,7 @@ The `/orb:review-pr` skill checks this automatically — it parses the spec for 
 
 ### Decisions
 
-Decisions use the [MADR](https://adr.github.io/madr/) format and live in `decisions/`. They surface during interviews and are recorded immediately — not after implementation.
+Decisions use the [MADR](https://adr.github.io/madr/) format and live in `decisions/`. They surface during design and discovery sessions and are recorded immediately — not after implementation.
 
 ### Context separation
 
@@ -124,8 +118,7 @@ specs/                              # Specifications & knowledge
 │   ├── interview.md
 │   ├── spec.yaml
 │   ├── review-spec-2026-04-02.md
-│   ├── review-pr-2026-04-02.md
-│   └── evaluation-2026-04-02.md
+│   └── review-pr-2026-04-02.md
 └── ...
 
 decisions/                          # MADR decision register

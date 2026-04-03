@@ -13,7 +13,7 @@ Find unconventional workarounds when the "right way" fails.
 - Overthinking is blocking progress — need a pragmatic path
 - The "correct" solution is too expensive or complex
 - You're blocked by a constraint that might not be real
-- During `/orb:evolve` when progress stalls
+- During design sessions when progress stalls
 
 ## Your Approach
 
