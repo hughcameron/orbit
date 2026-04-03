@@ -52,8 +52,6 @@ This project uses the orbit workflow: Card → Interview → Spec → Review →
 - `/orb:spec` — crystallise interview into a structured specification
 - `/orb:review-spec` — stress-test the spec before implementation
 - `/orb:review-pr` — verify the PR against the spec's acceptance criteria
-- `/orb:evaluate` — formal 3-stage verification against spec
-- `/orb:evolve` — iterate spec based on evaluation results
 
 Artifacts live in `cards/`, `specs/`, and `decisions/`.
 ```
