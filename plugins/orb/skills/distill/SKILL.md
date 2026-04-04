@@ -51,7 +51,7 @@ Presenting each for your approval.
 
 ### 3. Determine Card Numbering
 
-Read the `cards/` directory. Find the highest existing `NNNN-*.yaml` number. The first approved card gets that number + 1, and subsequent approvals increment from there.
+Read the `cards/` directory. If `cards/` does not exist, create it and start numbering at `0001`. Otherwise, find the highest existing `NNNN-*.yaml` number. The first approved card gets that number + 1, and subsequent approvals increment from there.
 
 Card numbering is determined at write time (when the user approves), not at extraction time. This is a single-user workflow — concurrent numbering is a known limitation, not a bug to solve.
 
@@ -80,6 +80,8 @@ scenarios:
     then: "<observable outcome>"
     source_lines: "<quoted passage from source>"
 
+priority: "next"                    # default; user can override via edit
+
 references:
   - "<path to source file>"
 ```
@@ -103,10 +105,12 @@ Use **AskUserQuestion** to present each card. Show the full YAML block, then off
 
 When the user chooses "edit":
 
-1. The user's next response is interpreted as **free-text modification instructions** (e.g. "change the feature name to X and add a scenario for error handling")
+1. The user's next response is interpreted as **free-text modification instructions** (e.g. "change the feature name to X" or "split scenario 2 into two scenarios")
 2. Apply the requested changes to the card
 3. Re-present the updated card with the same approve/edit/reject options
 4. **Maximum 3 edit rounds per card.** After 3 edits, present the card one final time and require approve or reject — no further edits.
+
+**Edits and `source_lines`:** If the user requests adding a new scenario during editing that has no corresponding passage in the source document, set `source_lines` to `"user-requested during edit"`. The extract-not-invent rule applies to the *initial* extraction — user-directed edits are explicitly authored, not LLM-invented.
 
 ### 6. Write Approved Cards
 
