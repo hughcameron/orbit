@@ -12,8 +12,18 @@ constraints:
   - Multiple distinct features in a single source MUST be presented as
     separate cards
   - Cards are presented one-by-one for approve/edit/reject — not batch
+  - Candidate cards are presented as formatted YAML blocks. AskUserQuestion
+    suggested answers are ["approve", "edit", "reject"]. On "edit", the
+    user's next response is interpreted as free-text modification instructions.
+    The agent applies changes and re-presents for another approve/edit/reject
+    cycle, up to 3 edit rounds per card, then forces approve or reject.
   - /orb:distill MUST NOT invent scenarios that aren't supported by the
-    source material — it extracts, not imagines
+    source material — it extracts, not imagines. Each extracted scenario
+    MUST include a source_lines field quoting the originating passage from
+    the source document.
+  - Card numbering uses read-then-write on cards/ directory. This is a
+    single-user workflow tool — concurrent numbering is a known limitation,
+    not a bug to solve.
 
 acceptance_criteria:
   - id: ac-01
@@ -48,10 +58,14 @@ acceptance_criteria:
 
   - id: ac-05
     description: >
-      Edited cards incorporate the user's changes before writing.
+      On "edit", the user provides free-text modification instructions. The
+      agent applies changes and re-presents the updated card for another
+      approve/edit/reject cycle, up to 3 rounds.
     verification: >
-      Choose edit on a candidate, modify the feature name. Verify the saved
-      YAML reflects the edited name.
+      Choose edit on a candidate, request "change the feature name to X and
+      add a scenario for error handling". Verify the re-presented card
+      reflects both changes. Approve on the second round. Verify the saved
+      YAML matches the final version.
 
   - id: ac-06
     description: >
@@ -71,11 +85,29 @@ acceptance_criteria:
 
   - id: ac-08
     description: >
-      Scenarios in extracted cards are grounded in the source material — not
-      invented by the LLM.
+      Each scenario in an extracted card includes a source_lines field that
+      quotes the originating passage from the source document. The quoted
+      text must exist verbatim (or near-verbatim) in the source.
     verification: >
-      Compare extracted card scenarios against the source document. Every
-      scenario should trace to a specific passage in the source.
+      Distill a memo. For each scenario in each resulting card, verify the
+      source_lines field is present and grep the source document for the
+      quoted text. Every quote must match.
+
+  - id: ac-09
+    description: >
+      When the input file does not exist or is unreadable, distill reports
+      a clear error message and exits without creating any files.
+    verification: >
+      Run distill with a nonexistent path. Verify an error message is shown
+      and no card files are created.
+
+  - id: ac-10
+    description: >
+      When the input file contains no identifiable feature ideas, distill
+      reports "no features found" rather than hallucinating cards.
+    verification: >
+      Run distill on a file containing only a grocery list. Verify the
+      response says no features were found and no card files are created.
 
 deliverables:
   - path: plugins/orb/skills/distill/SKILL.md
@@ -93,9 +125,10 @@ evaluation_principles:
     weight: 0.25
 
 exit_conditions:
-  - All 8 ACs pass verification
+  - All 10 ACs pass verification
   - Distill works with both memos and interview files
   - No card is written without explicit user approval
+  - Error paths produce clean messages, not hallucinated output
 
 risk_tier: STANDARD
 
@@ -106,7 +139,7 @@ dependencies:
       convention) before distill can consume them as input.
 
 metadata:
-  version: "1.0"
+  version: "1.1"
   timestamp: "2026-04-04T00:00:00Z"
-  ambiguity_score: 0.10
+  ambiguity_score: 0.14
   card_ref: "cards/0002-distill.yaml"
