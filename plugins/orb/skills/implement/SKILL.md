@@ -83,7 +83,7 @@ All items start as `- [ ]` (pending).
 
 ### 4. Implement — Tracking as You Go
 
-Now begin implementation. After completing work that addresses an AC or satisfies a constraint:
+**The pre-flight phase is over. Now write code.** Implement the deliverables from the spec, working through the acceptance criteria. After completing work that addresses an AC or satisfies a constraint:
 
 1. Update `progress.md` to mark the item done: `- [x] ac-01: <description> — <brief note>`
 2. State which AC(s) were addressed in your response
