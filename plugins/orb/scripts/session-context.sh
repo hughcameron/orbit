@@ -9,6 +9,30 @@ if [[ ! -d "specs" ]] && [[ ! -d "cards" ]]; then
   exit 0
 fi
 
+# Surface outstanding memos (not yet referenced by any card)
+if [[ -d "cards/memos" ]]; then
+  memo_files=$(find cards/memos -maxdepth 1 -name '*.md' 2>/dev/null | sort)
+  if [[ -n "$memo_files" ]]; then
+    # Collect all references from card YAML files
+    all_refs=$(grep -h '^\s*- ' cards/*.yaml 2>/dev/null | grep 'cards/memos/' | sed 's/^[[:space:]]*- //' | sed 's/^"//' | sed 's/"$//' || true)
+
+    outstanding=()
+    while IFS= read -r memo; do
+      # Check if any card references this memo path
+      if ! echo "$all_refs" | grep -qF "$memo"; then
+        outstanding+=("$(basename "$memo")")
+      fi
+    done <<< "$memo_files"
+
+    if [[ ${#outstanding[@]} -gt 0 ]]; then
+      echo "orbit: ${#outstanding[@]} outstanding memo(s) in cards/memos/:"
+      for name in "${outstanding[@]}"; do
+        echo "  - $name"
+      done
+    fi
+  fi
+fi
+
 # Find the most recent spec directory
 latest_spec=$(find specs -maxdepth 1 -type d -name '20*' 2>/dev/null | sort -r | head -1)
 
