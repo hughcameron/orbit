@@ -9,8 +9,8 @@ constraints:
     if the agent never invokes /orb:implement
   - The progress file MUST use ac-NN IDs that match the spec exactly
   - Unspecced decisions MUST surface as decision checkpoints, never silent choices
-  - The skill MUST NOT modify any source code — it only reads the spec and manages
-    the progress tracker
+  - The pre-flight phase (steps 1-3) MUST NOT modify source code — it only reads
+    the spec and writes progress.md. Implementation (step 4) then proceeds normally.
 
 acceptance_criteria:
   - id: ac-01
