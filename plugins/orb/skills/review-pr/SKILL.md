@@ -28,7 +28,8 @@ Verify an implementation before merge. This skill runs in a **forked context** â
 
 1. Run `git diff main...HEAD` to see all changes
 2. Read the spec to understand what was intended
-3. Identify which acceptance criteria this implementation claims to satisfy
+3. If `progress.md` exists alongside the spec, read it â€” this is the implementer's self-reported AC tracker from `/orb:implement`. Cross-reference it with your own findings.
+4. Identify which acceptance criteria this implementation claims to satisfy
 
 ### 3. Phase 2: Run Tests + AC Coverage Check
 
