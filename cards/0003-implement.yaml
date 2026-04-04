@@ -29,6 +29,16 @@ scenarios:
     when: the decision has meaningful consequences
     then: it pauses and presents options rather than choosing silently
 
+  - name: Hard constraints injected at session start
+    given: a spec is in-flight with hard constraints defined
+    when: a new session starts
+    then: the SessionStart hook surfaces the hard constraints in the session context
+
+  - name: Constraints visible even if skill is skipped
+    given: an agent begins implementation without running /orb:implement
+    when: the session started with an in-flight spec
+    then: the hard constraints are already in context from the SessionStart hook
+
 priority: "now"
 
 references:
