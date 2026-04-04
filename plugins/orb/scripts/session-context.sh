@@ -53,18 +53,22 @@ if [[ "$has_spec" == "1" && -z "$has_pr_review" ]]; then
 
   if [[ -n "$constraints_block" ]]; then
     # Collapse multi-line YAML entries: join continuation lines with the previous "- " line
-    constraints=$(echo "$constraints_block" | awk '
+    constraints=$(echo "$constraints_block" | awk -v sq="'" '
       /^  - / {
         if (line != "") print line
         line = $0
         sub(/^  - /, "", line)
         sub(/^"/, "", line)
+        sub(/"$/, "", line)
+        if (substr(line,1,1) == sq) line = substr(line, 2)
+        if (substr(line,length(line),1) == sq) line = substr(line, 1, length(line)-1)
         next
       }
       {
         cont = $0
         gsub(/^[[:space:]]+/, "", cont)
         sub(/"$/, "", cont)
+        if (substr(cont,length(cont),1) == sq) cont = substr(cont, 1, length(cont)-1)
         line = line " " cont
       }
       END { if (line != "") print line }
