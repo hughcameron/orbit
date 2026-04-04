@@ -1,0 +1,112 @@
+goal: >
+  Extract structured feature cards from unstructured input (memos, discovery
+  interviews, research output) so that existing work product becomes actionable
+  without re-interviewing.
+
+constraints:
+  - The user MUST approve each card individually before any file is written
+  - Each extracted card MUST follow the standard card YAML format (feature,
+    as_a, i_want, so_that, scenarios, references)
+  - The references field of each card MUST include the path to the source
+    document
+  - Multiple distinct features in a single source MUST be presented as
+    separate cards
+  - Cards are presented one-by-one for approve/edit/reject — not batch
+  - /orb:distill MUST NOT invent scenarios that aren't supported by the
+    source material — it extracts, not imagines
+
+acceptance_criteria:
+  - id: ac-01
+    description: >
+      /orb:distill reads the provided file path and identifies distinct
+      feature ideas within it.
+    verification: >
+      Provide a memo containing 3 distinct feature ideas. Verify distill
+      identifies all 3 as separate candidates.
+
+  - id: ac-02
+    description: >
+      Each candidate card is presented to the user one at a time using
+      AskUserQuestion with approve/edit/reject options.
+    verification: >
+      Run distill on a 3-feature memo. Verify 3 sequential prompts appear,
+      each showing one card and offering approve/edit/reject.
+
+  - id: ac-03
+    description: >
+      Approved cards are saved as cards/NNNN-slug.yaml with correct
+      sequential numbering.
+    verification: >
+      With existing cards 0001-0003, approve 2 distilled cards. Verify they
+      are saved as 0004-slug.yaml and 0005-slug.yaml.
+
+  - id: ac-04
+    description: >
+      Rejected cards are not written to disk.
+    verification: >
+      Reject one of 3 candidates. Verify only 2 files are created.
+
+  - id: ac-05
+    description: >
+      Edited cards incorporate the user's changes before writing.
+    verification: >
+      Choose edit on a candidate, modify the feature name. Verify the saved
+      YAML reflects the edited name.
+
+  - id: ac-06
+    description: >
+      Every saved card's references field includes the path to the source
+      document.
+    verification: >
+      Distill a memo at cards/memos/2026-04-04-search-ux.md. Verify each
+      resulting card has that path in its references list.
+
+  - id: ac-07
+    description: >
+      Distill works with discovery interview files (specs/<topic>/interview.md)
+      as input, not just memos.
+    verification: >
+      Run distill on an interview.md file. Verify it identifies features and
+      produces valid cards.
+
+  - id: ac-08
+    description: >
+      Scenarios in extracted cards are grounded in the source material — not
+      invented by the LLM.
+    verification: >
+      Compare extracted card scenarios against the source document. Every
+      scenario should trace to a specific passage in the source.
+
+deliverables:
+  - path: plugins/orb/skills/distill/SKILL.md
+    description: >
+      New skill definition for /orb:distill. Accepts a file path, reads it,
+      identifies distinct features, presents cards one-by-one for approval,
+      and writes approved cards to cards/.
+
+evaluation_principles:
+  - principle: "Extraction fidelity — cards reflect the source, not LLM invention"
+    weight: 0.4
+  - principle: "Human control — every card requires explicit approval"
+    weight: 0.35
+  - principle: "Pipeline integration — cards are valid orbit cards with references"
+    weight: 0.25
+
+exit_conditions:
+  - All 8 ACs pass verification
+  - Distill works with both memos and interview files
+  - No card is written without explicit user approval
+
+risk_tier: STANDARD
+
+dependencies:
+  - spec: specs/2026-04-04-memos/spec.yaml
+    reason: >
+      Memos must exist as a concept (cards/memos/ directory and naming
+      convention) before distill can consume them as input.
+
+metadata:
+  version: "1.0"
+  timestamp: "2026-04-04T00:00:00Z"
+  ambiguity_score: 0.10
+  card_ref: "cards/0002-distill.yaml"

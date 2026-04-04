@@ -1,0 +1,13 @@
+# Implementation Progress
+
+**Spec:** specs/<topic>/spec.yaml
+**Started:** YYYY-MM-DD
+
+## Hard Constraints
+- [ ] <constraint text>
+- [ ] <constraint text>
+
+## Acceptance Criteria
+- [ ] ac-01: <description>
+- [ ] ac-02: <description>
+- [x] ac-03: <description> — <brief note of what was done>
