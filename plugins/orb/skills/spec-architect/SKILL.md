@@ -67,3 +67,13 @@ Test:     fn ac03_steps_execute_in_declared_order() { ... }
 ```
 
 Be specific and concrete. Extract actual requirements from the conversation, not generic placeholders.
+
+## Evidence Validation
+
+When extracting constraints and acceptance criteria, check whether each one is backed by evidence:
+
+- **Evidence-backed constraint**: The interview cites data, research findings, or experimental results. Include the source and numbers in the constraint. Example: `"ATR gate threshold at 66th percentile (frontier sweep: F1=0.527 ATR-high vs 0.335 elsewhere)"`
+- **Assumption without evidence**: The interview states a value or approach without citing data. Flag it with `# ASSUMPTION — needs validation` in a YAML comment. These are risk points that implementation may invalidate.
+- **Research-dependent constraint**: The constraint's validity depends on conditions that haven't been verified yet (e.g., a finding from one label scheme applied to a different one). Flag it with `# CONDITIONAL — valid only if <condition>`.
+
+This traceability prevents specs from silently inheriting stale assumptions from prior work.

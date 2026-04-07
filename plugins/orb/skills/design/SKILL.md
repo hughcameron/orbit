@@ -28,14 +28,30 @@ If no card exists or the card is thin, use `/orb:discovery` first.
 - If no matching card exists, tell the user and suggest `/orb:discovery` or `/orb:card` instead.
 - Identify the output directory: `specs/YYYY-MM-DD-<topic-slug>/` (create if needed)
 
-### 2. Open with the Card
+### 2. Load the Evidence Base
+
+Before asking any questions, search for prior research that informs this card:
+
+1. Check `specs/` for related specs, research outputs, and `progress.md` files with findings
+2. Check `cards/memos/` for related memos
+3. If the card has `references`, read them — these may contain empirical results
+4. Search the codebase for experiments, sweeps, or benchmarks related to the card's topic
+
+**Build an evidence brief** — a short summary of what prior work found, with numbers. Present this before asking questions:
+
+> "Before we start: prior research found [findings with numbers]. These become constraints unless you override them. My questions will focus on gaps the evidence doesn't cover."
+
+**Apply the evidence hierarchy** (see `/orb:interviewer`): findings with data are constraints, not questions. Only ask about areas where evidence is silent or contradictory.
+
+### 3. Open with the Card
 
 Don't re-ask what the user wants. They wrote a card. Instead:
 
 1. Summarise what you read: "I've read card NNNN — *<feature name>*. Your scenarios cover: X, Y, Z."
-2. If the card has `references`, surface them immediately: "Your references include A, B, C — these represent different approaches. Let me understand which direction you're leaning."
+2. Present the evidence brief from step 2
+3. If the card has `references`, surface them immediately: "Your references include A, B, C — these represent different approaches. Let me understand which direction you're leaning."
 
-### 3. Conduct the Design Session
+### 4. Conduct the Design Session
 
 Adopt the socratic interviewer role (see `/orb:interviewer` for the full persona).
 
@@ -59,7 +75,7 @@ Target: **4–6 questions** focused on:
 
 3. After each answer, target the biggest remaining gap
 
-### 4. Ambiguity Assessment
+### 5. Ambiguity Assessment
 
 After every 2-3 questions, assess clarity:
 - **Goal Clarity**: Is the objective specific and well-defined? (card usually covers this)
@@ -68,7 +84,7 @@ After every 2-3 questions, assess clarity:
 
 If all three are clear (ambiguity ≤ 0.2), suggest wrapping up. Design sessions should be tight — the card did the heavy lifting.
 
-### 5. Surface Decisions
+### 6. Surface Decisions
 
 Design sessions are where most decisions live. When probing references and approach selection, choices will surface naturally. When a clear choice is made:
 
@@ -76,7 +92,7 @@ Design sessions are where most decisions live. When probing references and appro
 2. Each entry should name the choice, the alternatives considered, and the rationale
 3. These become MADR decision records during or after the session (the spec will reference them)
 
-### 6. Save the Record
+### 7. Save the Record
 
 Save the Q&A as: `specs/YYYY-MM-DD-<topic-slug>/interview.md`
 
