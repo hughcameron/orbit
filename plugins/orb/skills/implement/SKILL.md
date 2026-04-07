@@ -93,6 +93,8 @@ All items start as `- [ ]` (pending).
 - **Spec over codebase.** If the spec prescribes a pattern the codebase doesn't have, implement what the spec says. Do not work around missing code — create what the spec requires.
 - **Surface unspecced decisions.** When you encounter a choice not covered by the spec that has meaningful consequences, **stop and ask** using AskUserQuestion. Present 2-3 options with trade-offs. Never choose silently.
 - **Constraints are non-negotiable.** If you find yourself about to violate a constraint, stop and flag it. Either the constraint needs updating or the approach needs changing.
+- **Assumption reversals require escalation.** When implementation evidence (phase results, benchmarks, test outcomes) contradicts a spec assumption, **stop immediately**. Do not silently adjust and continue. Instead: (1) Document the finding with exact numbers in `progress.md`, (2) State which spec assumption is invalidated and why, (3) Checkpoint with Hugh before proceeding. A spec built on a false assumption produces implementation that diverges silently — this is worse than stopping.
+- **Derive from evidence, don't ask for gut calls.** When you encounter a parameter or approach question during implementation, check whether prior research, phase results, or benchmarks answer it. If the data prescribes the answer, use it. Only escalate to Hugh when evidence is genuinely silent or contradictory. Hugh sets goals and constraints; you derive implementation from evidence.
 
 ### 5. Final Check
 
