@@ -59,7 +59,7 @@ Extract:
 - <path 2>: <description>
 ```
 
-Wait for the user to confirm before proceeding to implementation.
+Then proceed immediately to writing the progress file and implementing — do not wait for confirmation.
 
 ### 3. Write the Progress File
 
