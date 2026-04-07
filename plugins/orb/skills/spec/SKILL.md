@@ -56,6 +56,7 @@ constraints:
 
 acceptance_criteria:
   - id: ac-01
+    ac_type: code        # code | doc | gate | config
     description: "Measurable criterion"
     verification: "How to verify"
 

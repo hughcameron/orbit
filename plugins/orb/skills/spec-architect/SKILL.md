@@ -33,9 +33,11 @@ constraints:
   - "Hard limitation 2"
 acceptance_criteria:
   - id: ac-01
+    ac_type: code        # code | doc | gate | config
     description: "Measurable criterion 1"
     verification: "How to verify"
   - id: ac-02
+    ac_type: doc
     description: "Measurable criterion 2"
     verification: "How to verify"
 ontology_schema:
@@ -65,6 +67,19 @@ Every acceptance criterion gets a sequential `ac-NN` ID. These IDs are used by i
 Spec AC:  ac-03: "Steps execute in declared order"
 Test:     fn ac03_steps_execute_in_declared_order() { ... }
 ```
+
+### AC Type Classification
+
+Every AC must include an `ac_type` field. This tells `/orb:audit` whether to expect a test:
+
+| Type | When to use | Test expected? |
+|------|-------------|----------------|
+| `code` | Functional behaviour implemented in source code | Yes |
+| `doc` | Document deliverable (decision record, runbook, design doc) | No |
+| `gate` | Manual or process gate (approval step, review checkpoint) | No |
+| `config` | Configuration change (env vars, infra settings, CI pipeline) | No |
+
+Default to `code` when uncertain. Most ACs are code. The type field prevents `/orb:audit` from reporting false negatives on deliverables that have no test by design.
 
 Be specific and concrete. Extract actual requirements from the conversation, not generic placeholders.
 

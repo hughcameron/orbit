@@ -34,14 +34,15 @@ Verify an implementation before merge. This skill runs in a **forked context** �
 ### 3. Phase 2: Run Tests + AC Coverage Check
 
 1. Run the project's test suite. Record pass/fail with output.
-2. **AC-to-test coverage check**: Parse the spec for AC IDs (`ac-NN`), then search test files for functions prefixed with `ac<NN>`:
+2. **AC-to-test coverage check**: Parse the spec for AC IDs (`ac-NN`) and their `ac_type` field. Only `code`-type ACs require tests. ACs typed as `doc`, `gate`, or `config` are exempt. If `ac_type` is missing, treat as `code`.
 
 ```
 AC Coverage Report:
-  ac-01: ✓ ac01_creates_project_structure
-  ac-02: ✓ ac02_manifest_has_correct_fields
-  ac-03: ✗ NO TEST FOUND
-  Coverage: 2/3 ACs have tests (67%)
+  ac-01 (code):   ✓ ac01_creates_project_structure
+  ac-02 (code):   ✓ ac02_manifest_has_correct_fields
+  ac-03 (doc):    EXEMPT (document deliverable)
+  ac-04 (code):   ✗ NO TEST FOUND
+  Coverage: 2/3 testable ACs have tests (67%), 1 exempt
 ```
 
 Cross-language patterns to search:
