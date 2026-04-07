@@ -54,7 +54,7 @@ Six commands. No re-explaining the feature mid-session. No manually cross-checki
 ## What this saves you
 
 - **Tokens**: constraints re-inject at session start, so you don't pay to re-explain them every time context resets.
-- **Time on QA**: ACs are linked to tests by naming convention (`ac-03` → `ac03_*`), so coverage is a grep instead of a re-read.
+- **Time on QA**: ACs are linked to tests by naming convention (`ac-03` → `ac03_*`), and `/audit` checks coverage across all specs in one pass — distinguishing real gaps from non-code deliverables.
 - **Re-interviewing**: distill turns existing notes into cards in one pass, rather than starting the conversation over.
 - **Silent decisions**: unspecced choices surface as checkpoints, so you find out at the moment they're made, not three commits later.
 - **Confirmation bias in review**: review skills fork into fresh sessions with no shared history, catching things a same-session reviewer would wave through.
@@ -103,6 +103,7 @@ flowchart LR
 | `/spec` | Generate a structured spec from an interview |
 | `/review-spec` | Stress-test a spec before implementation |
 | `/implement` | Pre-flight spec check: extract ACs as a tracked checklist, then implement |
+| `/audit` | Audit AC-to-test traceability across specs — find gaps, orphans, and coverage |
 | `/review-pr` | Verify a PR against the spec and AC coverage |
 
 ### Persona skills
@@ -152,7 +153,16 @@ Spec:   ac-03: "Steps execute in declared order"
 Test:   fn ac03_steps_execute_in_declared_order() { ... }
 ```
 
-The `/review-pr` skill checks this automatically. It parses the spec for AC IDs and greps test files for matching prefixes.
+Not every AC is testable code. Each AC carries an `ac_type` field that tells the tooling what to expect:
+
+| Type | Meaning | Test expected? |
+|------|---------|----------------|
+| `code` | Functional behaviour in source | Yes |
+| `doc` | Document deliverable | No |
+| `gate` | Manual/process gate | No |
+| `config` | Configuration change | No |
+
+The `/audit` skill checks traceability across all specs — it finds untested code ACs, orphaned test prefixes, and inconsistent naming. The `/review-pr` skill runs a subset of the same check during PR review. Both respect `ac_type`, so document deliverables don't produce false negatives.
 
 ### Decisions
 
