@@ -19,7 +19,7 @@ Generate a validated specification from interview results or conversation contex
 
 - If an interview file path is provided: Read it
 - If no file path: Check conversation history for a recent `/orb:design` or `/orb:discovery` session
-- If neither: Ask the user what to crystallise
+- If neither: Ask the author what to crystallise
 
 ### 2. Assess Ambiguity
 

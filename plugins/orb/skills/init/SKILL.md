@@ -23,7 +23,7 @@ Before creating anything, check what already exists:
 - Does `decisions/` already exist?
 - Does `CLAUDE.md` already exist? If so, does it already contain the orbit snippet?
 
-If the project is already fully initialised, inform the user and skip to the card tutorial.
+If the project is already fully initialised, inform the author and skip to the card tutorial.
 
 ### 2. Create Directory Structure
 
@@ -58,7 +58,7 @@ Artifacts live in `cards/`, `specs/`, and `decisions/`.
 
 ### 4. First Card Tutorial
 
-Walk the user through writing their first feature card using `/orb:card`. Explain:
+Walk the author through writing their first feature card using `/orb:card`. Explain:
 
 - A card captures **who** needs something, **why** it matters, and **what they'd expect to see**
 - Scenarios are written in user language, not engineering language

@@ -24,7 +24,7 @@ Not every idea is ready for a feature card. Sometimes you just need to jot somet
 ### 1. Determine the Slug
 
 - If `$ARGUMENTS` contains a non-empty value, use it as the slug
-- If no argument is provided, ask the user: **"What's a short label for this memo?"** (e.g. `pipeline-progress`, `auth-rethink`, `perf-concern`)
+- If no argument is provided, ask the author: **"What's a short label for this memo?"** (e.g. `pipeline-progress`, `auth-rethink`, `perf-concern`)
 - Normalise the slug: lowercase, hyphens instead of spaces, no special characters
 
 ### 2. Ensure the Directory Exists
@@ -33,13 +33,13 @@ Check that `cards/memos/` exists. If not, create it (including `cards/` if neede
 
 ### 3. Capture the Memo
 
-Ask the user: **"What's the idea?"**
+Ask the author: **"What's the idea?"**
 
-Use **AskUserQuestion** with no suggested answers — this is freeform. The user's response becomes the memo content verbatim.
+Use **AskUserQuestion** with no suggested answers — this is freeform. The author's response becomes the memo content verbatim.
 
 **Rules:**
-- The memo content is the user's exact text. Do not add frontmatter, headers, metadata, or structure.
-- Do not edit, summarise, or reformat the user's words.
+- The memo content is the author's exact text. Do not add frontmatter, headers, metadata, or structure.
+- Do not edit, summarise, or reformat the author's words.
 - Any markdown content is valid — a single sentence, a bulleted list, multiple paragraphs. There are no requirements.
 
 ### 4. Write the File

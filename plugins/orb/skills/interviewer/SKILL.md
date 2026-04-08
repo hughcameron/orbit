@@ -54,4 +54,4 @@ Present each question using the AskUserQuestion tool with contextually relevant 
 - Binary questions (greenfield/brownfield, yes/no): use the natural choices
 - Technology choices: suggest common options for the context
 - Open-ended questions: suggest representative answer categories
-- The user can always type a custom response
+- The author can always type a custom response

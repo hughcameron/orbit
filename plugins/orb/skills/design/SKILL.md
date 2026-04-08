@@ -25,7 +25,7 @@ If no card exists or the card is thin, use `/orb:discovery` first.
 ### 1. Setup
 
 - Find the matching card in `cards/`. Read it — including scenarios and references.
-- If no matching card exists, tell the user and suggest `/orb:discovery` or `/orb:card` instead.
+- If no matching card exists, tell the author and suggest `/orb:discovery` or `/orb:card` instead.
 - Identify the output directory: `specs/YYYY-MM-DD-<topic-slug>/` (create if needed)
 
 ### 2. Load the Evidence Base
@@ -45,7 +45,7 @@ Before asking any questions, search for prior research that informs this card:
 
 ### 3. Open with the Card
 
-Don't re-ask what the user wants. They wrote a card. Instead:
+Don't re-ask what the author wants. They wrote a card. Instead:
 
 1. Summarise what you read: "I've read card NNNN — *<feature name>*. Your scenarios cover: X, Y, Z."
 2. Present the evidence brief from step 2
@@ -69,7 +69,7 @@ Target: **4–6 questions** focused on:
    - When the card has references, use them as suggested answers where relevant
    - Binary questions: use the natural choices
    - Technology choices: suggest common options for the context
-   - The user can always type a custom response
+   - The author can always type a custom response
 
 2. Record the Q&A pair in your working notes
 

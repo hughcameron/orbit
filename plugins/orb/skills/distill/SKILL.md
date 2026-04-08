@@ -25,7 +25,7 @@ Ideas arrive as freeform text. Turning them into actionable cards currently requ
 
 Read the file provided via `$ARGUMENTS`.
 
-- If no argument is provided: tell the user distill requires a file path
+- If no argument is provided: tell the author distill requires a file path
 - If the file does not exist or is unreadable: report a clear error message and stop — do not create any files
 - Read the full contents of the file
 
@@ -53,11 +53,11 @@ Presenting each for your approval.
 
 Read the `cards/` directory. If `cards/` does not exist, create it and start numbering at `0001`. Otherwise, find the highest existing `NNNN-*.yaml` number. The first approved card gets that number + 1, and subsequent approvals increment from there.
 
-Card numbering is determined at write time (when the user approves), not at extraction time. This is a single-user workflow — concurrent numbering is a known limitation, not a bug to solve.
+Card numbering is determined at write time (when the author approves), not at extraction time. This is a single-user workflow — concurrent numbering is a known limitation, not a bug to solve.
 
 ### 4. Present Cards One-by-One
 
-For each candidate, draft a card in the standard YAML format and present it to the user.
+For each candidate, draft a card in the standard YAML format and present it to the author.
 
 **Card format:**
 
@@ -93,7 +93,7 @@ references:
 - **`references` always includes the source path.** Every card produced by distill includes the input file path in its references list.
 - **Scenarios describe outcomes, not solutions.** Follow the same principle as `/orb:card` — what the user observes, not how it's built.
 
-**Presenting to the user:**
+**Presenting to the author:**
 
 Use **AskUserQuestion** to present each card. Show the full YAML block, then offer three options:
 
@@ -103,18 +103,18 @@ Use **AskUserQuestion** to present each card. Show the full YAML block, then off
 
 ### 5. Handle Edits
 
-When the user chooses "edit":
+When the author chooses "edit":
 
-1. The user's next response is interpreted as **free-text modification instructions** (e.g. "change the feature name to X" or "split scenario 2 into two scenarios")
+1. The author's next response is interpreted as **free-text modification instructions** (e.g. "change the feature name to X" or "split scenario 2 into two scenarios")
 2. Apply the requested changes to the card
 3. Re-present the updated card with the same approve/edit/reject options
 4. **Maximum 3 edit rounds per card.** After 3 edits, present the card one final time and require approve or reject — no further edits.
 
-**Edits and `source_lines`:** If the user requests adding a new scenario during editing that has no corresponding passage in the source document, set `source_lines` to `"user-requested during edit"`. The extract-not-invent rule applies to the *initial* extraction — user-directed edits are explicitly authored, not LLM-invented.
+**Edits and `source_lines`:** If the author requests adding a new scenario during editing that has no corresponding passage in the source document, set `source_lines` to `"user-requested during edit"`. The extract-not-invent rule applies to the *initial* extraction — author-directed edits are explicitly authored, not LLM-invented.
 
 ### 6. Write Approved Cards
 
-When the user approves a card:
+When the author approves a card:
 
 1. Determine the next available card number (read `cards/` directory at write time)
 2. Generate a slug from the feature name (lowercase, hyphens, no special characters)
