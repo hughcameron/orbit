@@ -1,4 +1,3 @@
-
 # orbit
 
 An opinionated specification-driven workflow for [Claude Code](https://claude.ai/claude-code).
@@ -19,6 +18,8 @@ Orbit draws a clear line between the parts that need your judgement and the part
 | Which trade-offs matter | Which patterns fit the codebase |
 | What "done" looks like | Whether the tests cover the ACs |
 | Priorities between competing goals | Edge cases the spec didn't name |
+
+Throughout the skills, the human driving the workflow is called **the author** — the person with vision, priorities, and final say on trade-offs. The agent derives implementation from evidence; the author decides what to build and why.
 
 Your job is vision and decisions. The agent's job is to derive implementation from evidence: prior research, benchmarks, the codebase, the spec. When evidence is genuinely silent or contradictory, orbit stops and asks you. When it isn't, it doesn't waste your time confirming what the data already says.
 

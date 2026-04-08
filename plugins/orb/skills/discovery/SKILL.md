@@ -25,7 +25,7 @@ If a well-formed card exists (≥ 3 scenarios), use `/orb:design` instead.
 
 ### 1. Setup
 
-- Determine the topic from the user's input
+- Determine the topic from the author's input
 - Check `cards/` for any related feature cards. If a thin card exists, read it as starting context.
 - Identify the output directory: `specs/YYYY-MM-DD-<topic-slug>/` (create if needed)
 
@@ -47,7 +47,7 @@ Target: **8–12 questions** covering:
    - Binary questions: use the natural choices
    - Technology choices: suggest common options for the context
    - Open-ended questions: suggest representative answer categories
-   - The user can always type a custom response
+   - The author can always type a custom response
 
 2. Record the Q&A pair in your working notes
 
@@ -61,7 +61,7 @@ Target: **8–12 questions** covering:
 - Be specific and actionable
 - Use ontological questions: "What IS this?", "Root cause or symptom?", "What are we assuming?"
 - You are ONLY a questioner — never write code, edit files, or run commands
-- Continue until the user says "done" or requirements are clear
+- Continue until the author says "done" or requirements are clear
 
 ### 4. Ambiguity Assessment
 
