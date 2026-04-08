@@ -1,21 +1,31 @@
-feature: Distill cards from unstructured input
+feature: Distill capability cards from source material
 as_a: author
-i_want: to extract structured feature cards from memos, discovery interviews, or research output
-so_that: existing work product becomes actionable cards without re-interviewing
+i_want: to extract structured feature cards from memos, documents, or an existing project
+so_that: the product's capabilities are described as cards without re-interviewing
 
 scenarios:
   - name: Distill a memo into a card
     given: a memo exists at cards/memos/2026-04-04-search-ux.md
     when: I run /orb:distill cards/memos/2026-04-04-search-ux.md
-    then: one or more draft cards are presented for my approval
+    then: one or more capability cards are presented for my approval
 
   - name: Distill a discovery interview
     given: a discovery interview exists at specs/2026-04-01-topic/interview.md
     when: I run /orb:distill specs/2026-04-01-topic/interview.md
-    then: distinct features are identified and offered as separate cards
+    then: distinct capabilities are identified and offered as separate cards
+
+  - name: Distill an existing project
+    given: a project has a README, docs, source code, and specs
+    when: I run /orb:distill with a directory or natural-language scope
+    then: the product's capabilities are identified from first principles and offered as cards
+
+  - name: First-principles lens always applies
+    given: source material contains TODOs, roadmap items, or planned enhancements
+    when: distill extracts features
+    then: cards describe capabilities users experience, not incremental changes developers plan
 
   - name: Multiple cards from one source
-    given: a source document contains multiple distinct feature ideas
+    given: source material contains multiple distinct capabilities
     when: distill identifies them
     then: each is presented as a separate card for individual approval or rejection
 
@@ -27,7 +37,7 @@ scenarios:
   - name: Card references its source
     given: a card is created via distill
     when: I look at the card
-    then: the references field includes the path to the source document
+    then: the references field includes the source artifacts
 
 priority: "next"
 

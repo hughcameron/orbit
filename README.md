@@ -99,7 +99,7 @@ flowchart LR
 | `/card` | Write a feature card with scenarios |
 | `/discovery` | Explore a vague idea through Socratic Q&A |
 | `/memo` | Quickly jot a rough idea and file it in `cards/memos/` |
-| `/distill` | Extract feature cards from unstructured notes or documents |
+| `/distill` | Extract feature cards from notes, documents, or an existing project |
 | `/design` | Refine a card into technical decisions and constraints |
 | `/spec` | Generate a structured spec from an interview |
 | `/review-spec` | Stress-test a spec before implementation |
@@ -124,7 +124,7 @@ These personas drive the workflow skills, you don't invoke them directly but it'
 
 ### Feature cards
 
-A card captures **who** needs something, **why** it matters, and **what they'd expect to see**. Scenarios are written in user language, not engineering language.
+A card captures **who** needs something, **why** it matters, and **what they'd expect to see**. Scenarios are written in user language, not engineering language. Cards are living documents — when a capability evolves, the card is updated in place. Git history tracks how the product's self-description changes over time.
 
 ```yaml
 # cards/0001-step-progress.yaml
@@ -188,11 +188,10 @@ The hook is silent when no orbit directories exist or when there's nothing in-fl
 orbit prescribes this structure at your project root:
 
 ```
-cards/                              # Feature cards
+cards/                              # Feature cards (living capability descriptions)
 ├── 0001-step-progress.yaml
 ├── 0002-search-without-sql.yaml
-├── memos/                          # Rough ideas awaiting distillation
-└── done/                           # Completed (optional)
+└── memos/                          # Rough ideas awaiting distillation
 
 specs/                              # Specifications and knowledge
 ├── 2026-04-02-step-progress/

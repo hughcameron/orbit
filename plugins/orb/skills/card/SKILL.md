@@ -78,16 +78,11 @@ Verify the card against INVEST criteria:
 - **Small**: 2-5 scenarios (if more, suggest splitting)
 - **Testable**: Each scenario has an observable outcome
 
-### Card Lifecycle
+### Cards Are Living Documents
 
-Cards don't have a status field. Instead:
+Cards describe capabilities, not work items. When a capability evolves, update the card in place — git history is the audit trail. Cards are never "closed" or "delivered"; they are the current description of what the product does for its users.
 
-| State | How you know |
-|-------|-------------|
-| Open | The file exists in cards/ |
-| In progress | A spec references this card |
-| Delivered | The `releases` field lists specs that addressed it |
-| Closed | Moved to cards/done/ or deleted (git history preserves) |
+The relationship between cards and work is mediated by specs: a spec references a card and prescribes how to implement or extend the capability. Multiple specs may reference the same card over time as the capability matures.
 
 ---
 
