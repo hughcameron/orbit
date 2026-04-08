@@ -27,4 +27,4 @@ scenarios:
 priority: "next"
 
 references:
-  - "cards/done/ pattern: replaced by status field in card YAML"
+  - "cards are living documents — no done/ directory, git history is the audit trail"

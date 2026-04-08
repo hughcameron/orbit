@@ -1,19 +1,22 @@
 ---
 name: distill
-description: Extract structured feature cards from memos, interviews, or research output
+description: Extract capability cards from source material — files, directories, or a whole project
 ---
 
 # /orb:distill
 
-Extract structured feature cards from unstructured input. Takes a memo, discovery interview, or research document and identifies distinct feature ideas, presenting each as a card for individual approval.
+Extract structured feature cards from source material. Takes a memo, a document, a directory, or a whole project and identifies the capabilities it describes, presenting each as a card for individual approval.
 
 ## Usage
 
 ```
-/orb:distill <file_path>
+/orb:distill <scope>
 ```
 
-Where `<file_path>` is a markdown file — typically `cards/memos/YYYY-MM-DD-slug.md` or `specs/<topic>/interview.md`.
+Where `<scope>` is one of:
+- **A file path** — `cards/memos/2026-04-07-progress.md` or `specs/topic/interview.md`
+- **A directory path** — `docs/` or `.` (the whole project)
+- **A natural-language description** — `"the readme, docs, git history and specs"`
 
 ## Why This Exists
 
@@ -21,27 +24,38 @@ Ideas arrive as freeform text. Turning them into actionable cards currently requ
 
 ## Instructions
 
-### 1. Read the Source
+### 1. Resolve the Scope
 
-Read the file provided via `$ARGUMENTS`.
+Interpret the author's `$ARGUMENTS` to determine what to read:
 
-- If no argument is provided: tell the author distill requires a file path
-- If the file does not exist or is unreadable: report a clear error message and stop — do not create any files
-- Read the full contents of the file
+- **File path**: Read the file. If it doesn't exist or is unreadable, report a clear error and stop.
+- **Directory path**: Read key artifacts in the directory — README, docs, source structure, existing cards, specs, tests. Use Glob and Read to survey broadly; don't stop at one file.
+- **Natural-language description**: The author is telling you which artifacts to examine (e.g. "the readme, docs, git commit history and specs"). Resolve this into concrete files and read them.
+- **No argument**: Tell the author distill requires a scope.
+
+When scope spans multiple artifacts, build a working set of all the material before extracting. The extraction step operates on the aggregate, not file-by-file.
 
 ### 2. Identify Distinct Features
 
-Analyse the source material and identify distinct feature ideas. A "feature" is a user-facing need with observable outcomes — something that could be its own card.
+Analyse the source material and identify distinct features. A "feature" is a **capability the product provides** — something a user can do or observe.
+
+**The first-principles lens:**
+
+Always ask "what does this product do?" — not "what's planned next?" You are describing capabilities, not mining for TODOs. Even when the source material contains roadmap items, TODO comments, or planned enhancements, distill through the lens of **what the user gets**, not what the developer has left to build.
+
+For example:
+- ❌ "Expand phone validation to 40+ locales" (incremental TODO)
+- ✅ "Locale-aware type detection" (capability the user experiences)
 
 **Rules:**
 - Each feature must be **distinct** — different user need, different outcomes
 - If the source contains only one feature, that's fine — produce one card
-- If the source contains **no identifiable feature ideas** (e.g. a grocery list, meeting notes with no actionable features): report "No features found in `<file_path>` — nothing to distill." and stop. Do **not** hallucinate cards from non-feature content.
+- If the source contains **no identifiable feature ideas** (e.g. a grocery list, meeting notes with no actionable features): report "No features found — nothing to distill." and stop. Do **not** hallucinate cards from non-feature content.
 
 Present a brief summary before starting the approval loop:
 
 ```
-Found N feature(s) in <file_path>:
+Found N feature(s) across <scope description>:
 1. <short feature name>
 2. <short feature name>
 ...
@@ -89,9 +103,10 @@ references:
 **Critical rules for card content:**
 
 - **Extract, don't invent.** Every scenario MUST trace to something in the source material. The `source_lines` field quotes the originating passage. If you can't point to a passage that supports a scenario, don't include that scenario.
-- **`source_lines` is mandatory** on every scenario. It must quote text that exists verbatim (or near-verbatim) in the source document. This is the mechanically verifiable link between the card and its source.
-- **`references` always includes the source path.** Every card produced by distill includes the input file path in its references list.
+- **`source_lines` is mandatory** on every scenario. It must quote text that exists verbatim (or near-verbatim) in a source artifact. When scope spans multiple files, prefix with the file path: `"README.md: Detects 120+ semantic types"`. This is the mechanically verifiable link between the card and its source.
+- **`references` always includes the source artifacts.** Every card produced by distill includes the input scope in its references list. For single-file scope, this is the file path. For broader scope, list the key artifacts the card was extracted from.
 - **Scenarios describe outcomes, not solutions.** Follow the same principle as `/orb:card` — what the user observes, not how it's built.
+- **Describe capabilities, not changes.** Scenarios should express what the product does for users, not what developers need to build. Frame around the user's experience of the capability.
 
 **Presenting to the author:**
 
@@ -129,7 +144,7 @@ After all candidates have been presented:
 
 ```
 Distill complete:
-  Source: <file_path>
+  Scope: <scope description>
   Approved: N card(s) — <list of files>
   Rejected: M card(s)
 ```
