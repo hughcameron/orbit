@@ -95,7 +95,7 @@ flowchart LR
 
 | Skill | Purpose |
 |-------|---------|
-| `/init` | Set up a project: directories, CLAUDE.md, first card |
+| `/setup` | Set up a project: directories, CLAUDE.md, first card |
 | `/card` | Write a feature card with scenarios |
 | `/discovery` | Explore a vague idea through Socratic Q&A |
 | `/memo` | Quickly jot a rough idea and file it in `cards/memos/` |
@@ -230,7 +230,7 @@ orbit builds on well-established ideas from the agile and software engineering c
 Then in any project:
 
 ```
-/init
+/setup
 ```
 
 This creates the directory structure (`cards/`, `specs/`, `decisions/`), adds a workflow snippet to your `CLAUDE.md`, and walks you through writing your first feature card.
