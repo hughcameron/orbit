@@ -1,16 +1,16 @@
 ---
-name: init
+name: setup
 description: Set up a project for the orbit workflow — creates directories, CLAUDE.md snippet, and first card
 ---
 
-# /orb:init
+# /orb:setup
 
 Set up a project for the orbit specification-driven workflow.
 
 ## Usage
 
 ```
-/orb:init
+/orb:setup
 ```
 
 ## Instructions
