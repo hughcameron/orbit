@@ -144,13 +144,35 @@ scenarios:
     when: the error occurs
     then: I can see which step failed and why
 
+goal: "progress visible for all steps in the nightly pipeline"
+
 maturity: established
 
 specs:
   - specs/2026-04-02-step-progress/spec.yaml
 ```
 
-Each card carries a `maturity` field (`planned`, `emerging`, `established`) and a `specs` array listing the specs that have addressed this capability. Together these tell you how far the capability has come and what work got it there.
+Cards carry three fields that track evolution:
+
+- **`goal`** — what success looks like *right now*. This is specific and measurable, and it changes as the capability matures. The `so_that` says why the capability matters (timeless); the `goal` says what you're driving toward (current). Git history tracks how goals evolve.
+- **`maturity`** — `planned`, `emerging`, or `established`. Where the capability stands today.
+- **`specs`** — the specs that have addressed this capability. The work trail.
+
+### Goals and sprints
+
+A sprint goal spans multiple cards. The sprint section in `CLAUDE.md` names the objective and lists the card goals that need to be met:
+
+```yaml
+# Current Sprint
+goal: "pipeline handles all three data sources end-to-end"
+
+cards:
+  - 0001: "CSV ingestion passes validation suite"
+  - 0002: "API source handles pagination and retries"
+  - 0003: "combined pipeline runs on staging"
+```
+
+The sprint is done when the listed card goals are met and their maturity advances. Detailed findings, constraints, and status live in specs and `progress.md` files — not in `CLAUDE.md`. Every session, instead of re-reading prose, you check the card goals and know where you stand.
 
 ### Acceptance criteria and test naming
 

@@ -44,9 +44,10 @@ If `CLAUDE.md` does not exist, create it. If it exists, append to it — but onl
 ```markdown
 ## Workflow (orbit)
 
-This project uses the orbit workflow: Card → Interview → Spec → Review → Ship.
+This project uses the orbit workflow: Card → Design → Spec → Implement → Review → Ship.
 
 - `/orb:card` — capture a feature need with expected behaviours
+- `/orb:distill` — extract capability cards from source material
 - `/orb:discovery` — explore a vague idea through Socratic Q&A
 - `/orb:design` — refine a feature card into technical decisions
 - `/orb:spec` — crystallise interview into a structured specification
@@ -54,6 +55,13 @@ This project uses the orbit workflow: Card → Interview → Spec → Review →
 - `/orb:review-pr` — verify the PR against the spec's acceptance criteria
 
 Artifacts live in `cards/`, `specs/`, and `decisions/`.
+
+## Current Sprint
+
+goal: "<sprint objective>"
+
+cards:
+  - NNNN: "<card goal>"
 ```
 
 ### 4. First Card Tutorial
