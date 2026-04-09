@@ -24,7 +24,10 @@ scenarios:
     when: I look at the resulting card
     then: the card's references field points back to the memo
 
-priority: "next"
+maturity: established
+
+specs:
+  - specs/2026-04-04-memos/spec.yaml
 
 references:
   - "cards are living documents — no done/ directory, git history is the audit trail"

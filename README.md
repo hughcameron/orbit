@@ -143,7 +143,14 @@ scenarios:
     given: a step that fails
     when: the error occurs
     then: I can see which step failed and why
+
+maturity: established
+
+specs:
+  - specs/2026-04-02-step-progress/spec.yaml
 ```
+
+Each card carries a `maturity` field (`planned`, `emerging`, `established`) and a `specs` array listing the specs that have addressed this capability. Together these tell you how far the capability has come and what work got it there.
 
 ### Acceptance criteria and test naming
 

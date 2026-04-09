@@ -39,7 +39,10 @@ scenarios:
     when: the session started with an in-flight spec
     then: the hard constraints are already in context from the SessionStart hook
 
-priority: "now"
+maturity: established
+
+specs:
+  - specs/2026-04-04-implement/spec.yaml
 
 references:
   - "Prior incident: agent treated codebase as ground truth, missed spec-prescribed entrypoint pattern"
