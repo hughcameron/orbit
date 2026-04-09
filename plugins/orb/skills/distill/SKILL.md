@@ -77,6 +77,8 @@ scenarios:
     then: "<observable outcome>"
     source_lines: "<quoted passage from source>"
 
+goal: "<current measurable target>"   # optional — what success looks like right now
+
 maturity: "planned"                  # planned | emerging | established
 
 specs: []                            # specs that have addressed this capability
