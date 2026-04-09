@@ -24,15 +24,20 @@ scenarios:
     when: distill extracts features
     then: cards describe capabilities users experience, not incremental changes developers plan
 
-  - name: Multiple cards from one source
-    given: source material contains multiple distinct capabilities
-    when: distill identifies them
-    then: each is presented as a separate card for individual approval or rejection
-
-  - name: Human approval before writing
+  - name: Staged review — draft then review then write
     given: distill has extracted candidate cards
     when: it presents them to me
-    then: I can approve, edit, or reject each one before any file is written
+    then: all cards are shown as a numbered batch with nothing written to disk yet
+
+  - name: Batch feedback
+    given: I'm reviewing the drafted card set
+    when: I spot overlaps, gaps, or cards to merge/drop/rename
+    then: I give feedback on the batch and the agent revises until I say "write"
+
+  - name: Nothing written until explicit approval
+    given: distill is presenting drafted cards
+    when: the review is still in progress
+    then: no files are created on disk until I explicitly approve the final set
 
   - name: Card references its source
     given: a card is created via distill
