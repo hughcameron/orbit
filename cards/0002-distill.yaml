@@ -44,7 +44,10 @@ scenarios:
     when: I look at the card
     then: the references field includes the source artifacts
 
-priority: "next"
+maturity: established
+
+specs:
+  - specs/2026-04-04-distill/spec.yaml
 
 references:
   - "/orb:card: interactive interview produces one card"

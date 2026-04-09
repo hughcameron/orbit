@@ -77,7 +77,9 @@ scenarios:
     then: "<observable outcome>"
     source_lines: "<quoted passage from source>"
 
-priority: "next"                    # default; author can override during review
+maturity: "planned"                  # planned | emerging | established
+
+specs: []                            # specs that have addressed this capability
 
 references:
   - "<source artifact path(s)>"

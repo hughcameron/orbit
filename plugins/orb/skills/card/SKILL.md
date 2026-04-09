@@ -38,7 +38,10 @@ Use **AskUserQuestion** to gather:
    - **given**: Precondition
    - **when**: Action or event
    - **then**: Observable outcome (in user language, not engineering language)
-6. **Priority**: now / next / later (optional)
+6. **Maturity**: How mature is this capability? (optional)
+   - `established` — built and working
+   - `emerging` — partially built, some specs have addressed it
+   - `planned` — not yet built (default for new cards)
 7. **References**: Are there existing tools, libraries, or approaches that inspire this feature? (optional) — these are not solutions, they're prior art that provides context. Examples: "uv: fast, minimal output", "cargo: step-by-step compile progress".
 
 ### 3. Write the Card
@@ -62,7 +65,9 @@ scenarios:
     when: "<action or event>"
     then: "<observable outcome>"
 
-priority: "now"
+maturity: "planned"                  # planned | emerging | established
+
+specs: []                            # specs that have addressed this capability
 
 references:                          # optional — prior art and inspiration
   - "<tool/approach>: <what's relevant about it>"
