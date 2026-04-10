@@ -31,10 +31,10 @@ Every piece of work in orbit becomes a **card**: a short YAML file describing wh
 
 - **`/card`**: you know what you want. Answer a few questions, get a card.
 - **`/memo`**: jot a rough idea as freeform markdown and have it filed in `cards/memos/`. The session hook will surface outstanding memos until you distill them.
-- **`/distill`**: you've got some reference material (meeting notes, research or an existing project). Distill extracts candidate cards from it, one at a time, for your approval.
+- **`/distill`**: you've got some reference material (meeting notes, research or an existing project). Distill extracts candidate cards from it and presents them as a batch for your review.
 - **`/discovery`**: the idea is big and new. A Socratic Q&A session explores it until a card can be written.
 
-Whichever door you come in, you land in the same place: a card ready for `/design`, then `/spec`, then implementation. One pipeline from there.
+Whichever door you come in, you land in the same place: a card ready for `/design`, then `/spec`, then implementation. Some capabilities ship in a single pass; others take multiple specs — each design session reads the cumulative progress and anchors on what remains.
 
 ## A feature, end to end
 
@@ -51,6 +51,8 @@ Now `/design cards/0004-pipeline-progress.yaml` opens a focused session. The age
 When it's done, `/review-pr` runs in a fresh context, reads the diff cold, checks every AC has a matching test, and reports back. Merge.
 
 Six commands. No re-explaining the feature mid-session. No manually cross-checking tests against requirements. No wondering which decisions the agent made silently.
+
+That's the simple case — one spec, one ship. For capabilities that take longer, the loop continues: after shipping, you return to `/design` for the same card. The design session reads the card's `specs` array, summarises what prior work achieved, and anchors on the gap between current state and goal. Each pass adds a spec to the array and advances the card's maturity. Not every pass is linear — some specs approach the goal from different angles (infrastructure, data quality, tooling) rather than continuing the last spec's thread.
 
 ## What this saves you
 
@@ -84,6 +86,7 @@ flowchart LR
     Spec --> ReviewSpec --> Implement
     Spec --> Implement
     Implement --> ReviewPR --> Ship
+    Ship -.->|"goal not yet met"| Design
     style entry fill:none,stroke:none
     style Discovery fill:#f0f0f0,stroke:#999,color:#333
     style Distill fill:#f0f0f0,stroke:#999,color:#333
