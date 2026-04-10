@@ -2,6 +2,16 @@
 
 All notable changes to orbit are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.2.11] - 2026-04-11
+
+### Changed
+- `/orb:design` now reads the card's `specs` array as cumulative progress. Presents what each prior spec contributed and anchors the session on the gap between current state and goal.
+- Design sessions no longer assume linear spec progression — specs may enhance a capability from different angles (infrastructure, data quality, tooling, adjacent work). The session surfaces which path the author intends.
+- Interview record template includes goal, prior spec summary, and gap context.
+
+### Added
+- `CHANGELOG.md` backfilled from v0.2.0 through v0.2.10 (added in this release cycle).
+
 ## [0.2.10] - 2026-04-09
 
 ### Added
