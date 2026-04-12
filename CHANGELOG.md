@@ -2,6 +2,22 @@
 
 All notable changes to orbit are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.2.12] - 2026-04-12
+
+### Added
+- `/orb:keyword-scan` — shared technique for keyword-based search across orbit artifacts. Extracts 5–8 distinctive domain terms from a card, spec, or interview; builds a ripgrep alternation pattern; falls back to `grep -rl` in environments without `rg`. Referenced by all workflow skills rather than inlining the pattern.
+- `/orb:spec` now appends the new spec path to the card's `specs` array after saving (write-time enforcement). Agents downstream that read the array get a complete work trail without manual upkeep.
+- `/orb:design` reconciles the card's `specs` array against a keyword scan of `specs/` before the session starts — surfaces orphaned specs the author can confirm to link.
+- `/orb:distill` checks `cards/` for existing capability overlap before drafting new cards.
+- `/orb:card` checks `cards/` and `specs/` for overlap before finalising a new card.
+- `/orb:discovery` searches `specs/` and `decisions/` for prior art before the interview begins.
+- `/orb:implement` searches the project source for existing code and patterns related to the spec's ACs.
+- `/orb:review-pr` searches `decisions/` for architectural choices the implementation should respect.
+
+### Changed
+- README workflow diagram shows the multi-spec loop: dashed edge from Ship back to Design when the card goal is not yet met.
+- End-to-end walkthrough describes iterative goal pursuit across multiple specs.
+
 ## [0.2.11] - 2026-04-11
 
 ### Changed
