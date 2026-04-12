@@ -62,6 +62,8 @@ For example:
 - If the source contains only one feature, that's fine — produce one card
 - If the source contains **no identifiable feature ideas** (e.g. a grocery list, meeting notes with no actionable features): report "No features found — nothing to distill." and stop. Do **not** hallucinate cards from non-feature content.
 
+**Check for overlap with existing cards:** Before drafting, run a keyword scan (see `/orb:keyword-scan`) against `cards/` using terms from the source material. If existing cards already describe a capability you're about to draft, note the overlap — it may mean updating an existing card rather than creating a new one. Surface overlaps during the Review phase.
+
 Draft ALL cards before presenting any of them. Each card uses the standard YAML format:
 
 ```yaml

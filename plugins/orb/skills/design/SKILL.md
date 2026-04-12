@@ -42,6 +42,18 @@ Before asking any questions, build a picture of where this capability stands:
 
 > "Card 0002 has 3 specs. The 2026-03-25 spec shipped the multi-branch pipeline at 155/190. The 2026-03-26 spec audited data quality but hasn't shipped. The 2026-04-09 spec is building an autoresearch loop. The card's goal is 170+ — current baseline is 155."
 
+**Reconcile the specs array — keyword scan for orphaned specs:**
+
+Before trusting the card's `specs` array as complete, verify it with a keyword scan (see `/orb:keyword-scan` for the full technique). This catches specs that address the card's topic but were never linked back.
+
+1. Extract keywords from the card and search `specs/` using the keyword scan technique
+2. Compare hits against the card's `specs` array — any spec directory found by keyword but not in the array is a potential orphan
+3. Surface orphans to the author — do not auto-link:
+   > "Found specs/2026-04-10-exit-classifier/ discussing [matched terms] — not in card's specs array. Include?"
+4. If the author confirms, append the spec path to the card's `specs` array and write the updated card to disk
+
+If no orphans are found, move on silently.
+
 **Then load broader evidence:**
 
 1. Check `cards/memos/` for related memos

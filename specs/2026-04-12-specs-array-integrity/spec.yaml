@@ -1,0 +1,73 @@
+goal: "Every spec that addresses a card is in that card's specs array — maintained by write-time enforcement and read-time reconciliation"
+
+constraints:
+  - "Write-time update MUST live in /orb:spec, not a separate hook or script"
+  - "Keyword scan MUST use a single rg (or grep fallback) command, not full spec reads"
+  - "Orphaned specs are surfaced for author confirmation — never auto-linked to the card"
+  - "MUST work in environments without ripgrep — grep -rl as fallback"
+  - "Keyword extraction from the card MUST produce 5-8 distinctive terms, not a noisy dump of every word"
+
+acceptance_criteria:
+  - id: ac-01
+    ac_type: code
+    description: "/orb:spec appends the new spec path to the card's specs array after saving spec.yaml"
+    verification: "After running /orb:spec for a card, the card's YAML file contains the new spec path in its specs array"
+
+  - id: ac-02
+    ac_type: code
+    description: "/orb:spec identifies the card from the interview's Card reference line"
+    verification: "The skill parses 'Card: cards/NNNN-slug.yaml' from the interview and uses it to locate the card file"
+
+  - id: ac-03
+    ac_type: code
+    description: "/orb:design extracts 5-8 keywords from the card's feature, scenario names, and goal"
+    verification: "Keywords are distinctive domain terms, not generic words. Logged or surfaced so the author can see what was searched."
+
+  - id: ac-04
+    ac_type: code
+    description: "/orb:design runs a single rg -l command with an alternation pattern to find specs mentioning those keywords"
+    verification: "One rg call searches specs/**/{spec.yaml,interview.md,progress.md} and returns matching paths"
+
+  - id: ac-05
+    ac_type: code
+    description: "Falls back to grep -rl when rg is unavailable"
+    verification: "The skill checks for rg availability and uses grep -rl with the same pattern as fallback"
+
+  - id: ac-06
+    ac_type: code
+    description: "/orb:design compares keyword scan hits against the card's specs array and surfaces orphans"
+    verification: "Specs found by keyword but not in the array are listed with a prompt asking the author whether to include them"
+
+  - id: ac-07
+    ac_type: code
+    description: "Author-confirmed orphans are appended to the card's specs array"
+    verification: "After confirmation, the card YAML is updated on disk with the newly linked spec paths"
+
+  - id: ac-08
+    ac_type: doc
+    description: "Fallback note in both skills documents grep as alternative to rg"
+    verification: "Both /orb:spec and /orb:design SKILL.md files mention the grep fallback with rationale"
+
+deliverables:
+  - path: plugins/orb/skills/spec/SKILL.md
+    description: "Add step 5 — update the card's specs array after saving the spec"
+  - path: plugins/orb/skills/design/SKILL.md
+    description: "Add keyword reconciliation substep to step 2 (Load the Evidence Base)"
+
+evaluation_principles:
+  - principle: "Completeness — does the specs array reflect all related work?"
+    weight: 0.4
+  - principle: "Lightweight — does the scan avoid unnecessary token spend?"
+    weight: 0.3
+  - principle: "Author control — are orphans surfaced, not auto-linked?"
+    weight: 0.3
+
+exit_conditions:
+  - "Both skills updated and the card's specs array includes this spec"
+  - "Keyword extraction produces sensible terms from an existing card"
+
+metadata:
+  version: "1.0"
+  timestamp: "2026-04-12T10:00:00Z"
+  ambiguity_score: 0.10
+  interview_ref: "specs/2026-04-12-specs-array-integrity/interview.md"

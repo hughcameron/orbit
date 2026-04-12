@@ -76,7 +76,11 @@ references:                          # optional — prior art and inspiration
   - "<tool/approach>: <what's relevant about it>"
 ```
 
-### 4. Quality Check
+### 4. Check for Overlap
+
+Before finalising, run a keyword scan (see `/orb:keyword-scan`) against `cards/` and `specs/` using terms from the feature name and scenarios. If an existing card already describes this capability, surface it — the author may want to update the existing card rather than create a new one.
+
+### 5. Quality Check
 
 Verify the card against INVEST criteria:
 - **Independent**: Can be delivered without other cards

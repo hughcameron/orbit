@@ -88,7 +88,20 @@ Save to: `specs/YYYY-MM-DD-<topic-slug>/spec.yaml`
 
 If the interview file exists in a spec directory, save alongside it.
 
-### 5. Assess Risk Tier
+### 5. Update the Card's Specs Array
+
+The spec references a card (from the interview's `Card:` line). After saving `spec.yaml`, append its path to the card's `specs` array so the work trail stays complete.
+
+1. Parse the card path from the interview record (the `**Card:**` line) or from conversation context
+2. If no card is identified, skip this step — not all specs originate from a card
+3. Read the card YAML
+4. Append the new spec path (e.g. `specs/2026-04-12-topic/spec.yaml`) to the `specs` array
+5. If the `specs` array doesn't exist yet, create it
+6. Write the updated card back to disk
+
+**This is non-negotiable.** Every spec that addresses a card must appear in the card's `specs` array. Agents downstream (`/orb:design`, `/orb:implement`) rely on this array to understand cumulative progress. An incomplete array causes agents to lose the thread and repeat or contradict prior work.
+
+### 6. Assess Risk Tier
 
 Based on the spec content, assess the risk tier:
 
@@ -100,4 +113,4 @@ State the tier and reasoning.
 
 ---
 
-**Next step:** For HIGH-tier work, run `/orb:review-spec` to stress-test the plan. Otherwise, proceed to implementation.
+**Next step:** For HIGH-tier work, run `/orb:review-spec` to stress-test the plan. Otherwise, proceed to `/orb:implement`.

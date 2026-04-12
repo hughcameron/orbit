@@ -30,6 +30,7 @@ Verify an implementation before merge. This skill runs in a **forked context** â
 2. Read the spec to understand what was intended
 3. If `progress.md` exists alongside the spec, read it â€” this is the implementer's self-reported AC tracker from `/orb:implement`. Cross-reference it with your own findings.
 4. Identify which acceptance criteria this implementation claims to satisfy
+5. Run a keyword scan (see `/orb:keyword-scan`) against `decisions/` using terms from the spec's goal and constraints. If relevant decisions exist, verify the implementation respects them. Flag violations as findings.
 
 ### 3. Phase 2: Run Tests + AC Coverage Check
 
