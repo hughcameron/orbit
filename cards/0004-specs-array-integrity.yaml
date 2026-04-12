@@ -1,0 +1,46 @@
+feature: Specs array stays complete without manual upkeep
+as_a: author
+i_want: the specs array on cards to be updated automatically when specs are created, and reconciled when design sessions start
+so_that: agents always see the full work trail and don't repeat or contradict prior findings
+
+scenarios:
+  - name: Spec creation updates the card
+    given: a spec is generated via /orb:spec for a card
+    when: the spec is saved to disk
+    then: the spec path is appended to the card's specs array automatically
+
+  - name: Design reconciles before starting
+    given: a card has a specs array that may be incomplete
+    when: /orb:design loads the card
+    then: it searches specs/ for related work using keywords from the card and surfaces orphans
+
+  - name: Keyword search catches unlisted specs
+    given: specs exist that discuss the card's topic but aren't in the specs array
+    when: reconciliation runs
+    then: keyword matching (feature name, scenario terms, goal) surfaces them
+
+  - name: Reconciliation is lightweight
+    given: a project has many specs
+    when: the keyword scan runs
+    then: it uses a single ripgrep/grep command, not full spec reads
+
+  - name: Author confirms before linking
+    given: the keyword scan found specs not in the array
+    when: they are surfaced
+    then: the author decides which to include — nothing is auto-linked
+
+  - name: Works without ripgrep
+    given: the environment does not have rg installed
+    when: keyword search runs
+    then: it falls back to grep with equivalent functionality
+
+goal: "zero orphaned specs — every spec that addresses a card is in that card's specs array"
+
+maturity: planned
+
+specs:
+  - specs/2026-04-12-specs-array-integrity/spec.yaml
+
+references:
+  - "Prior incident: agent ping-ponged between diagnoses because card's specs array was incomplete"
+  - "cards/0003-implement.yaml: prior art on spec-awareness during implementation"

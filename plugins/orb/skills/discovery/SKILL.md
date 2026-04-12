@@ -29,7 +29,11 @@ If a well-formed card exists (≥ 3 scenarios), use `/orb:design` instead.
 - Check `cards/` for any related feature cards. If a thin card exists, read it as starting context.
 - Identify the output directory: `specs/YYYY-MM-DD-<topic-slug>/` (create if needed)
 
-### 2. Conduct the Discovery
+### 2. Search for Prior Art
+
+Before asking questions, run a keyword scan (see `/orb:keyword-scan`) against `specs/` and `decisions/` using terms from the topic. If prior specs or decisions already explored this area, front-load what they found — the discovery session should build on existing knowledge, not rediscover it.
+
+### 3. Conduct the Discovery
 
 Adopt the socratic interviewer role (see `/orb:interviewer` for the full persona).
 
@@ -53,7 +57,7 @@ Target: **8–12 questions** covering:
 
 3. After each answer, target the biggest remaining source of ambiguity
 
-### 3. Questioning Strategy
+### 4. Questioning Strategy
 
 - Always end responses with a question
 - Target the biggest source of ambiguity
@@ -63,7 +67,7 @@ Target: **8–12 questions** covering:
 - You are ONLY a questioner — never write code, edit files, or run commands
 - Continue until the author says "done" or requirements are clear
 
-### 4. Ambiguity Assessment
+### 5. Ambiguity Assessment
 
 After every 3-4 questions, assess clarity across three dimensions:
 - **Goal Clarity**: Is the objective specific and well-defined?
@@ -72,7 +76,7 @@ After every 3-4 questions, assess clarity across three dimensions:
 
 If all three are clear (ambiguity ≤ 0.2), suggest wrapping up.
 
-### 5. Surface Decisions
+### 6. Surface Decisions
 
 During discovery, choices between approaches will surface. When a clear choice is made:
 
@@ -80,7 +84,7 @@ During discovery, choices between approaches will surface. When a clear choice i
 2. Each entry should name the choice, the alternatives considered, and the rationale
 3. These become MADR decision records during or after the session (the spec will reference them)
 
-### 6. Save the Record
+### 7. Save the Record
 
 Save the Q&A as: `specs/YYYY-MM-DD-<topic-slug>/interview.md`
 

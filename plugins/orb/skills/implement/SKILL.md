@@ -36,7 +36,11 @@ Extract:
 - `acceptance_criteria` — every `ac-NN` with its description
 - `deliverables` — what files need to be created or modified
 
-### 2. Present the Checklist
+### 2. Search for Related Code
+
+Before writing anything, run a keyword scan (see `/orb:keyword-scan`) against the project source using terms from the spec's goal and AC descriptions. This surfaces existing code, patterns, and tests the implementation should build on — rather than reimplementing what already exists.
+
+### 3. Present the Checklist
 
 **Before any code is written**, present the full checklist:
 
@@ -61,7 +65,7 @@ Extract:
 
 Then proceed immediately to writing the progress file and implementing — do not wait for confirmation.
 
-### 3. Write the Progress File
+### 4. Write the Progress File
 
 Create `progress.md` in the same directory as the spec:
 
@@ -81,7 +85,7 @@ Create `progress.md` in the same directory as the spec:
 
 All items start as `- [ ]` (pending).
 
-### 4. Implement — Tracking as You Go
+### 5. Implement — Tracking as You Go
 
 **The pre-flight phase is over. Now write code.** Implement the deliverables from the spec, working through the acceptance criteria. After completing work that addresses an AC or satisfies a constraint:
 
@@ -96,7 +100,7 @@ All items start as `- [ ]` (pending).
 - **Assumption reversals require escalation.** When implementation evidence (phase results, benchmarks, test outcomes) contradicts a spec assumption, **stop immediately**. Do not silently adjust and continue. Instead: (1) Document the finding with exact numbers in `progress.md`, (2) State which spec assumption is invalidated and why, (3) Checkpoint with the author before proceeding. A spec built on a false assumption produces implementation that diverges silently — this is worse than stopping.
 - **Derive from evidence, don't ask for gut calls.** When you encounter a parameter or approach question during implementation, check whether prior research, phase results, or benchmarks answer it. If the data prescribes the answer, use it. Only escalate to the author when evidence is genuinely silent or contradictory. The author sets goals and constraints; you derive implementation from evidence.
 
-### 5. Final Check
+### 6. Final Check
 
 When implementation is complete:
 
