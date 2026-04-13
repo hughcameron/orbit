@@ -2,6 +2,12 @@
 
 All notable changes to orbit are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.2.13] - 2026-04-13
+
+### Added
+- `/orb:card` "What Gets Closed" section — specs are the closure unit; cards are never closed. A NO-GO result updates the card's `goal` and `maturity`, not its existence.
+- `/orb:implement` step 7 "When a Spec Produces a NO-GO" — guidance to record evidence in `progress.md`, mark ACs with the result, update the card's goal, and loop back to `/orb:design` with the new evidence.
+
 ## [0.2.12] - 2026-04-12
 
 ### Added
