@@ -96,6 +96,17 @@ Cards describe capabilities, not work items. When a capability evolves, update t
 
 The relationship between cards and work is mediated by specs: a spec references a card and prescribes how to implement or extend the capability. Multiple specs may reference the same card over time as the capability matures.
 
+### What Gets Closed
+
+**Specs** get completed — `progress.md` marks all ACs done, `/orb:review-pr` verifies the work, and the PR merges. That's the closure unit. The card persists because the capability persists.
+
+When a spec produces a NO-GO or invalidates an assumption:
+1. Record the finding in `progress.md` with evidence
+2. Update the card's `goal` to reflect what was learned
+3. Advance or maintain the card's `maturity` based on current state
+
+The card lives on. Its goal may change, its maturity may shift, but it still describes what the product does — which now includes what you learned.
+
 ---
 
 **Next step:** Refine this card with `/orb:design` to work out the technical approach.

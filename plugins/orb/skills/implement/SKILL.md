@@ -108,6 +108,16 @@ When implementation is complete:
 2. If any items remain pending, explain why
 3. Suggest next step: `/orb:review-pr` to verify the implementation
 
+### 7. When a Spec Produces a NO-GO
+
+Not every spec ships code. Some produce evidence that an approach doesn't work — that's a valid outcome, not a failure. When results invalidate the spec's hypothesis:
+
+1. **Record the finding in `progress.md`** with exact numbers and evidence. This is the spec's deliverable.
+2. **Mark the relevant ACs** with the result (NO-GO, with data).
+3. **Do NOT "close the card."** Cards describe capabilities, not work items — they are never closed. The spec is the unit that completes, not the card.
+4. **Update the card's `goal`** to reflect what was learned. The goal may narrow, shift, or be refined based on evidence.
+5. Suggest next step: `/orb:design` to reassess the gap with the new evidence, or `/orb:review-pr` if there is code to merge.
+
 ## Integration with Other Skills
 
 - **SessionStart hook** surfaces hard constraints even if this skill is never invoked — see `session-context.sh`
