@@ -177,9 +177,9 @@ A NO-GO means the current iteration failed review or was rejected at a gate.
 
 5. **Re-enter at design** (§3) with the failure constraint carried forward. The constraint from the NO-GO becomes a hard constraint in the new iteration's design session.
 
-### 8. Escalation on Budget Exhaustion
+### 8. Escalation
 
-When 3 iterations have produced NO-GO results, the drive has exhausted its budget.
+Escalation is triggered by **budget exhaustion** (3 NO-GO iterations) OR by a **semantic trigger** from the Disposition section (recurring failure mode, contradicted hypothesis, diminishing signal). An honest agent may escalate before the budget is spent.
 
 1. **Update drive.yaml:**
    ```yaml
@@ -188,7 +188,7 @@ When 3 iterations have produced NO-GO results, the drive has exhausted its budge
 
 2. **Output an escalation summary:**
    ```
-   DRIVE ESCALATED — budget exhausted (3/3 iterations used)
+   DRIVE ESCALATED — <reason: budget exhausted | recurring failure | contradicted hypothesis | diminishing signal>
 
    Card: <card path>
    Goal: <card goal>
@@ -196,17 +196,21 @@ When 3 iterations have produced NO-GO results, the drive has exhausted its budge
    Iteration history:
      1. <dir> — NO-GO: <constraint_added>
      2. <dir> — NO-GO: <constraint_added>
-     3. <dir> — NO-GO: <constraint_added>
+     [3. <dir> — NO-GO: <constraint_added>]
 
    Accumulated constraints:
      - <all constraints from all iterations>
 
+   What would have to be true:
+     <For a future attempt to succeed, what assumptions need revisiting?
+      What constraints are structural vs configurational?
+      What corner of the solution space was not explored?>
+
    Recommendation:
-     <What the agent learned across iterations. Which assumptions proved false.
-      What the card needs before another drive attempt.>
+     <What the card needs before another drive attempt.>
    ```
 
-3. **Stop.** Do not start iteration 4. The card needs human rethinking.
+3. **Stop.** The card needs human rethinking. Escalation is not giving up — it is the mechanism by which difficult work gets human judgment at the right moment.
 
 ### 9. Completion
 
@@ -256,6 +260,35 @@ When `/orb:drive` is invoked and `drive.yaml` already exists in the expected loc
    Iteration: <N> of <budget>
    Resuming at: <stage>
    ```
+
+## Disposition
+
+The drive's job is to **find the way through, not the evidence that closes the card.** When an iteration falls short, the first question is *what would have to be true for this to work*, not *what does this rule out*. Push past the first plateau. Try the approaches that look uncomfortable. Treat negative results as constraints on the next iteration, not as conclusions.
+
+This disposition applies at every stage:
+
+- **Design:** When carrying forward a NO-GO constraint, the agent's task is to find the configuration that satisfies the new constraint — not to confirm that the goal is unreachable.
+- **Implement:** When implementation hits friction, work through it. The spec was designed with the constraint in mind; honour the design.
+- **Review:** An honest review serves the disposition. A REQUEST_CHANGES verdict is an opportunity to strengthen the iteration, not a signal to give up. A BLOCK verdict is evidence for the next iteration's design.
+
+### Bounded by honest escalation
+
+Disposition and escalation are the same stance, not opposing ones. Commitment to the goal is bounded by honest reporting. Escalate — don't push through, and don't quietly close — when any of these are true:
+
+- **Recurring failure mode.** The same problem has appeared across 2+ iterations despite varied approaches to address it. The constraint may be structural, not configurational.
+- **Contradicted hypothesis.** The accumulated evidence points to the card's *underlying goal* being unreachable, not just the current approach falling short. The call to pivot a thesis belongs to the author.
+- **Diminishing signal.** Each iteration is producing less new information than the last. The drive is grinding, not learning.
+
+These semantic triggers supplement the mechanical budget (3 iterations). An agent with the right disposition may escalate at iteration 2 when the evidence warrants it, or push hard through all 3 when each iteration genuinely narrows the search space.
+
+### What this means in practice
+
+A mechanical agent runs 3 iterations by rote and escalates with "tried 3 times, didn't work." A disposed agent:
+
+1. Treats iteration 1's failure as a constraint that sharpens iteration 2's design
+2. Asks "what corner of the solution space haven't I tried?" before concluding the space is empty
+3. Reports honestly when the evidence says the goal needs rethinking — and explains *why*, with the accumulated constraint history as proof
+4. Includes in every escalation summary not just what failed, but what would have to be true for a future attempt to succeed
 
 ## Critical Rules
 
