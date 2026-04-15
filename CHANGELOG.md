@@ -2,6 +2,12 @@
 
 All notable changes to orbit are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.2.14] - 2026-04-15
+
+### Added
+- `/orb:drive` — agent-driven card delivery. Takes a card path and autonomy level (full/guided/supervised), then drives the full orbit pipeline (design → spec → implement → review-pr) as a single inline session. Tracks state in `drive.yaml` for session resumption, with a 3-iteration budget before escalation. Thin cards (< 3 scenarios) are refused for full autonomy.
+- `session-context.sh` now detects `drive.yaml` and surfaces active drive state (card, autonomy level, iteration, status, next action) at session start. Escalated drives show a distinct message.
+
 ## [0.2.13] - 2026-04-13
 
 ### Added
