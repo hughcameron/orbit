@@ -1,0 +1,125 @@
+goal: >
+  /orb:drive skill that takes a card path and autonomy level, then drives the full orbit
+  pipeline (design → spec → implement → review-pr) as a single inline agent session,
+  with file-based state for resumption and a 3-iteration budget before escalation.
+
+constraints:
+  - "Single inline session — the agent reads each stage's SKILL.md and follows it in sequence. No sub-agent spawning for pipeline stages."
+  - "Card quality gates full autonomy — ≥3 scenarios required. Thin cards are refused with a clear message naming the gap. No silent downgrade."
+  - "3-iteration budget before escalation. Each iteration is a full design→spec→implement→review cycle. Budget is hardcoded, not configurable."
+  - "drive.yaml lives in the first spec directory as the master state file. It references subsequent iteration directories."
+  - "Must use existing file-presence state model (interview.md, spec.yaml, progress.md, review-pr-*.md) — no parallel tracking system."
+  - "Agent self-answers design questions in full mode using card scenarios, goal, and references as input."
+  - "On successful completion, create PR with implementation (commit 1) + proposed card updates (commit 2)."
+  - "session-context.sh must be updated to detect drive.yaml and surface active drives at session start."
+
+acceptance_criteria:
+  - id: ac-01
+    ac_type: code
+    description: "SKILL.md exists at plugins/orb/skills/drive/SKILL.md with usage, autonomy levels, and stage instructions"
+    verification: "File exists and documents the three autonomy levels (full, guided, supervised) with default of guided"
+
+  - id: ac-02
+    ac_type: code
+    description: "Full mode drives design→spec→implement→review-pr without human interaction"
+    verification: "Given a card with ≥3 scenarios, /orb:drive <card> full produces interview.md, spec.yaml, progress.md, review-pr-*.md, and a PR"
+
+  - id: ac-03
+    ac_type: code
+    description: "Guided mode pauses at review gates for author approval"
+    verification: "Agent uses AskUserQuestion at review-spec and review-pr stages, waiting for go/no-go before continuing"
+
+  - id: ac-04
+    ac_type: code
+    description: "Supervised mode pauses after spec generation for author greenlight at each subsequent step"
+    verification: "Agent uses AskUserQuestion after spec, after implement, and after review-pr"
+
+  - id: ac-05
+    ac_type: code
+    description: "Thin card (< 3 scenarios) is refused for full mode with a message naming the gap"
+    verification: "Given a card with 2 scenarios, /orb:drive <card> full outputs which scenarios are missing or too vague, and does not proceed"
+
+  - id: ac-06
+    ac_type: code
+    description: "drive.yaml is created in the first spec directory with card ref, autonomy, budget, iteration count, and history"
+    verification: "After first iteration starts, drive.yaml exists and is valid YAML with required fields"
+
+  - id: ac-07
+    ac_type: code
+    description: "NO-GO result triggers re-entry at design with failure recorded as a new constraint"
+    verification: "After review-pr returns NO-GO, agent creates a new spec directory (topic-v2), records the failure constraint in the new interview, and increments iteration count in drive.yaml"
+
+  - id: ac-08
+    ac_type: code
+    description: "Budget exhaustion (3 NO-GOs) produces escalation with findings summary"
+    verification: "After third NO-GO, agent stops and outputs a summary of what was tried, what failed, and what constraints accumulated — does not start iteration 4"
+
+  - id: ac-09
+    ac_type: code
+    description: "Successful completion creates PR with two commits: implementation and proposed card updates"
+    verification: "PR branch has commit 1 (code changes) and commit 2 (card goal/maturity updates). Both visible in PR diff."
+
+  - id: ac-10
+    ac_type: code
+    description: "session-context.sh detects drive.yaml and surfaces active drive state at session start"
+    verification: "With a drive.yaml present, SessionStart output includes drive card ref, autonomy level, current iteration, and suggested next action"
+
+  - id: ac-11
+    ac_type: code
+    description: "Default autonomy level is guided when no level is specified"
+    verification: "/orb:drive <card> without a second argument behaves as guided mode"
+
+  - id: ac-12
+    ac_type: code
+    description: "Drive resumes from correct stage after session interruption"
+    verification: "Given drive.yaml showing iteration 1 with spec.yaml present but no progress.md, agent resumes at implement stage"
+
+ontology_schema:
+  name: "DriveState"
+  description: "Orchestration state for a card-driven pipeline run"
+  fields:
+    - name: "card"
+      type: "string"
+      description: "Path to the card being driven (e.g. cards/0005-drive.yaml)"
+    - name: "autonomy"
+      type: "string"
+      description: "Autonomy level: full | guided | supervised"
+    - name: "budget"
+      type: "number"
+      description: "Maximum iterations before escalation (hardcoded: 3)"
+    - name: "iteration"
+      type: "number"
+      description: "Current iteration number (1-indexed)"
+    - name: "current_spec"
+      type: "string"
+      description: "Path to the active spec directory for the current iteration"
+    - name: "status"
+      type: "string"
+      description: "Current status: design | spec | implement | review | complete | escalated"
+    - name: "history"
+      type: "array"
+      description: "List of prior iteration records with dir, result, and constraint_added"
+    - name: "started"
+      type: "string"
+      description: "ISO-8601 timestamp of drive initiation"
+
+evaluation_principles:
+  - principle: "Autonomy fidelity — each mode behaves exactly as declared, no scope creep between levels"
+    weight: 0.30
+  - principle: "State reliability — drive.yaml accurately reflects pipeline position, enabling correct resumption"
+    weight: 0.30
+  - principle: "Failure value — NO-GO iterations produce actionable constraints, not just 'it failed'"
+    weight: 0.25
+  - principle: "Minimal disruption — uses existing orbit primitives (file-presence state, progress.md, session-context.sh) without reimplementation"
+    weight: 0.15
+
+exit_conditions:
+  - "All 12 acceptance criteria pass"
+  - "Manual test: /orb:drive on a test card in full mode produces a PR without human interaction (except merge)"
+  - "session-context.sh correctly surfaces drive state for an in-flight drive"
+
+metadata:
+  version: "1.0"
+  timestamp: "2026-04-15T12:00:00Z"
+  ambiguity_score: 0.08
+  interview_ref: "specs/2026-04-15-drive/interview.md"

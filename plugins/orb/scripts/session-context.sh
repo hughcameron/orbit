@@ -33,6 +33,39 @@ if [[ -d "cards/memos" ]]; then
   fi
 fi
 
+# Detect active drives (drive.yaml in any spec directory)
+# v1 constraint: single drive at a time. If multiple drive.yaml files exist, only the first is surfaced.
+active_drive=""
+drive_file=$(find specs -maxdepth 2 -name 'drive.yaml' 2>/dev/null | head -1)
+if [[ -n "$drive_file" ]]; then
+  drive_dir=$(dirname "$drive_file")
+  # Parse drive.yaml fields (lightweight — no yq dependency)
+  drive_card=$(grep '^card:' "$drive_file" 2>/dev/null | sed 's/^card:[[:space:]]*//')
+  drive_autonomy=$(grep '^autonomy:' "$drive_file" 2>/dev/null | sed 's/^autonomy:[[:space:]]*//')
+  drive_iteration=$(grep '^iteration:' "$drive_file" 2>/dev/null | sed 's/^iteration:[[:space:]]*//')
+  drive_budget=$(grep '^budget:' "$drive_file" 2>/dev/null | sed 's/^budget:[[:space:]]*//')
+  drive_status=$(grep '^status:' "$drive_file" 2>/dev/null | sed 's/^status:[[:space:]]*//')
+  drive_current_spec=$(grep '^current_spec:' "$drive_file" 2>/dev/null | sed 's/^current_spec:[[:space:]]*//')
+
+  if [[ "$drive_status" != "complete" && "$drive_status" != "escalated" ]]; then
+    active_drive="$drive_file"
+
+    # Determine suggested next action from status
+    case "$drive_status" in
+      design)   drive_next="run /orb:drive $drive_card $drive_autonomy to resume at design" ;;
+      spec)     drive_next="run /orb:drive $drive_card $drive_autonomy to resume at spec generation" ;;
+      implement) drive_next="run /orb:drive $drive_card $drive_autonomy to resume at implementation" ;;
+      review)   drive_next="run /orb:drive $drive_card $drive_autonomy to resume at review" ;;
+      *)        drive_next="run /orb:drive $drive_card $drive_autonomy to resume" ;;
+    esac
+
+    echo "orbit: Active drive — $drive_card ($drive_autonomy mode, iteration $drive_iteration/$drive_budget, status: $drive_status)"
+    echo "  Next: $drive_next"
+  elif [[ "$drive_status" == "escalated" ]]; then
+    echo "orbit: ESCALATED drive — $drive_card (exhausted $drive_budget iterations). Card needs human rethinking."
+  fi
+fi
+
 # Find the most recent spec directory
 latest_spec=$(find specs -maxdepth 1 -type d -name '20*' 2>/dev/null | sort -r | head -1)
 
