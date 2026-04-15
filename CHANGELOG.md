@@ -2,6 +2,13 @@
 
 All notable changes to orbit are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.2.15] - 2026-04-15
+
+### Added
+- `/orb:drive` Disposition section — defines the agent's working stance: find the way through, treat negatives as constraints on the next iteration, push past the first plateau. Ported from prior agent research disposition.
+- Semantic escalation triggers (recurring failure mode, contradicted hypothesis, diminishing signal) alongside the mechanical 3-iteration budget. An honest agent may escalate before the budget is spent.
+- Escalation summaries now include "What would have to be true" — what assumptions need revisiting for a future attempt to succeed.
+
 ## [0.2.14] - 2026-04-15
 
 ### Added
