@@ -2,6 +2,18 @@
 
 All notable changes to orbit are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.2.16] - 2026-04-16
+
+### Changed
+- `/orb:drive` pipeline expanded to 5 stages: Design → Spec → **Review-Spec** → Implement → Review-PR. Every spec now gets reviewed as part of the drive.
+- `/orb:drive` guided mode removes intermediate go/no-go gates. Reviews ARE the quality gates. The only interactive pause is a rich final summary (spec review verdict, AC coverage, honest assessment) before PR creation. "Let me read the reviews first" is an explicit option.
+- `/orb:drive` supervised mode gates now include richer context (AC counts, finding summaries) instead of bare "greenlight?" prompts.
+- `/orb:review-spec` replaced with progressive 3-pass model (decision 0001). Pass 1 (structural scan) always runs. Pass 2 (assumption & failure analysis) triggered by findings or content signals. Pass 3 (adversarial review) triggered by structural concerns. Depth scales with findings, not upfront classification.
+- Removed risk tier classification (HIGH/STANDARD/SKIP) from `/orb:spec`. Every spec gets reviewed — the progressive model makes tier gating unnecessary.
+
+### Added
+- `decisions/0001-progressive-spec-review.md` — first orbit decision record. Documents why tier-based review gating was replaced with progressive review.
+
 ## [0.2.15] - 2026-04-15
 
 ### Added
