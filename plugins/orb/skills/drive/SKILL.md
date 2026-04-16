@@ -1,11 +1,11 @@
 ---
 name: drive
-description: Drive a card through the full orbit pipeline — design → spec → implement → review-pr — at a declared autonomy level
+description: Drive a card through the full orbit pipeline — design → spec → review-spec → implement → review-pr — at a declared autonomy level
 ---
 
 # /orb:drive
 
-Take a card and an autonomy level. Drive the full orbit pipeline (design → spec → implement → review-pr) as a single session, tracking state in `drive.yaml` for resumption.
+Take a card and an autonomy level. Drive the full orbit pipeline (design → spec → review-spec → implement → review-pr) as a single session, tracking state in `drive.yaml` for resumption.
 
 ## Usage
 
@@ -20,9 +20,9 @@ Take a card and an autonomy level. Drive the full orbit pipeline (design → spe
 
 | Level | Behaviour |
 |-------|-----------|
-| **full** | Agent drives all stages without human interaction. Pauses only for PR merge. Requires ≥3 card scenarios. |
-| **guided** | Agent drives all stages but pauses at review-spec and review-pr for author go/no-go. Default. |
-| **supervised** | Agent pauses after spec, after implement, and after review-pr for author greenlight at each step. |
+| **full** | Agent self-answers design questions. All stages run without human interaction. Pauses only for PR merge. Requires ≥3 card scenarios. |
+| **guided** | Design interview is interactive. All subsequent stages (spec → review-spec → implement → review-pr) run without intermediate pauses — the reviews ARE the quality gates. Author approves the final review-pr verdict before PR creation. Default. |
+| **supervised** | Design interview is interactive. Agent pauses after each stage for author greenlight before proceeding. |
 
 ## Instructions
 
@@ -66,7 +66,7 @@ history: []
 started: <ISO-8601 timestamp>
 ```
 
-If `drive.yaml` already exists, read it and **resume from the recorded state** (see §8 Resumption).
+If `drive.yaml` already exists, read it and **resume from the recorded state** (see §11 Resumption).
 
 ### 3. Stage: Design
 
@@ -94,23 +94,39 @@ Read the spec skill instructions from `plugins/orb/skills/spec/SKILL.md`. Follow
 
 **Output:** Save `spec.yaml` in the current spec directory. Update the card's `specs` array per the spec skill's instructions.
 
-Update `drive.yaml`: `status: implement`
-
-**Guided mode gate:** If autonomy is `guided`, pause here:
-```
-AskUserQuestion: "Spec generated at <path>. Review the spec and greenlight to continue, or NO-GO to re-enter at design."
-Suggested answers: ["GO — proceed to implement", "NO-GO — re-enter at design"]
-```
-If NO-GO → jump to §7 (NO-GO Handling).
+Update `drive.yaml`: `status: review-spec`
 
 **Supervised mode gate:** If autonomy is `supervised`, pause here:
 ```
-AskUserQuestion: "Spec generated at <path>. Review and greenlight to continue, or NO-GO to re-enter at design."
+AskUserQuestion: "Spec generated at <path>. Summary: <goal from spec>, <N> ACs, <N> constraints. Review and greenlight to continue, or NO-GO to re-enter at design."
+Suggested answers: ["GO — proceed to review-spec", "NO-GO — re-enter at design"]
+```
+If NO-GO → jump to §8 (NO-GO Handling).
+
+### 5. Stage: Review-Spec
+
+Read the review-spec skill instructions from `plugins/orb/skills/review-spec/SKILL.md`. Follow its instructions **inline** — read the spec cold, run the assumption audit, failure mode analysis, test adequacy check, gap analysis, and constraint check.
+
+**Important:** Do NOT invoke `/orb:review-spec` as a skill call. Read the SKILL.md file and follow its instructions directly within this session. The review runs inline to keep the drive's single-session model intact.
+
+**Output:** Save `review-spec-<date>.md` in the current spec directory.
+
+**Review-spec verdict handling:**
+
+- **APPROVE:** Proceed to Implement (§6).
+- **REQUEST_CHANGES:** Address the specific changes in the spec. Re-run the review. If the review now approves, proceed.
+- **BLOCK:** Jump to §8 (NO-GO Handling). The spec needs rework — the block reason becomes the NO-GO constraint.
+
+Update `drive.yaml`: `status: implement`
+
+**Supervised mode gate:** If autonomy is `supervised`, pause here:
+```
+AskUserQuestion: "Spec review complete — verdict: <verdict>. <N> findings (<severities>). Review saved at <path>. Proceed to implementation?"
 Suggested answers: ["GO — proceed to implement", "NO-GO — re-enter at design"]
 ```
-If NO-GO → jump to §7 (NO-GO Handling).
+If NO-GO → jump to §8 (NO-GO Handling).
 
-### 5. Stage: Implement
+### 6. Stage: Implement
 
 Read the implement skill instructions from `plugins/orb/skills/implement/SKILL.md`. Follow its instructions — read the spec, present the checklist, write `progress.md`, implement the deliverables.
 
@@ -120,12 +136,12 @@ Update `drive.yaml`: `status: review`
 
 **Supervised mode gate:** If autonomy is `supervised`, pause here:
 ```
-AskUserQuestion: "Implementation complete. Progress tracked in <path>. Review and greenlight to continue, or NO-GO to re-enter at design."
-Suggested answers: ["GO — proceed to review", "NO-GO — re-enter at design"]
+AskUserQuestion: "Implementation complete. Progress tracked in <path>. <N>/<total> ACs addressed. Review and greenlight to continue, or NO-GO to re-enter at design."
+Suggested answers: ["GO — proceed to review-pr", "NO-GO — re-enter at design"]
 ```
-If NO-GO → jump to §7 (NO-GO Handling).
+If NO-GO → jump to §8 (NO-GO Handling).
 
-### 6. Stage: Review
+### 7. Stage: Review-PR
 
 Read the review-pr skill instructions from `plugins/orb/skills/review-pr/SKILL.md`. Follow its instructions **inline** — read the diff, check AC coverage, probe edge cases, write the review file.
 
@@ -135,26 +151,35 @@ Read the review-pr skill instructions from `plugins/orb/skills/review-pr/SKILL.m
 
 **Review verdict handling:**
 
-- **APPROVE:**
-  - **In guided mode:** Present the review to the author:
-    ```
-    AskUserQuestion: "Review complete — verdict: APPROVE. Review saved at <path>. Proceed to PR creation?"
-    Suggested answers: ["GO — create PR", "NO-GO — re-enter at design"]
-    ```
-  - **In supervised mode:** Same gate as guided.
-  - **In full mode:** Proceed directly to §9 (Completion).
-
 - **REQUEST_CHANGES:**
   - Address the specific changes requested in the review.
   - Re-run the review after fixes.
-  - If changes are addressed and review now approves, proceed per APPROVE flow above.
+  - If changes are addressed and review now approves, continue to APPROVE handling below.
 
 - **BLOCK (NO-GO):**
-  - Jump to §7 (NO-GO Handling).
+  - Jump to §8 (NO-GO Handling).
 
-### 7. NO-GO Handling
+- **APPROVE:**
+  - **In full mode:** Proceed directly to §10 (Completion).
+  - **In guided mode:** This is the **only gate in guided mode**. Present a rich summary of the entire drive:
+    ```
+    AskUserQuestion: "Drive summary for <card name>:
 
-A NO-GO means the current iteration failed review or was rejected at a gate.
+    Spec: <spec path> — <goal summary>
+    Spec review: <verdict>, <N> findings
+    Implementation: <N>/<total> ACs addressed
+    PR review: APPROVE — <honest assessment one-liner>
+
+    Review saved at <path>. Proceed to PR creation?"
+    Suggested answers: ["GO — create PR", "NO-GO — re-enter at design", "Let me read the reviews first"]
+    ```
+    If "Let me read the reviews first" → wait for the author to respond after reading, then re-present the gate.
+    If NO-GO → jump to §8 (NO-GO Handling).
+  - **In supervised mode:** Same gate as guided.
+
+### 8. NO-GO Handling
+
+A NO-GO means the current iteration failed a review (spec or PR) or was rejected at a supervised gate.
 
 1. **Record the failure** in `drive.yaml`:
    ```yaml
@@ -164,7 +189,7 @@ A NO-GO means the current iteration failed review or was rejected at a gate.
        constraint_added: "<one-line description of what failed and why>"
    ```
 
-2. **Check budget:** If `iteration == budget` (i.e., this was the last allowed iteration), jump to §8 (Escalation). Do not increment.
+2. **Check budget:** If `iteration == budget` (i.e., this was the last allowed iteration), jump to §9 (Escalation). Do not increment.
 
 3. **Increment iteration:**
    ```yaml
@@ -177,7 +202,7 @@ A NO-GO means the current iteration failed review or was rejected at a gate.
 
 5. **Re-enter at design** (§3) with the failure constraint carried forward. The constraint from the NO-GO becomes a hard constraint in the new iteration's design session.
 
-### 8. Escalation
+### 9. Escalation
 
 Escalation is triggered by **budget exhaustion** (3 NO-GO iterations) OR by a **semantic trigger** from the Disposition section (recurring failure mode, contradicted hypothesis, diminishing signal). An honest agent may escalate before the budget is spent.
 
@@ -212,7 +237,7 @@ Escalation is triggered by **budget exhaustion** (3 NO-GO iterations) OR by a **
 
 3. **Stop.** The card needs human rethinking. Escalation is not giving up — it is the mechanism by which difficult work gets human judgment at the right moment.
 
-### 9. Completion
+### 10. Completion
 
 On successful review (APPROVE verdict, gates passed):
 
@@ -235,7 +260,7 @@ On successful review (APPROVE verdict, gates passed):
    status: complete
    ```
 
-### 10. Resumption
+### 11. Resumption
 
 When `/orb:drive` is invoked and `drive.yaml` already exists in the expected location:
 
@@ -246,8 +271,9 @@ When `/orb:drive` is invoked and `drive.yaml` already exists in the expected loc
    |-------------------|---------------|-----------|
    | `design` | no interview.md | Design (§3) |
    | `spec` | interview.md, no spec.yaml | Spec (§4) |
-   | `implement` | spec.yaml, no progress.md | Implement (§5) |
-   | `review` | progress.md, no review-pr-*.md | Review (§6) |
+   | `review-spec` | spec.yaml, no review-spec-*.md | Review-Spec (§5) |
+   | `implement` | review-spec-*.md, no progress.md | Implement (§6) |
+   | `review` | progress.md, no review-pr-*.md | Review-PR (§7) |
    | `complete` | review-pr-*.md | Already done — report status |
    | `escalated` | — | Already escalated — report status |
 
@@ -268,8 +294,9 @@ The drive's job is to **find the way through, not the evidence that closes the c
 This disposition applies at every stage:
 
 - **Design:** When carrying forward a NO-GO constraint, the agent's task is to find the configuration that satisfies the new constraint — not to confirm that the goal is unreachable.
+- **Review-Spec:** An honest spec review catches assumptions before they become implementation debt. REQUEST_CHANGES strengthens the spec; BLOCK is evidence for re-design.
 - **Implement:** When implementation hits friction, work through it. The spec was designed with the constraint in mind; honour the design.
-- **Review:** An honest review serves the disposition. A REQUEST_CHANGES verdict is an opportunity to strengthen the iteration, not a signal to give up. A BLOCK verdict is evidence for the next iteration's design.
+- **Review-PR:** An honest PR review serves the disposition. A REQUEST_CHANGES verdict is an opportunity to strengthen the iteration, not a signal to give up. A BLOCK verdict is evidence for the next iteration's design.
 
 ### Bounded by honest escalation
 
@@ -292,9 +319,10 @@ A mechanical agent runs 3 iterations by rote and escalates with "tried 3 times, 
 
 ## Critical Rules
 
-- **Never skip a stage.** Design → Spec → Implement → Review, always in order.
+- **Never skip a stage.** Design → Spec → Review-Spec → Implement → Review-PR, always in order.
 - **Never silently downgrade autonomy.** If full mode is requested but the card is thin, refuse explicitly.
 - **drive.yaml is the single source of orchestration state.** Do not track drive state anywhere else.
-- **Existing file-presence model is authoritative for stage completion.** drive.yaml tracks the orchestration layer; individual files (interview.md, spec.yaml, progress.md, review-pr-*.md) prove stage completion.
+- **Existing file-presence model is authoritative for stage completion.** drive.yaml tracks the orchestration layer; individual files (interview.md, spec.yaml, review-spec-*.md, progress.md, review-pr-*.md) prove stage completion.
 - **Constraints accumulate across iterations.** Every NO-GO adds a constraint. Iteration 3 carries constraints from iterations 1 and 2.
-- **The review runs inline.** Do not invoke `/orb:review-pr` as a skill — read its SKILL.md and follow the instructions within this session.
+- **Both reviews run inline.** Do not invoke `/orb:review-spec` or `/orb:review-pr` as skill calls — read their SKILL.md files and follow the instructions within this session.
+- **Reviews are the quality gates.** In guided mode, the spec review and PR review replace explicit go/no-go prompts. The only interactive gate is the final verdict summary before PR creation.
