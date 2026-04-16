@@ -46,7 +46,7 @@ Ambiguity Assessment:
 
 Adopt the spec-architect role (see `/orb:spec-architect` for extraction guidelines).
 
-Every acceptance criterion gets a sequential `ac-NN` ID. These IDs are used by implementers to prefix test function names:
+Every acceptance criterion gets a sequential `ac-NN` ID. These IDs are used by implementers to prefix test function names. The `test_prefix` in metadata disambiguates ACs when a project has multiple specs:
 
 ```yaml
 goal: "Clear primary objective"
@@ -77,6 +77,7 @@ exit_conditions:
 
 metadata:
   version: "1.0"
+  test_prefix: "v01"  # short prefix for test names — disambiguates ACs across specs
   timestamp: "YYYY-MM-DDTHH:MM:SSZ"
   ambiguity_score: 0.15
   interview_ref: "specs/YYYY-MM-DD-<topic>/interview.md"

@@ -35,22 +35,24 @@ Verify an implementation before merge. This skill runs in a **forked context** �
 ### 3. Phase 2: Run Tests + AC Coverage Check
 
 1. Run the project's test suite. Record pass/fail with output.
-2. **AC-to-test coverage check**: Parse the spec for AC IDs (`ac-NN`) and their `ac_type` field. Only `code`-type ACs require tests. ACs typed as `doc`, `gate`, or `config` are exempt. If `ac_type` is missing, treat as `code`.
+2. **AC-to-test coverage check**: Parse the spec for AC IDs (`ac-NN`), their `ac_type` field, and `metadata.test_prefix`. Only `code`-type ACs require tests. ACs typed as `doc`, `gate`, or `config` are exempt. If `ac_type` is missing, treat as `code`.
+
+If `test_prefix` is present (e.g., `v03`), search for prefixed test names (`v03_ac01_*`). If absent, search for bare `ac<NN>` names (backward-compatible).
 
 ```
-AC Coverage Report:
-  ac-01 (code):   ✓ ac01_creates_project_structure
-  ac-02 (code):   ✓ ac02_manifest_has_correct_fields
+AC Coverage Report (prefix: v03):
+  ac-01 (code):   ✓ v03_ac01_creates_project_structure
+  ac-02 (code):   ✓ v03_ac02_manifest_has_correct_fields
   ac-03 (doc):    EXEMPT (document deliverable)
   ac-04 (code):   ✗ NO TEST FOUND
   Coverage: 2/3 testable ACs have tests (67%), 1 exempt
 ```
 
-Cross-language patterns to search:
-- Rust: `fn ac<NN>`
-- Python: `def test_ac<NN>` or `def ac<NN>`
-- TypeScript: `test('ac<NN>` or `it('ac<NN>`
-- General: grep for `ac<NN>` prefix in test directories
+Cross-language patterns to search (with prefix `v03`; omit prefix if `test_prefix` absent):
+- Rust: `fn v03_ac<NN>`
+- Python: `def test_v03_ac<NN>` or `def v03_ac<NN>`
+- TypeScript: `test('v03_ac<NN>` or `it('v03_ac<NN>`
+- General: grep for `v03_ac<NN>` prefix in test directories
 
 ### 4. Phase 3: Environment Simulation
 

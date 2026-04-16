@@ -54,6 +54,7 @@ exit_conditions:
   - "When to stop iterating"
 metadata:
   version: "1.0"
+  test_prefix: "v01"  # short prefix for test names — disambiguates ACs across specs
   timestamp: "ISO-8601"
   ambiguity_score: null
   interview_ref: "specs/YYYY-MM-DD-<topic>/interview.md"
@@ -61,12 +62,24 @@ metadata:
 
 ## AC Naming Convention
 
-Every acceptance criterion gets a sequential `ac-NN` ID. These IDs are used by implementers to prefix test function names, creating a machine-checkable link from tests back to the spec:
+Every acceptance criterion gets a sequential `ac-NN` ID. These IDs are used by implementers to prefix test function names, creating a machine-checkable link from tests back to the spec.
+
+When a project has multiple specs, AC IDs collide (`ac-01` exists in every spec). The `test_prefix` metadata field disambiguates by scoping test names to the spec:
+
+```
+Spec metadata:  test_prefix: v03
+Spec AC:        ac-03: "Steps execute in declared order"
+Test:           fn v03_ac03_steps_execute_in_declared_order() { ... }
+```
+
+When `test_prefix` is absent, tests use the bare `ac<NN>` prefix (backward-compatible):
 
 ```
 Spec AC:  ac-03: "Steps execute in declared order"
 Test:     fn ac03_steps_execute_in_declared_order() { ... }
 ```
+
+**Choosing a prefix:** Derive from the spec's version (e.g., `v03`), a short slug (e.g., `introspect`), or whatever the project already uses. Keep it short — it appears in every test name.
 
 ### AC Type Classification
 

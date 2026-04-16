@@ -34,6 +34,7 @@ Extract:
 - `goal` — the primary objective
 - `constraints` — the hard limitations (these are non-negotiable)
 - `acceptance_criteria` — every `ac-NN` with its description
+- `metadata.test_prefix` — if present, use this prefix in test function names (e.g., `v03_ac01_*`)
 - `deliverables` — what files need to be created or modified
 
 ### 2. Search for Related Code
@@ -48,20 +49,23 @@ Before writing anything, run a keyword scan (see `/orb:keyword-scan`) against th
 ## Pre-Flight Checklist
 
 **Goal:** <goal from spec>
+**Test prefix:** <test_prefix from metadata, or "none">
 
 ### Hard Constraints
 - [ ] <constraint 1>
 - [ ] <constraint 2>
 
 ### Acceptance Criteria
-- [ ] ac-01: <description>
-- [ ] ac-02: <description>
-- [ ] ac-03: <description>
+- [ ] ac-01: <description>  →  test: <prefix>_ac01_*
+- [ ] ac-02: <description>  →  test: <prefix>_ac02_*
+- [ ] ac-03: <description>  →  test: <prefix>_ac03_*
 
 ### Deliverables
 - <path 1>: <description>
 - <path 2>: <description>
 ```
+
+If `test_prefix` is present, all test function names for this spec must use the prefix (e.g., `test_v03_ac01_creates_structure`). This prevents AC ID collisions across specs in multi-spec projects.
 
 Then proceed immediately to writing the progress file and implementing — do not wait for confirmation.
 
