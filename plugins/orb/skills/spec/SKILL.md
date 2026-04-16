@@ -101,16 +101,6 @@ The spec references a card (from the interview's `Card:` line). After saving `sp
 
 **This is non-negotiable.** Every spec that addresses a card must appear in the card's `specs` array. Agents downstream (`/orb:design`, `/orb:implement`) rely on this array to understand cumulative progress. An incomplete array causes agents to lose the thread and repeat or contradict prior work.
 
-### 6. Assess Risk Tier
-
-Based on the spec content, assess the risk tier:
-
-- **HIGH**: Deployment, infrastructure, cron, production-touching. Both spec review + PR review.
-- **STANDARD**: Feature work. PR review only.
-- **SKIP**: Docs, config-only. No review.
-
-State the tier and reasoning.
-
 ---
 
-**Next step:** For HIGH-tier work, run `/orb:review-spec` to stress-test the plan. Otherwise, proceed to `/orb:implement`.
+**Next step:** Run `/orb:review-spec` to stress-test the plan, then `/orb:implement`.
