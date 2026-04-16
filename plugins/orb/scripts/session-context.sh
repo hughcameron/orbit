@@ -52,10 +52,11 @@ if [[ -n "$drive_file" ]]; then
 
     # Determine suggested next action from status
     case "$drive_status" in
-      design)   drive_next="run /orb:drive $drive_card $drive_autonomy to resume at design" ;;
-      spec)     drive_next="run /orb:drive $drive_card $drive_autonomy to resume at spec generation" ;;
-      implement) drive_next="run /orb:drive $drive_card $drive_autonomy to resume at implementation" ;;
-      review)   drive_next="run /orb:drive $drive_card $drive_autonomy to resume at review" ;;
+      design)      drive_next="run /orb:drive $drive_card $drive_autonomy to resume at design" ;;
+      spec)        drive_next="run /orb:drive $drive_card $drive_autonomy to resume at spec generation" ;;
+      review-spec) drive_next="run /orb:drive $drive_card $drive_autonomy to resume at spec review" ;;
+      implement)   drive_next="run /orb:drive $drive_card $drive_autonomy to resume at implementation" ;;
+      review)      drive_next="run /orb:drive $drive_card $drive_autonomy to resume at PR review" ;;
       *)        drive_next="run /orb:drive $drive_card $drive_autonomy to resume" ;;
     esac
 
