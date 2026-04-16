@@ -2,6 +2,11 @@
 
 All notable changes to orbit are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.2.17] - 2026-04-16
+
+### Changed
+- `/orb:release` — moved from user-level skill (`~/.claude/skills/release/`) into the orbit plugin. Invoked as `/orb:release` instead of `/release`, freeing the `/release` namespace for project-specific release skills .
+
 ## [0.2.16] - 2026-04-16
 
 ### Changed
