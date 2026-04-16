@@ -122,7 +122,7 @@ Not every spec ships code. Some produce evidence that an approach doesn't work �
 
 - **SessionStart hook** surfaces hard constraints even if this skill is never invoked — see `session-context.sh`
 - **`/orb:review-pr`** reads `progress.md` to cross-reference AC coverage against the implementation record
-- **`/orb:review-spec`** should have run before this skill on HIGH-tier specs
+- **`/orb:review-spec`** should have run before this skill — progressive review catches issues proportional to complexity
 
 ---
 

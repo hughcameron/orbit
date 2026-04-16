@@ -1,13 +1,15 @@
 ---
 name: review-spec
-description: Context-separated spec review — spawns a fresh agent to stress-test a plan before implementation
+description: Progressive spec review — depth scales with findings, not upfront classification
 context: fork
 agent: general-purpose
 ---
 
 # /orb:review-spec
 
-Stress-test a specification before implementation begins. This skill runs in a **forked context** — a fresh agent session with zero shared conversation history.
+Stress-test a specification before implementation begins. Every spec gets reviewed. The review's depth scales with what it finds — straightforward specs get a quick structural pass; complex or risky specs automatically deepen.
+
+This skill runs in a **forked context** — a fresh agent session with zero shared conversation history.
 
 ## Usage
 
@@ -28,7 +30,33 @@ A reviewer who watched you build something has confirmation bias. A fresh agent 
 - Also read the associated interview file (from `metadata.interview_ref`)
 - If neither exists, report that no spec was found
 
-### 2. Review Process
+### 2. Progressive Review
+
+The review runs in passes. Every spec gets Pass 1. Subsequent passes are triggered by findings or content signals — not by upfront classification.
+
+#### Pass 1 — Structural Scan (always runs)
+
+Quick check of spec integrity:
+
+1. **AC testability**: Is each AC specific enough to write a test for? Flag vague criteria ("works correctly", "handles errors gracefully").
+2. **Constraint conflicts**: Do any constraints contradict each other or make ACs unreachable?
+3. **Scope vs goal**: Does the scope match the goal? Over-specified (ACs beyond what the goal needs)? Under-specified (goal claims more than ACs deliver)?
+4. **Obvious gaps**: Error handling mentioned? Rollback plan? Monitoring? Edge cases?
+5. **Content signal scan**: Check whether the spec touches any deepening triggers:
+   - Training data, ground truth, model inputs, eval datasets
+   - Deployment, infrastructure, cron, production services
+   - Cross-system boundaries, shared config, other agents' domains
+   - Security, auth, permissions, key management
+   - Data migrations, schema changes, backwards compatibility
+
+**After Pass 1:**
+
+- If **zero findings AND no content signals** → APPROVE. Record the pass and stop. A clean structural scan on a well-scoped spec is a valid review.
+- If **any finding ≥ MEDIUM severity OR content signals present** → proceed to Pass 2.
+
+#### Pass 2 — Assumption & Failure Analysis (triggered)
+
+Deeper scrutiny, triggered by Pass 1 findings or content signals:
 
 1. **Assumption audit**: List every assumption the spec makes. For each, ask: what happens when this assumption is wrong? Flag assumptions not validated by acceptance criteria.
 
@@ -40,9 +68,19 @@ A reviewer who watched you build something has confirmation bias. A fresh agent 
 
 3. **Test adequacy**: For each AC's verification method — does it actually prove the criterion is met, or only under specific conditions?
 
-4. **Gap analysis**: What's NOT in the spec? Missing error handling, rollback plan, monitoring, edge cases.
+**After Pass 2:**
 
-5. **Constraint check**: Are constraints realistic? Do any contradict each other?
+- If **no structural concerns** → deliver verdict based on combined Pass 1 + Pass 2 findings. Most specs stop here.
+- If **structural concerns found** (contradicted assumptions, cascading failure modes, untestable ACs, downstream impact unclear) → proceed to Pass 3.
+
+#### Pass 3 — Adversarial Review (triggered)
+
+Full adversarial mode. Only reached when Pass 2 reveals structural problems:
+
+1. **Simultaneous failure**: What happens when multiple assumptions are wrong at the same time?
+2. **Cascade analysis**: If AC-01 fails, what happens to AC-02..N? Are there hidden dependencies between criteria?
+3. **Rollback feasibility**: Can the changes be undone? What state is left behind on failure?
+4. **Impact radius**: What breaks outside the spec's declared scope? What systems downstream consume this spec's outputs?
 
 ### 3. Output
 
@@ -58,10 +96,19 @@ Produce a structured review:
 
 ---
 
+## Review Depth
+
+| Pass | Triggered by | Findings |
+|------|-------------|----------|
+| 1 — Structural scan | always | <N> |
+| 2 — Assumption & failure | <reason or "not triggered"> | <N or "—"> |
+| 3 — Adversarial | <reason or "not triggered"> | <N or "—"> |
+
 ## Findings
 
 ### [SEVERITY] <title>
-**Category:** assumption | failure-mode | test-gap | missing-requirement | constraint-conflict
+**Category:** assumption | failure-mode | test-gap | missing-requirement | constraint-conflict | content-signal
+**Pass:** <1 | 2 | 3>
 **Description:** What the problem is
 **Evidence:** Why you believe this (cite spec lines, interview answers)
 **Recommendation:** What to change
