@@ -53,15 +53,15 @@ Also extract `metadata.test_prefix` if present. This prefix scopes test names to
 
 For each `code`-type AC, search test directories for functions matching the AC ID.
 
-**If the spec has a `test_prefix`** (e.g., `v03`): search for the prefixed form first. The AC `ac-01` with prefix `v03` maps to `v03_ac01` in test names.
+**If the spec has a `test_prefix`** (e.g., `remat`): search for the prefixed form first. The AC `ac-01` with prefix `remat` maps to `remat_ac01` in test names.
 
 Cross-language patterns with prefix:
 
-- Python: `def test_v03_ac<NN>` or `def v03_ac<NN>`
-- Rust: `fn v03_ac<NN>`
-- TypeScript/JavaScript: `test('v03_ac<NN>` or `it('v03_ac<NN>`
-- Go: `func TestV03Ac<NN>` or `func Test_v03_ac<NN>`
-- General fallback: grep for `v03_ac<NN>` prefix in test directories
+- Python: `def test_remat_ac<NN>` or `def remat_ac<NN>`
+- Rust: `fn remat_ac<NN>`
+- TypeScript/JavaScript: `test('remat_ac<NN>` or `it('remat_ac<NN>`
+- Go: `func TestRematAc<NN>` or `func Test_remat_ac<NN>`
+- General fallback: grep for `remat_ac<NN>` prefix in test directories
 
 **If the spec has no `test_prefix`** (backward-compatible): search for bare `ac<NN>` as before.
 
@@ -78,7 +78,7 @@ Cross-language patterns without prefix:
 - Go: `func TestAc<NN>` or `func Test_ac<NN>`
 - General fallback: grep for `ac<NN>` prefix in any file under `tests/` or `test/` or `__tests__/`
 
-Also search for the prefix + `acNN` in test **file names** (e.g. `test_v03_ac03_ordering.py` or `test_ac03_ordering.py`).
+Also search for the prefix + `acNN` in test **file names** (e.g. `test_remat_ac03_ordering.py` or `test_ac03_ordering.py`).
 
 ### 4. Check for Orphaned Test Prefixes
 

@@ -37,22 +37,22 @@ Verify an implementation before merge. This skill runs in a **forked context** �
 1. Run the project's test suite. Record pass/fail with output.
 2. **AC-to-test coverage check**: Parse the spec for AC IDs (`ac-NN`), their `ac_type` field, and `metadata.test_prefix`. Only `code`-type ACs require tests. ACs typed as `doc`, `gate`, or `config` are exempt. If `ac_type` is missing, treat as `code`.
 
-If `test_prefix` is present (e.g., `v03`), search for prefixed test names (`v03_ac01_*`). If absent, search for bare `ac<NN>` names (backward-compatible).
+If `test_prefix` is present (e.g., `remat`), search for prefixed test names (`remat_ac01_*`). If absent, search for bare `ac<NN>` names (backward-compatible).
 
 ```
-AC Coverage Report (prefix: v03):
-  ac-01 (code):   ✓ v03_ac01_creates_project_structure
-  ac-02 (code):   ✓ v03_ac02_manifest_has_correct_fields
+AC Coverage Report (prefix: remat):
+  ac-01 (code):   ✓ remat_ac01_creates_project_structure
+  ac-02 (code):   ✓ remat_ac02_manifest_has_correct_fields
   ac-03 (doc):    EXEMPT (document deliverable)
   ac-04 (code):   ✗ NO TEST FOUND
   Coverage: 2/3 testable ACs have tests (67%), 1 exempt
 ```
 
-Cross-language patterns to search (with prefix `v03`; omit prefix if `test_prefix` absent):
-- Rust: `fn v03_ac<NN>`
-- Python: `def test_v03_ac<NN>` or `def v03_ac<NN>`
-- TypeScript: `test('v03_ac<NN>` or `it('v03_ac<NN>`
-- General: grep for `v03_ac<NN>` prefix in test directories
+Cross-language patterns to search (with prefix `remat`; omit prefix if `test_prefix` absent):
+- Rust: `fn remat_ac<NN>`
+- Python: `def test_remat_ac<NN>` or `def remat_ac<NN>`
+- TypeScript: `test('remat_ac<NN>` or `it('remat_ac<NN>`
+- General: grep for `remat_ac<NN>` prefix in test directories
 
 ### 4. Phase 3: Environment Simulation
 

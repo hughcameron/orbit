@@ -77,7 +77,7 @@ exit_conditions:
 
 metadata:
   version: "1.0"
-  test_prefix: "v01"  # short prefix for test names — disambiguates ACs across specs
+  test_prefix: "remat"  # short label for this spec — disambiguates ACs across specs
   timestamp: "YYYY-MM-DDTHH:MM:SSZ"
   ambiguity_score: 0.15
   interview_ref: "specs/YYYY-MM-DD-<topic>/interview.md"

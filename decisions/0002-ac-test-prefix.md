@@ -13,13 +13,13 @@ Trigger incident: Nightingale audit of Meridian's DuckDB extension found four sp
 
 ## Considered Options
 
-- **Option A: Spec `test_prefix` field** — Add an explicit `test_prefix` to spec metadata. Implementers use it in test names: `test_v03_ac01_*`. Audit and review-pr read the prefix when searching.
+- **Option A: Spec `test_prefix` field** — Add an explicit `test_prefix` to spec metadata. Implementers use it in test names: `test_remat_ac01_*`. Audit and review-pr read the prefix when searching.
 - **Option B: Auto-derive prefix from spec slug** — The spec directory name (`2026-04-16-sql-introspection`) auto-generates a prefix like `introspect_ac01`.
 - **Option C: Globally unique AC IDs** — ACs get project-wide sequential IDs. First spec: ac-01 to ac-14. Second spec starts at ac-15.
 
 ## Decision Outcome
 
-Chosen option: "Option A — Spec `test_prefix` field", because it is explicit, already field-tested in Meridian (`v03_ac`), backward-compatible with specs that lack the field, and the simplest change to orbit's skills.
+Chosen option: "Option A — Spec `test_prefix` field", because it is explicit, already field-tested in Meridian, backward-compatible with specs that lack the field, and the simplest change to orbit's skills. The prefix is a freeform spec identifier (e.g., a slug like `remat` or `introspect`), not a version number — `metadata.version` already carries the version.
 
 ### What Changed
 
@@ -35,6 +35,6 @@ Chosen option: "Option A — Spec `test_prefix` field", because it is explicit, 
 - Good, because AC-to-test mapping becomes unambiguous across multi-spec projects
 - Good, because backward-compatible — specs without `test_prefix` work exactly as before
 - Good, because the prefix is explicit and auditable in the spec YAML
-- Good, because already proven in practice (Meridian `v03_ac` convention)
+- Good, because already proven in practice (Meridian used ad-hoc prefixes to disambiguate)
 - Bad, because spec authors must choose a meaningful prefix at creation time
-- Mitigation: `/orb:spec` derives a default from the spec version or slug; authors can override
+- Mitigation: `/orb:spec` derives a default from the spec directory slug; authors can override
