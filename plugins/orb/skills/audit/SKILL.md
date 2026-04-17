@@ -38,6 +38,8 @@ For each spec, extract every AC entry. Each AC should have:
 - `description`: what it requires
 - `ac_type`: one of `code`, `doc`, `gate`, `config` (defaults to `code` if missing)
 
+Also extract `metadata.test_prefix` if present. This prefix scopes test names to the spec, preventing AC ID collisions across specs in multi-spec projects.
+
 **AC type meanings:**
 
 | Type | Meaning | Test expected? |
@@ -49,12 +51,26 @@ For each spec, extract every AC entry. Each AC should have:
 
 ### 3. Search for Matching Tests
 
-For each `code`-type AC, search test directories for functions matching the AC ID. Handle both naming formats:
+For each `code`-type AC, search test directories for functions matching the AC ID.
+
+**If the spec has a `test_prefix`** (e.g., `remat`): search for the prefixed form first. The AC `ac-01` with prefix `remat` maps to `remat_ac01` in test names.
+
+Cross-language patterns with prefix:
+
+- Python: `def test_remat_ac<NN>` or `def remat_ac<NN>`
+- Rust: `fn remat_ac<NN>`
+- TypeScript/JavaScript: `test('remat_ac<NN>` or `it('remat_ac<NN>`
+- Go: `func TestRematAc<NN>` or `func Test_remat_ac<NN>`
+- General fallback: grep for `remat_ac<NN>` prefix in test directories
+
+**If the spec has no `test_prefix`** (backward-compatible): search for bare `ac<NN>` as before.
+
+Handle both naming formats:
 
 - Zero-padded: `ac-01` maps to `ac01` prefix in tests
 - Unpadded: `ac-1` also maps to `ac01` prefix (normalise to two digits)
 
-Cross-language patterns to search:
+Cross-language patterns without prefix:
 
 - Python: `def test_ac<NN>` or `def ac<NN>`
 - Rust: `fn ac<NN>`
@@ -62,7 +78,7 @@ Cross-language patterns to search:
 - Go: `func TestAc<NN>` or `func Test_ac<NN>`
 - General fallback: grep for `ac<NN>` prefix in any file under `tests/` or `test/` or `__tests__/`
 
-Also search for `acNN` in test **file names** (e.g. `test_ac03_ordering.py`).
+Also search for the prefix + `acNN` in test **file names** (e.g. `test_remat_ac03_ordering.py` or `test_ac03_ordering.py`).
 
 ### 4. Check for Orphaned Test Prefixes
 
@@ -127,6 +143,7 @@ After the report, suggest concrete next steps:
 - If coverage is below 80% for code ACs: *"Coverage is below 80%. Consider adding tests for the MISSING items above."*
 - If orphaned tests exist: *"N orphaned test prefixes found. These may reference superseded ACs — verify and clean up."*
 - If naming format is inconsistent (mix of `ac-N` and `ac-NN`): *"Found inconsistent AC naming: some specs use ac-N, others use ac-NN. Standardise on ac-NN (zero-padded)."*
+- If multiple specs exist but any lack `test_prefix`: *"N specs have no test_prefix in metadata. AC IDs collide across specs — add `test_prefix` to disambiguate test names (see decision 0002)."*
 
 ## Integration with Other Skills
 

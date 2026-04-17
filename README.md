@@ -179,9 +179,14 @@ The sprint is done when the listed card goals are met and their maturity advance
 
 ### Acceptance criteria and test naming
 
-Every spec AC gets an `ac-NN` ID. Tests are prefixed with that ID, creating a machine-checkable link:
+Every spec AC gets an `ac-NN` ID. Tests are prefixed with that ID, creating a machine-checkable link. In multi-spec projects, the spec's `metadata.test_prefix` disambiguates ACs across specs:
 
 ```
+# With test_prefix: remat
+Spec:   ac-03: "Steps execute in declared order"
+Test:   fn remat_ac03_steps_execute_in_declared_order() { ... }
+
+# Without test_prefix (single-spec projects)
 Spec:   ac-03: "Steps execute in declared order"
 Test:   fn ac03_steps_execute_in_declared_order() { ... }
 ```
