@@ -2,6 +2,16 @@
 
 All notable changes to orbit are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.2.18] - 2026-04-17
+
+### Added
+- `test_prefix` metadata field for specs — disambiguates AC-to-test mapping across multi-spec projects. Skills `spec`, `spec-architect`, `audit`, `review-pr`, and `implement` all consume the prefix.
+- `decisions/0002-ac-test-prefix.md` — documents the choice of explicit spec-scoped prefixes over globally unique IDs or auto-derived slugs.
+
+### Changed
+- AC naming guidance now recommends slug-style prefixes (`remat`, `introspect`) over version-like prefixes (`v03`), since `metadata.version` already carries the version.
+- `/orb:audit` warns when multiple specs exist but any lack `test_prefix`.
+
 ## [0.2.17] - 2026-04-16
 
 ### Changed
