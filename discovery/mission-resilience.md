@@ -120,11 +120,11 @@ Options:
   The "Return to" field is the re-anchoring mechanism.
 - **B. Findings file.** Separate `findings.md` alongside progress.md for discoveries made during implementation. Keeps progress.md clean but adds another file to track.
 
-### 5. How does this interact with batch drive?
+### 5. How does this interact with rally?
 
-Batch drive (see `discovery/batch-drive.md`) packs multiple cards between human gates. Mission resilience becomes more critical in batch mode — if one card in the batch hits a detour, it could pull the lead agent's attention away from the other cards' progress.
+Rally (see `discovery/rally.md`) packs multiple cards between human gates. Mission resilience becomes more critical in a rally — if one card hits a detour, it could pull the lead agent's attention away from the other cards' progress.
 
-The batch state file (`batch.yaml`) could track per-card AC progress, making drift visible at the batch level. But this adds complexity to an already-new concept. Worth considering but probably a second-order concern.
+The rally state file (`rally.yaml`) could track per-card AC progress, making drift visible at the rally level. But this adds complexity to an already-new concept. Worth considering but probably a second-order concern.
 
 ## Severity
 

@@ -1,4 +1,4 @@
-# Batch Drive — Maximising Agent Throughput Between Human Gates
+# Rally — Maximising Agent Throughput Between Human Gates
 
 **Date:** 2026-04-19
 **Origin:** Observed behaviour during a parallel design session across three independent cards
@@ -23,7 +23,7 @@ During a session, the lead agent identified three independent cards that shared 
 ```
 Cards identified
   │
-  ├─ Human gate: batch approval ("drive 0015–0017 as a group?")
+  ├─ Human gate: rally approval ("drive 0015–0017 as a group?")
   │
   ▼
 Parallel design (3 background agents)
@@ -50,7 +50,7 @@ Ship
 
 - **Design outputs landed in an improvised `designs/` folder** instead of the prescribed `specs/` structure. The parallel agents weren't running `/orb:design` as a skill — they were general-purpose agents briefed to "produce a design document." Without the skill's instructions, they picked a reasonable-sounding location.
 - **The "parallel teammates" pitch became sequential.** The initial framing was 3 parallel implementation streams (~2 hours vs ~5). The design phase revealed shared trait changes that require serial implementation. The time estimate was honest in retrospect, but the initial pitch oversold parallelism.
-- **No artefact records the batch plan.** The implementation order (0016 → 0015 → 0017) and the rationale exist only in conversation. If the session dies, a resuming agent has no record of the batch or its sequencing.
+- **No artefact records the rally plan.** The implementation order (0016 → 0015 → 0017) and the rationale exist only in conversation. If the session dies, a resuming agent has no record of the rally or its sequencing.
 
 ## The Throughput Model
 
@@ -79,13 +79,13 @@ Human attention is the scarce resource. Agent compute is abundant. The question 
 
 **Single-card drive:** One design session → one spec → one implementation → one PR review. Human touches the pipeline 2–3 times per card.
 
-**Batch drive:** N design sessions (parallel) → consolidated review (1 human touch) → N specs + implementations (serial or parallel) → N PR reviews (batched). Human touches the pipeline 2–3 times per *batch*.
+**Rally:** N design sessions (parallel) → consolidated review (1 human touch) → N specs + implementations (serial or parallel) → N PR reviews (grouped). Human touches the pipeline 2–3 times per *rally*.
 
-The multiplier is `N` — the number of independent cards in the batch.
+The multiplier is `N` — the number of independent cards in the rally.
 
 ## Key Design Questions
 
-### 1. What qualifies cards for a batch?
+### 1. What qualifies cards for a rally?
 
 The observed heuristic: independent cards that share a subsystem. More precisely:
 
@@ -93,7 +93,7 @@ The observed heuristic: independent cards that share a subsystem. More precisely
 - **Shared codebase area** — same module or crate, so the lead agent can reason about interactions
 - **Common prerequisite** — all needed for the same downstream goal (e.g., "reference pipeline readiness")
 
-Open question: should batch identification be a skill, or is it better left to agent judgment? The current agent definition says "recommend splitting for 2+ hours with 2+ independent streams" — this heuristic worked.
+Open question: should rally identification be a skill, or is it better left to agent judgment? The current agent definition says "recommend splitting for 2+ hours with 2+ independent streams" — this heuristic worked.
 
 ### 2. How do parallel designs stay on the artefact path?
 
@@ -104,13 +104,13 @@ Options:
 - **B. Each design agent runs `/orb:design` as a skill.** This keeps them on the prescribed path but contradicts drive's "inline, not sub-skill" rule.
 - **C. Design agents return content, lead agent saves it.** Agents produce markdown as their return value; the lead writes files to the correct locations. Centralises file management.
 
-### 3. What artefact records the batch plan?
+### 3. What artefact records the rally plan?
 
-A batch needs a state file analogous to `drive.yaml` but at a higher level. Something like:
+A rally needs a state file analogous to `drive.yaml` but at a higher level. Something like:
 
 ```yaml
-# batch.yaml — lives in specs/ or at repo root
-batch: pipeline-runtime-essentials
+# rally.yaml — lives in specs/ or at repo root
+rally: pipeline-runtime-essentials
 cards:
   - path: cards/0015-execution-resilience.yaml
     status: designing
@@ -139,10 +139,10 @@ The consolidated design review is where this decision gets made. The lead agent 
 
 If conflicts exist, the lead proposes an implementation order. If not, parallel implementation with worktree isolation is viable.
 
-### 5. How does assurance scale with batch size?
+### 5. How does assurance scale with rally size?
 
 Single-card drive: one PR review per card, each one a human gate.
-Batch drive options:
+Rally options:
 
 - **Individual PR reviews** — N separate reviews. Safe but defeats the throughput goal.
 - **Batched PR review** — one review session covering all N PRs. Higher throughput but higher cognitive load on the author.
@@ -150,7 +150,7 @@ Batch drive options:
 
 ## Scope Boundary
 
-This brief is about **orbit workflow mechanics** — how `/orb:drive` could support batching. It is not about:
+This brief is about **orbit workflow mechanics** — how `/orb:drive` could support rallying. It is not about:
 
 - Agent teaming infrastructure (TeamCreate, worktree management) — that's Claude Code platform
 - Specific card content (0015–0017 are examples, not the subject)
@@ -159,4 +159,4 @@ This brief is about **orbit workflow mechanics** — how `/orb:drive` could supp
 ## Next Steps
 
 - [ ] Decide whether this warrants a card (it does if we want to build it; it doesn't if the pattern works well enough as agent judgment)
-- [ ] If carding: the card's scenarios should cover batch identification, parallel design, consolidated review, sequential implementation, session resumption, and the failure case (what happens when one card in the batch gets a NO-GO)
+- [ ] If carding: the card's scenarios should cover rally identification, parallel design, consolidated review, sequential implementation, session resumption, and the failure case (what happens when one card in the rally gets a NO-GO)
