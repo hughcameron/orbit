@@ -2,7 +2,7 @@
 
 **Spec:** specs/2026-04-20-drive-forked-reviews/spec.yaml
 **Started:** 2026-04-20
-**Completed:** 2026-04-20 (implementation; ac-16/ac-17/ac-18 deferred as designed)
+**Completed:** 2026-04-20 (implementation; ac-18 verified post-ship; ac-16/ac-17 deferred as designed)
 
 ## Hard Constraints
 
@@ -36,7 +36,7 @@
 - [x] ac-15: REQUEST_CHANGES budget section with byte-identical constraint string — drive/SKILL.md §5a; grep-verified against spec.yaml
 - [ ] ac-16: PR description includes migration note — **deferred to PR creation**
 - [ ] ac-17: End-to-end drive produces 2 review files + correct terminal state — **deferred; exercised on next real drive after merge**
-- [ ] ac-18: Post-ship verification against rally refinement spec — **deferred; not a merge gate per spec's exit_conditions split**
+- [x] ac-18: Post-ship verification against rally refinement spec — **verified 2026-04-20**. Rally refinement follow-up shipped at commit `b9c1bb7` (PR #7); rally SKILL.md §7c delegates all reviewer mechanics to drive and cites decisions 0004–0007 by title — no rally-specific nested-fork plumbing remains. Full verification record lives in `specs/2026-04-19-rally-subagent-model/progress.md` under "Cross-Spec Verification — drive-forked-reviews ac-18", per this spec's own instruction.
 - [x] ac-19: `-v2`/`-v3` suffix for cycles 2–3; date captured at cycle 1 via review_cycle_dates — drive/SKILL.md §5.1, §7.1
 - [x] ac-20: Absent review_cycles triggers refusal — drive/SKILL.md §2 ("Refusal on pre-change drive.yaml"), §11 step 1
 - [x] ac-21: Fresh drives initialise review_cycles and review_cycle_dates — drive/SKILL.md §2 initial drive.yaml template
@@ -47,7 +47,7 @@
 
 - **ac-16** (PR description migration note) — added at PR creation time; the text is fixed by the spec
 - **ac-17** (end-to-end drive exercise) — executed on the first real drive after this change ships; cannot be fully simulated pre-merge without forking a real Agent, which this session should not do
-- **ac-18** (rally refinement downstream) — explicitly post-ship per exit_conditions; verified when the rally refinement spec lands
+- ~~**ac-18**~~ (rally refinement downstream) — **verified** on 2026-04-20 after rally refinement follow-up PR #7 merged. See `specs/2026-04-19-rally-subagent-model/progress.md` for the verification record.
 
 ## Verification Notes
 
