@@ -2,16 +2,21 @@
 
 All notable changes to orbit are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/).
 
-## [Unreleased]
+## [0.2.19] - 2026-04-20
+
+### Added
+- **`/orb:rally`** — new top-level orchestration skill for multi-card sprints. Proposes a rally, runs design/implementation in parallel via nested forked Agents with recursive context separation, and enforces a consolidated decision gate. Coherence is enforced via `plugins/orb/scripts/rally-coherence-scan.sh`. See `orbit/decisions/0003-rally-skill-boundary.md`, `0008-rally-subagent-path-discipline.md`, `0009-rally-parallel-drive-full.md`, `0010-rally-thin-card-guard.md`.
+- `SessionStart` hook now detects an active `orbit/specs/rally.yaml` and surfaces rally goal, phase, autonomy mode, per-card status, and parked constraints. Individual drive states are subordinated to the rally display when a rally is active.
 
 ### Changed
 - **Artefact layout consolidated under `orbit/`.** The four top-level directories (`cards/`, `specs/`, `decisions/`, `discovery/`) have moved to `orbit/cards/`, `orbit/specs/`, `orbit/decisions/`, and `orbit/discovery/`. All skill docs, hooks, examples, and references have been rewritten to point at the new paths. The move was done via `git mv` so history is preserved (`git log --follow` traces every artefact back through the rename).
 - `/orb:setup` now detects four repo states — **greenfield** (create fresh `orbit/`), **brownfield** (legacy bare dirs present → single all-or-nothing migration prompt), **idempotent** (already migrated, no-op), and **mixed** (refuse with a clear collision report). Brownfield migration runs one `git mv` transaction covering every detected bare dir; untracked residue is reported after the move.
-- `SessionStart` hook (`session-context.sh`) now gates on the presence of `orbit/` and emits a one-line nudge (`orbit: legacy layout detected. Run /orb:setup to migrate.`) when bare-layout dirs are found without `orbit/`.
+- `SessionStart` hook (`session-context.sh`) now gates on the presence of `orbit/` and emits a one-line nudge (`orbit: legacy layout detected. Run /orb:setup to migrate.`) when bare-layout dirs are found without `orbit/`. Hardened against partial `orbit/` layouts: `find` pipelines inside the drive and latest-spec scans are guarded with `[[ -d ... ]]` checks plus `|| true`, so the hook survives manually-created `orbit/` directories without `cards/` or `specs/` subdirs.
 - `CLAUDE.md` snippet appended by `/orb:setup` now references `orbit/cards/`, `orbit/specs/`, and `orbit/decisions/`.
+- **`/orb:drive` forks its review stages.** `review-spec` and `review-pr` now run in nested forked Agents with `context: fork` at the architectural root, honouring the context-separation contract that the review skills themselves already declared. Verdict is read from the written artefact rather than the return message. See `orbit/decisions/0005-drive-review-artefact-contract.md`, `0006-drive-cold-re-review.md`, `0007-drive-rerequest-budget.md`.
 
 ### Notes
-- Prior review artefacts (e.g. `review-pr-*.md`, `review-spec-*.md`) that quoted old bare paths were rewritten in place. This is a deliberate evidence-fidelity trade-off in favour of a clean end-state; the migration commit itself is the audit trail for the path change.
+- Prior review artefacts (e.g. `review-pr-*.md`, `review-spec-*.md`) that quoted old bare paths were rewritten in place during the artefact-folder migration. This is a deliberate evidence-fidelity trade-off in favour of a clean end-state; the migration commit itself is the audit trail for the path change.
 
 ## [0.2.18] - 2026-04-17
 
