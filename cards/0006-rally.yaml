@@ -60,6 +60,7 @@ maturity: planned
 
 specs:
   - specs/2026-04-19-rally/spec.yaml
+  - specs/2026-04-19-rally-subagent-model/spec.yaml
 
 references:
   - "discovery/rally.md: observed pattern from parallel design session"

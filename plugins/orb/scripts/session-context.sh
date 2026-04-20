@@ -33,10 +33,91 @@ if [[ -d "cards/memos" ]]; then
   fi
 fi
 
+# Detect active rally (specs/rally.yaml)
+# When a rally is active, it becomes the primary orchestration context
+# and individual drive states are subordinated (shown as sub-items, not independent status lines).
+active_rally=""
+rally_file="specs/rally.yaml"
+if [[ -f "$rally_file" ]]; then
+  # Parse top-level fields tolerantly: missing fields yield empty strings, never abort the hook.
+  # `|| true` keeps set -e / pipefail from killing the script when grep finds no match.
+  rally_goal=$( { grep '^rally:' "$rally_file" 2>/dev/null || true; } | head -1 | sed 's/^rally:[[:space:]]*//; s/^"//; s/"$//')
+  rally_phase=$( { grep '^phase:' "$rally_file" 2>/dev/null || true; } | head -1 | sed 's/^phase:[[:space:]]*//; s/^"//; s/"$//')
+  rally_autonomy=$( { grep '^autonomy:' "$rally_file" 2>/dev/null || true; } | head -1 | sed 's/^autonomy:[[:space:]]*//; s/^"//; s/"$//')
+
+  # Validate required fields. If rally.yaml exists but is malformed, surface a clear error
+  # and skip the rally display — do not silently abort the hook.
+  if [[ -z "$rally_phase" || -z "$rally_goal" ]]; then
+    missing=()
+    [[ -z "$rally_goal"  ]] && missing+=("rally")
+    [[ -z "$rally_phase" ]] && missing+=("phase")
+    echo "orbit: rally.yaml at $rally_file is malformed — missing required field(s): ${missing[*]}"
+    echo "  Fix the file or remove it to start fresh. Rally state will not be surfaced."
+  elif [[ "$rally_phase" != "complete" ]]; then
+    active_rally="$rally_file"
+
+    # Count cards by status using awk — emits a single integer even when no matches.
+    # (grep -c || echo 0 is unsafe: grep prints "0" AND exit is nonzero, so || echo 0
+    #  concatenates "0\n0" into the variable.)
+    total_cards=$(awk '/^  - path:/ {n++} END {print n+0}' "$rally_file")
+    complete_cards=$(awk '/^    status: complete[[:space:]]*$/ {n++} END {print n+0}' "$rally_file")
+    parked_cards=$(awk '/^    status: parked[[:space:]]*$/ {n++} END {print n+0}' "$rally_file")
+
+    echo "orbit: Active rally — \"$rally_goal\" ($rally_autonomy mode, phase: $rally_phase)"
+    echo "  Cards: $total_cards total, $complete_cards complete, $parked_cards parked"
+
+    # Surface per-card status lines as sub-items
+    awk '
+      /^  - path:/ {
+        path = $0
+        sub(/^  - path:[[:space:]]*/, "", path)
+        gsub(/"/, "", path)
+        card_path = path
+        next
+      }
+      /^    status:/ {
+        status = $0
+        sub(/^    status:[[:space:]]*/, "", status)
+        gsub(/"/, "", status)
+        if (card_path != "") {
+          printf "    - %s [%s]\n", card_path, status
+          card_path = ""
+        }
+      }
+    ' "$rally_file"
+
+    # Surface parked card constraints
+    if [[ "$parked_cards" -gt 0 ]]; then
+      echo "  Parked constraints:"
+      awk '
+        /^  - path:/ { path = $0; sub(/^  - path:[[:space:]]*/, "", path); gsub(/"/, "", path); card_path = path; parked = 0; next }
+        /^    status: parked/ { parked = 1 }
+        /^    parked_constraint:/ {
+          if (parked) {
+            c = $0
+            sub(/^    parked_constraint:[[:space:]]*/, "", c)
+            gsub(/"/, "", c)
+            printf "    - %s: %s\n", card_path, c
+          }
+        }
+      ' "$rally_file"
+    fi
+
+    echo "  Next: run /orb:rally to resume at phase \"$rally_phase\""
+  elif [[ "$rally_phase" == "complete" ]]; then
+    echo "orbit: Completed rally — \"$rally_goal\" (awaiting archival on next rally)"
+  fi
+fi
+
 # Detect active drives (drive.yaml in any spec directory)
-# v1 constraint: single drive at a time. If multiple drive.yaml files exist, only the first is surfaced.
+# v1 constraint: single drive at a time outside a rally. Inside a rally, drive states are
+# subordinated to the rally display above and not re-surfaced here.
 active_drive=""
-drive_file=$(find specs -maxdepth 2 -name 'drive.yaml' 2>/dev/null | head -1)
+if [[ -n "$active_rally" ]]; then
+  drive_file=""
+else
+  drive_file=$(find specs -maxdepth 2 -name 'drive.yaml' 2>/dev/null | head -1)
+fi
 if [[ -n "$drive_file" ]]; then
   drive_dir=$(dirname "$drive_file")
   # Parse drive.yaml fields (lightweight — no yq dependency)
