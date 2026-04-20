@@ -383,7 +383,7 @@ On each completion:
 
 1. Parse the sub-agent's JSON verdict.
 2. `git checkout main` (if not already there).
-3. Update rally.yaml for that card: `complete` on APPROVE, `parked` on escalation (with `parked_constraint` constructed per ac-14 once PR #6 is live).
+3. Update rally.yaml for that card: `complete` on APPROVE, `parked` on escalation (with `parked_constraint` constructed per the §9 label-mapping table).
 4. `git commit` on main.
 
 N sub-agent completions produce exactly N rally.yaml commits on main, in the order completions are surfaced by the harness.
