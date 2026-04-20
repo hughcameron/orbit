@@ -1,0 +1,47 @@
+feature: Mission resilience — agents stay anchored to the spec through disruptions
+as_a: author
+i_want: the implementing agent to detect drift, enforce gate ACs, log detours, and re-anchor after unplanned work
+so_that: spec fidelity is maintained through real-world interruptions without me pulling the agent back on track
+
+scenarios:
+  - name: Mid-flight spec modification is detected
+    given: an implementation is in progress against a spec.yaml
+    when: the spec file is modified on disk during the session
+    then: the agent is notified, checkpoints with the author before continuing, and surfaces "spec modified since implementation started, re-review recommended"
+    source_lines: "mission-resilience.md: B. Git-based detection. Session-context hook compares spec file's git status. If modified since the last review-spec-*.md, surface a warning."
+
+  - name: Gate ACs block subsequent ACs
+    given: a spec has an AC typed as a gate
+    when: the implementing agent considers later ACs
+    then: the agent refuses to proceed past a gate AC until the gate is marked complete, surfacing the blocking AC's ID
+    source_lines: "mission-resilience.md: AC-01 (gate) → Prerequisite verification — \"Do not proceed to AC-05 until verified\""
+
+  - name: Detours are recorded in progress.md
+    given: the implementing agent goes off-script to handle an unplanned finding
+    when: the detour is resolved
+    then: progress.md records the detour with a "Return to:" field naming the AC to resume, so the re-anchoring target survives session death
+    source_lines: "mission-resilience.md: A. Detour log in progress.md. A section for unplanned work... The \"Return to\" field is the re-anchoring mechanism."
+
+  - name: Agent re-anchors after detour
+    given: the agent has resolved an unplanned detour
+    when: it chooses what to do next
+    then: it re-reads progress.md and the spec's AC list, identifies the next AC in sequence, and resumes against that AC rather than continuing in the detour's direction
+    source_lines: "mission-resilience.md: After resolving the detour, the agent continues in the direction it was heading rather than returning to the spec. The most recent work feels like the natural next step."
+
+  - name: Session resume surfaces next AC
+    given: a session is resumed mid-implementation
+    when: the SessionStart hook fires
+    then: the hook reads progress.md and surfaces the next unchecked AC (including any blocking gate AC) alongside hard constraints, so the resuming agent knows where to restart
+    source_lines: "mission-resilience.md: B. In the session-context hook. The hook already reads the spec for constraints. It could also read progress.md and surface the next unchecked AC at session start."
+
+goal: "Agents maintain spec fidelity through mid-flight disruptions without requiring the author to pull them back on track"
+
+maturity: planned
+
+specs: []
+
+references:
+  - "orbit/discovery/mission-resilience.md"
+  - "plugins/orb/skills/implement/SKILL.md"
+  - "plugins/orb/scripts/session-context.sh"
+  - "https://code.claude.com/docs/en/tools-reference"

@@ -54,6 +54,12 @@ scenarios:
     when: I check progress mid-session
     then: the task list shows per-card status, dependencies, and what is blocked or in progress
 
+  - name: Rally approval is a structured prompt
+    given: a rally has been proposed with N candidate cards
+    when: the author is asked to approve
+    then: the approval uses AskUserQuestion with options (approve-all / select-subset / decline) rather than a free-text prompt
+    source_lines: "tools-reference: AskUserQuestion — Asks multiple-choice questions to gather requirements or clarify ambiguity"
+
 goal: "agents coordinate multi-card delivery with fewer human touchpoints per card than serial drives"
 
 maturity: planned
