@@ -62,8 +62,14 @@ ok   required-present: 'recursive context separation'
 ok   required-present: 'drive-full'
 ok   required-present: 'nested forked Agents'
 == Adjacency scan (window=80) ==
-(no enforcement verbs in named sections — trivially passes)
+
 rally-coherence-scan: PASS
+
+(Note: SKILL.md §2/§4a/§7/§11 contain no enforcement verbs — the rewrite
+favoured "verifies", "checks", "rejects", "refuses". The adjacency scan
+therefore has nothing to check and trivially passes. If a future edit
+introduces enforcement verbs in those sections, the scan will exercise the
+adjacency rule against the concrete citation vocabulary.)
 
 Mutation matrix (run against temp copy):
   1. Baseline                                   → PASS (exit 0)
