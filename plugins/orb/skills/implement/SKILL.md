@@ -71,23 +71,71 @@ Then proceed immediately to writing the progress file and implementing — do no
 
 ### 4. Write the Progress File
 
-Create `progress.md` in the same directory as the spec:
+Create `progress.md` in the same directory as the spec. This is the **authoritative template** — the schema is owned by card 0009 (mission-resilience) and consumed by card 0003 (implement session visibility). Every field and section below is load-bearing.
 
 ```markdown
 # Implementation Progress
 
-**Spec:** <path to spec.yaml>
-**Started:** <today's date>
+Spec path: <path to spec.yaml>
+Spec hash: sha256:<hex>
+Started: <today's date>
+Current AC: <ac-id | none>
 
 ## Hard Constraints
 - [ ] <constraint text>
 
+## Detours
+
 ## Acceptance Criteria
-- [ ] ac-01: <description>
+- [ ] ac-01 (gate): <description>
 - [ ] ac-02: <description>
 ```
 
-All items start as `- [ ]` (pending).
+The metadata fields (`Spec path:`, `Spec hash:`, `Started:`, `Current AC:`) are **plain text, not bold** — this is a deliberate contract so the `Spec hash:` line matches the ac-01 regex `^Spec hash: sha256:[0-9a-f]{64}$` exactly, and so the `session-context.sh` parser's literal grep stays simple.
+
+**Field semantics (non-negotiable — card 0009 owns this schema):**
+
+- **`Spec hash: sha256:<hex>`** — the sha256 hex digest of `spec.yaml` computed over **raw bytes as read from disk in binary mode**. No line-ending conversion, no trimming, no YAML canonicalisation. Cross-platform checkouts may produce occasional false drift; this is the accepted trade-off.
+- **`Current AC: <ac-id | none>`** — the AC currently in flight. Updated when advancing and immediately after a detour append (set to the detour's `Return to:` target).
+- **`## Detours`** — positioned strictly between `## Hard Constraints` and `## Acceptance Criteria`. Entries are atomic and terminal — appended only at the moment unplanned work is resolved. Format:
+  ```
+  YYYY-MM-DD: <one-line description>
+  Return to: <ac-id>
+  ```
+  Never edit or remove an entry after writing. There is **no** `Status:` field, **no** open/closed distinction — "closing a detour" and "appending the entry" are the same event. A separate `findings.md` is forbidden.
+- **Gate annotation** — an AC whose `ac_type: gate` is rendered with the human-readable tag `(gate)`: `- [ ] ac-NN (gate): <description>`. The authoritative signal remains the `ac_type` value in `spec.yaml`; the annotation is documentation only.
+
+All items start as `- [ ]` (pending). Constraint items mirror each constraint from `spec.yaml`.
+
+#### 4a. Canonical drift-notice string
+
+The single canonical source for the drift-notice string lives in this skill:
+
+> **DRIFT_NOTICE** = `spec modified since implementation started, re-review recommended`
+
+This exact string is emitted by the implement skill on drift (ac-02) and referenced by literal inclusion in `plugins/orb/scripts/session-context.sh` (ac-03). Test fixtures for `mrl_ac02` and `mrl_ac03` import or copy the same string. Any change to the wording is a schema change that routes through card 0009.
+
+#### 4b. Pre-AC check sequence (fixed)
+
+Before starting any AC, the implement skill runs **three checks in this exact order**. The ordering is pinned so user-visible log causality is deterministic across implementations.
+
+1. **Backfill Spec hash if absent (ac-12).** If the `Spec hash:` line is missing from `progress.md` (a legacy in-flight file from before ac-01), compute `sha256(spec.yaml raw bytes)`, insert the `Spec hash:` line in the file header, and emit the log line `Backfilled Spec hash for existing progress.md`. Do **NOT** emit the drift notice on this write — the hash was never recorded, so there is nothing to disagree with. Once backfilled, the file is indistinguishable from a fresh write.
+2. **Drift check (ac-02).** If the `Spec hash:` line is present, recompute `sha256(spec.yaml raw bytes)` and compare. On mismatch, emit the canonical `DRIFT_NOTICE` string (stderr/stdout), then branch by interactivity:
+   - **Interactive path** (TTY on stdin **AND** `ORBIT_NONINTERACTIVE` is not set to `1`): call `AskUserQuestion` with exactly two options:
+     - `Acknowledge drift and proceed (records new hash)` — overwrite the `Spec hash:` field with the new hash and continue. **This write is the acknowledgement.**
+     - `Stop — re-run /orb:review-spec on the modified spec` — halt with exit status 0, leave the stale hash in place.
+   - **Non-interactive path** (no TTY on stdin **OR** `ORBIT_NONINTERACTIVE=1`): do **NOT** call `AskUserQuestion`. Leave the `Spec hash:` field unchanged, halt with exit status 1. The autonomous harness (e.g. `/orb:drive`) is responsible for surfacing the non-zero exit as a checkpoint.
+3. **Gate enforcement (ac-06).** Walk the AC list in declaration order. If any preceding AC with `ac_type: gate` is not marked `[x]`, refuse to start the current AC and emit a refusal message naming the blocking gate's id. Non-gate preceding ACs do **not** block — an unchecked `ac-02 (code)` does not prevent `ac-03 (code)` from starting.
+
+The acknowledgement contract for the interactive drift path is machine-checkable: **`progress.md`'s `Spec hash:` field equals `sha256(spec.yaml raw bytes)` after `Acknowledge` and only after `Acknowledge`.** No other path modifies it.
+
+#### 4c. Detour append and re-anchor (ac-04, ac-05, ac-07)
+
+When unplanned work is resolved:
+
+1. Append a single atomic entry to `## Detours` in the format `YYYY-MM-DD: <description>` followed by `Return to: <ac-id>`. No open/closed state; the append IS the resolution.
+2. Immediately set `Current AC:` to the entry's `Return to:` target.
+3. Re-read `progress.md` and the spec's AC list. Select the next action from the **first unchecked AC in `## Acceptance Criteria`** — not from any in-memory context left over from the unplanned work. The parser ignores `## Detours` content when determining AC status (ac-09).
 
 ### 5. Implement — Tracking as You Go
 

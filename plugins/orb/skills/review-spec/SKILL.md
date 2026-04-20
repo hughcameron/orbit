@@ -42,7 +42,13 @@ Quick check of spec integrity:
 2. **Constraint conflicts**: Do any constraints contradict each other or make ACs unreachable?
 3. **Scope vs goal**: Does the scope match the goal? Over-specified (ACs beyond what the goal needs)? Under-specified (goal claims more than ACs deliver)?
 4. **Obvious gaps**: Error handling mentioned? Rollback plan? Monitoring? Edge cases?
-5. **Content signal scan**: Check whether the spec touches any deepening triggers:
+5. **Gate-AC verification check (deterministic — no LLM judgement).** For every AC whose `ac_type: gate`, the `verification` field must pass **all three** of the following deterministic rules. Flag a MEDIUM finding naming the gate's id and the specific rule violated if any fail:
+   - **Non-empty**: the field is present and contains at least one non-whitespace character.
+   - **Not a placeholder token**: the trimmed value is not (case-insensitive) in the set `{TBD, TODO, FIXME, PLACEHOLDER, XXX, ???}`. Match the trimmed value against the literal token — a sentence that happens to contain `TBD` as a word is not a failure of this rule.
+   - **Minimum length**: the trimmed value is at least 20 characters long.
+
+   A vague-but-long verification ("it works correctly when the feature is done", 49 chars) does **not** trip this check. That is accepted as a deliberate limitation of the deterministic rule — richer semantic detection is out of scope for Pass 1. The implement skill remains the runtime gate enforcer; Pass 1 adds a structural check only.
+6. **Content signal scan**: Check whether the spec touches any deepening triggers:
    - Training data, ground truth, model inputs, eval datasets
    - Deployment, infrastructure, cron, production services
    - Cross-system boundaries, shared config, other agents' domains
