@@ -1,0 +1,141 @@
+goal: "Refine the rally skill's sub-agent orchestration model to honestly describe what Claude Code's primitives provide — trust + post-verify path discipline, parallel sub-agents running drive-full with nested forked reviews, thin-card guard at proposal, and lead-owned rally.yaml writes"
+
+constraints:
+  - "Path discipline for design sub-agents is trust + post-verify — the brief names the spec_dir, the lead verifies on return. No claim of native path enforcement via tools allow-list or similar."
+  - "Parallel implementation sub-agents run drive in full autonomy inside their worktree. Drive-full's review-spec and review-pr stages spawn their own nested forked Agents — this is recursive context separation, not self-review."
+  - "Rally refuses any parallel-eligible rally containing a card with fewer than 3 scenarios, at the proposal gate. No silent downgrade, no mid-rally execution-model switching."
+  - "rally.yaml is written only by the lead agent. Sub-agents are briefed with card, interview.md, and spec_dir — they never read or write rally.yaml."
+  - "Parallel sub-agents run fire-and-forget in background (run_in_background: true); the lead reacts to completion events. No mid-flight stage streaming, no sentinel files."
+  - "Rally-level autonomy (guided | supervised) governs pauses between rally phases. Drive-level autonomy inside a parallel sub-agent is always full. The two are independent."
+  - "The rally.yaml ontology gains a cards[].worktree field (repo-relative or absolute path, null for serial cards or before launch), so the lead can locate each sub-agent's checkout on resumption."
+  - "Drive-full's internal 3-iteration budget exhaustion, when it occurs inside a rally sub-agent, is returned to the lead and recorded as a park. Rally's single-strike NO-GO policy absorbs drive's escalation — the sub-agent's internal iterations are the strike."
+  - "This spec is a refinement of specs/2026-04-19-rally/spec.yaml (v2.0), not a replacement. The earlier spec's ACs for invocation, design, consolidated review, implementation coordination, assurance, visibility, and completion remain in force where not directly amended here."
+
+acceptance_criteria:
+  # --- Thin-card guard at proposal ---
+  - id: ac-01
+    ac_type: code
+    description: "The rally proposal gate checks scenario counts on every candidate card. If any candidate card has fewer than 3 scenarios AND the disjointness check is expected to allow parallel implementation, the proposal flags the card and refuses to proceed until the author either thickens the card via /orb:card or removes it from the rally list."
+    verification: "Invoke /orb:rally with a candidate list that includes a card with 2 scenarios. Verify the proposal flags the card by name, names the scenario count, and does not accept approval until the card is thickened or removed."
+
+  - id: ac-02
+    ac_type: code
+    description: "Serial rallies (those the author pre-declares as serial, or those where the post-design disjointness check forces serial ordering) accept cards with fewer than 3 scenarios but surface a one-line warning during the consolidated review phase noting that thin cards indicate weak ideation."
+    verification: "Run a serial rally with a 2-scenario card. Verify the rally proceeds and the consolidated review output contains a warning naming the thin card."
+
+  # --- Design sub-agent path discipline ---
+  - id: ac-03
+    ac_type: doc
+    description: "The rally SKILL.md §4a (Design — Launch N design sub-agents) no longer claims that the tools allow-list blocks writes outside the assigned spec_dir. The section names trust + post-verify as the discipline: brief instructs the sub-agent where to write; lead verifies on return."
+    verification: "Read plugins/orb/skills/rally/SKILL.md §4a. Verify the phrase 'tools allow-list' does not appear as an enforcement mechanism. Verify the section names post-return verification."
+
+  - id: ac-04
+    ac_type: code
+    description: "After a design sub-agent returns, the lead performs a verification pass: confirms the expected artefact (decisions.md for the decision-pack phase, interview.md for the interview-production phase) exists at the card's assigned spec_dir, and checks for any files written outside that spec_dir. Writes outside the spec_dir cause the sub-agent's output to be rejected and the card to be re-briefed once; on second failure the card is parked with the constraint 'sub-agent violated path discipline'."
+    verification: "Simulate a design sub-agent that writes a spurious file outside its spec_dir. Verify the lead detects the extra file, rejects the sub-agent's output, and either re-briefs or parks per the rule."
+
+  - id: ac-05
+    ac_type: doc
+    description: "The rally spec's ac-06 (from v2.0) is rewritten to match the trust + post-verify model. The verification step no longer says 'verify the write is blocked' — it says 'verify unexpected writes are detected on return and the sub-agent output is rejected'."
+    verification: "Read specs/2026-04-19-rally/spec.yaml ac-06. Verify the description and verification fields reflect the post-verify model, not the blocked-write model."
+
+  # --- Parallel implementation via drive-full + nested forks ---
+  - id: ac-06
+    ac_type: code
+    description: "When rally enters parallel implementation, the lead launches one Agent-tool invocation per card with run_in_background: true. Each sub-agent's brief instructs it to run /orb:drive <card> full inside its assigned worktree, using the already-produced interview.md at <spec_dir>/interview.md as the design input."
+    verification: "Trigger a 2-card parallel rally. Verify two Agent-tool calls are made with run_in_background: true. Verify each brief names the card path, the worktree path, full autonomy, and the existing interview.md."
+
+  - id: ac-07
+    ac_type: doc
+    description: "Rally SKILL.md §7 Parallel Implementation explicitly states that sub-agents run drive-full, and that drive-full's review-spec and review-pr stages spawn their own nested forked Agents — this is recursive context separation (the forked-reviewer pattern used at the top level of drive), not self-review."
+    verification: "Read plugins/orb/skills/rally/SKILL.md §7. Verify the section names drive-full, references nested forked Agents for the review stages, and uses the phrase 'recursive context separation' or equivalent (distinguishing from self-review)."
+
+  - id: ac-08
+    ac_type: code
+    description: "Sub-agent briefs for parallel implementation forbid reading or writing rally.yaml. The brief states: 'Do not read rally.yaml. Do not write rally.yaml. Report progress by returning a structured verdict at the end.'"
+    verification: "Inspect the parallel sub-agent brief template. Verify the forbidden-paths clause is present."
+
+  - id: ac-09
+    ac_type: code
+    description: "On each parallel sub-agent completion, the lead reads the returned verdict (complete, parked, or escalated) and serialises a single rally.yaml write for that card. N sub-agent completions produce exactly N rally.yaml writes, in the order completions are observed."
+    verification: "Complete a 3-card parallel rally. Inspect rally.yaml history (via git diff on rally.yaml between launch and completion events). Verify exactly 3 per-card status transitions were written, each attributable to a single sub-agent completion."
+
+  # --- Rally-level autonomy semantics ---
+  - id: ac-10
+    ac_type: doc
+    description: "Rally SKILL.md explicitly states that rally-level autonomy (guided | supervised) governs pauses between rally phases (proposal, consolidated decision gate, consolidated design review, batched diff review), and is independent of the drive autonomy used inside a parallel sub-agent (always full)."
+    verification: "Read plugins/orb/skills/rally/SKILL.md Autonomy Levels section. Verify the distinction between rally-level and drive-level autonomy is explicit, and that sub-agent drive autonomy is always full in the parallel path."
+
+  # --- rally.yaml ontology extension ---
+  - id: ac-11
+    ac_type: code
+    description: "The RallyState ontology schema adds a cards[].worktree field (type: string, nullable). Populated with the sub-agent's worktree path at parallel launch. null for cards in serial rallies, and null before parallel launch. rally.yaml writes reflect this field consistently."
+    verification: "Inspect rally.yaml during a parallel rally after sub-agent launch. Verify each parallel card has a non-null worktree field pointing to a valid directory. For a serial rally, verify worktree remains null."
+
+  - id: ac-12
+    ac_type: code
+    description: "rally.yaml validation (from v2.0 ac-04) is extended to recognise the cards[].worktree field. Missing worktree on a card whose status is implementing in a parallel rally produces a validation error. worktree present but pointing to a non-existent directory produces a recoverable warning, not a hard error (the worktree may have been cleaned up post-rally)."
+    verification: "Corrupt rally.yaml by removing worktree from an implementing card during a parallel rally. Verify validation reports the missing field. Restore and delete the worktree directory; verify validation produces a warning, not an error."
+
+  # --- Resumption ---
+  - id: ac-13
+    ac_type: code
+    description: "Parallel rally resumption: when the lead restarts with an active parallel rally, it reads rally.yaml for coordination state, then reads each implementing card's worktree/specs/<spec_dir>/drive.yaml to determine per-card sub-stage. The lead reports each card's resume point (e.g. 'card A at review-pr, card B at implement') before re-launching any sub-agents."
+    verification: "Start a 2-card parallel rally, kill the lead session mid-implementation. Restart and invoke /orb:rally. Verify the resume message reads both worktrees' drive.yaml files and reports per-card sub-stage."
+
+  # --- Escalation absorbed into park ---
+  - id: ac-14
+    ac_type: code
+    description: "When a parallel sub-agent's drive-full exhausts its 3-iteration budget, the sub-agent returns an escalation summary. The lead treats this as a NO-GO park (not as a retry at rally level — rally's single-strike policy absorbs drive's internal iterations). rally.yaml records the card as parked with the escalation summary's one-line reason as parked_constraint."
+    verification: "Trigger a parallel sub-agent that escalates (mock a scenario forcing 3 NO-GO iterations internally). Verify the lead records the card as parked with parked_constraint set from the escalation summary. Verify the rally continues with remaining cards."
+
+  # --- Cross-cutting: spec coherence ---
+  - id: ac-15
+    ac_type: gate
+    description: "After this spec's changes land, the rally SKILL.md and specs/2026-04-19-rally/spec.yaml are internally consistent. Every claim in SKILL.md about sub-agent behaviour maps to an AC in either this spec or v2.0. No claim in either spec is contradicted by the other."
+    verification: "Cross-read the rally SKILL.md and both rally specs. Confirm each claim about sub-agent orchestration has a matching AC, and that v2.0's ac-06 and ac-14 have been amended per ac-05 and ac-07 here."
+
+ontology_schema:
+  name: "RallyState"
+  description: "Extended from v2.0 to include the worktree path for parallel sub-agent resumption"
+  fields:
+    - name: "cards[].worktree"
+      type: "string"
+      description: "Repo-relative or absolute path to the sub-agent's git worktree. Populated at parallel launch; null for serial cards and for parallel cards before launch. Used by the lead on resumption to locate each sub-agent's drive.yaml for sub-stage detection."
+
+evaluation_principles:
+  - principle: "Honesty — the spec and SKILL.md describe what Claude Code actually provides, not what an ideal architecture would provide. Trust is named as trust; enforcement is named only where it exists."
+    weight: 0.35
+  - principle: "Interaction quality — inherited from v2.0. Every human touchpoint presents maximum clarity based on the best available evidence. The honesty principle serves interaction quality by ensuring the author is not misled about orchestration guarantees."
+    weight: 0.25
+  - principle: "Coherence — SKILL.md, v2.0 spec, and this spec are internally consistent. A reader holding any one of them has a correct mental model of the others."
+    weight: 0.20
+  - principle: "Minimality — this refinement extends the ontology by one field and amends two ACs. No new files, no new hooks, no new state layers."
+    weight: 0.20
+
+exit_conditions:
+  - "plugins/orb/skills/rally/SKILL.md §2, §4a, §7, and Autonomy Levels are updated per ac-03, ac-05, ac-07, ac-10"
+  - "specs/2026-04-19-rally/spec.yaml ac-06 and ac-14 are amended per ac-05 and ac-07 of this spec"
+  - "RallyState ontology (in specs/2026-04-19-rally/spec.yaml) has the cards[].worktree field added"
+  - "rally.yaml validation recognises the new field (ac-12)"
+  - "The thin-card guard is implemented in SKILL.md §2 (ac-01, ac-02)"
+  - "The /orb:review-pr verdict on this spec's implementation is APPROVE"
+
+metadata:
+  version: "1.0"
+  test_prefix: "rallysub"
+  timestamp: "2026-04-19T18:00:00Z"
+  ambiguity_score: 0.07
+  interview_ref: "specs/2026-04-19-rally-subagent-model/interview.md"
+  relates_to:
+    - "specs/2026-04-19-rally/spec.yaml"
+    - "specs/2026-04-19-rally/review-pr-2026-04-19.md"
+  addresses_findings:
+    - "F-03 (HIGH): ac-06 tools allow-list mechanism is aspirational — resolved via trust + post-verify (ac-03, ac-04, ac-05)"
+    - "F-05 (HIGH): parallel sub-agents + drive's interactive gates contradict — resolved via drive-full with nested forked reviews (ac-06, ac-07, ac-10)"
+    - "F-06 (MEDIUM): rally.yaml writes across worktrees uncoordinated — resolved via lead-owned writes (ac-08, ac-09) and worktree field (ac-11, ac-12, ac-13)"
+    - "Drive escalation semantics inside a rally sub-agent — resolved via single-strike-absorbs-escalation (ac-14)"
+  decisions_pending:
+    - "decisions/0004-rally-subagent-path-discipline.md (trust + post-verify)"
+    - "decisions/0005-rally-parallel-drive-full.md (drive-full with nested forked reviews)"
+    - "decisions/0006-rally-thin-card-guard.md (refuse at proposal)"
