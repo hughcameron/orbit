@@ -67,6 +67,7 @@ maturity: established
 
 specs:
   - orbit/specs/2026-04-04-implement/spec.yaml
+  - orbit/specs/2026-04-20-implement-session-visibility/spec.yaml
 
 references:
   - "Prior incident: agent treated codebase as ground truth, missed spec-prescribed entrypoint pattern"
