@@ -2,6 +2,23 @@
 
 All notable changes to orbit are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.3.0] - 2026-04-20
+
+UX uplift rally — four coordinated cards shipped together (PRs #12, #14, #11, #10) to make orbit sessions mission-resilient, visible in real time, and sharper at approval gates.
+
+### Added
+- **Mission resilience — three-layer spec fidelity through disruptions.** `progress.md` gains `Spec path:`, `Spec hash:`, `Current AC:` header fields and a `## Detours` section for out-of-order work. The `SessionStart` hook surfaces the current AC on resume, detects spec drift (sha256 mismatch with recorded baseline), and blocks advancement past `(gate)`-annotated ACs until the gate closes. `/orb:implement` §5 now declares detour discipline, spec-hash backfill, drift-halt, and gate-enforcement rules. (#12)
+- **Session visibility — first-class TaskList integration for `/orb:implement`.** After writing `progress.md`, the skill emits a `TaskCreate` per hard constraint and per AC (flat, scoped by `metadata.spec_path`, subjects verbatim from progress.md). `TaskUpdate` must land in the same tool-call turn as the progress.md checkbox flip — anything else is a protocol violation. Mid-session resumes reconcile the task list against progress.md via a deterministic cancel-then-recreate algorithm using `TaskUpdate status: cancelled` + `TaskCreate`, with a canonical `RESUME_REBUILD_WARNING`. (#14)
+- **`plugins/orb/scripts/parse-progress.sh`** — single source of truth for `progress.md` parsing. Six subcommands: `acs`, `constraints`, `spec-path`, `next-unchecked-ac`, `post-gate-ac`, `has-unchecked`. `## Detours` content is ignored by the AC parser — a `- [x] ac-02` inside Detours never flips ac-02's status. Both the mission-resilience next-AC surface and the session-visibility resume reconcile delegate to this helper. (#14)
+- **Monitor heuristic for long test runs.** `/orb:implement` §5 declares that tests expected to run >60 seconds or full-suite should be launched via Monitor with the canonical failure-marker filter `grep --line-buffered -E 'FAIL|ERROR|AssertionError|Traceback'`, so failures stream back mid-run rather than on completion. Short tests stay on Bash. (#14)
+- **First-failure checkpoint.** On the first test failure of a run, `/orb:implement` pauses and offers two canonical options (investigate-and-re-run vs let-the-suite-finish-then-triage) via `AskUserQuestion` under an interactive TTY; subsequent failures do not re-prompt. Under `/orb:drive` full (non-interactive), the skill emits a canonical `FIRST_FAILURE_NONINTERACTIVE_MARKER` to stderr and halts with exit 2 for upstream triage. (#14)
+- **`/orb:drive` live visibility — heartbeat, escalation ping, four-option verdict gate.** Guided-mode PR gate now offers four canonical choices (GO, NO-GO, read-reviews-first, drop-to-supervised) instead of a binary. Long-running stages emit heartbeat surfaces so the author knows the agent is alive; escalations ping the author with context rather than silently parking. (#11)
+- **`/orb:rally` §2b approval gate tightened.** Approval uses canonical labels; the modify flow is now a two-prompt loop (collect edits, confirm, re-present) rather than free-form one-shot. Thin-card refusal still runs unconditionally before the gate. (#10)
+
+### Changed
+- `/orb:implement` §1–§4c are byte-identical to the post-mission-resilience baseline (sha256 verified, empty diff) — the session-visibility changes land as §4d + four §5 rules, not as rewrites of the shipped pre-flight behaviour.
+- `plugins/orb/scripts/session-context.sh` next-AC surfacing and resume-reconcile blocks refactored to delegate to `parse-progress.sh`; zero `awk|sed` hits remain in those regions.
+
 ## [0.2.19] - 2026-04-20
 
 ### Added
