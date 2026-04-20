@@ -93,6 +93,10 @@ The thin-card refusal is **unconditional on the eventual serial-or-parallel outc
 
 #### 2b. Present the proposal using AskUserQuestion
 
+The §2b approval surface has two strict halves: a **markdown preview block** that carries the evidence (per-card rationale), and an **AskUserQuestion** that carries the decision (three canonical, terse options). They are not collapsed — the preview block scales with N cards while the AskUserQuestion stays short and action-focused.
+
+**Preview block (markdown, above the AskUserQuestion) — owns per-card rationale:**
+
 ```
 ## Rally Proposal — <goal string>
 
@@ -106,12 +110,33 @@ Candidate cards:
 Autonomy: <guided|supervised>
 ```
 
-Offer the author these choices:
-- **Approve as-is** — proceed with the proposed list
-- **Modify the list** — author names cards to add or remove (free-form response)
-- **Reject the rally** — abort, offer alternatives (e.g. individual drives)
+**AskUserQuestion — owns the decision.** Exactly three canonical options in this order. The `description` field for each option is a one-line **action summary** — it describes the action, not the cards. Per-card rationale must not appear in these descriptions (the preview block already owns it).
 
-If the author adds a card not in the scan's top-N, include it — then re-run the thin-card guard against the new candidate. If the author removes a card, drop it. Loop on "modify" until the author approves or rejects.
+- **`approve-all`** — `Proceed with all N candidates`
+- **`modify-list`** — `Add or remove cards before proceeding`
+- **`decline`** — `Abort the rally; offer individual drive as alternative`
+
+**On `approve-all`:** proceed to §3 (Initialise Rally State).
+
+**On `decline`:** abort the rally and offer individual `/orb:drive` invocations as the alternative.
+
+**On `modify-list`:** the lead issues exactly one follow-up AskUserQuestion with **no pre-populated options** (free-form only). The prompt text reads:
+
+> *Name cards to add (by path, e.g. `orbit/cards/0019-foo.yaml`) or remove (by number, e.g. `2`). Empty response cancels the modification and returns to the approval prompt.*
+
+An empty response cancels the modification and re-presents the unchanged candidate list with the same three canonical options. A non-empty response is interpreted as modification instructions.
+
+**Modify loop — sequence per iteration:**
+
+1. **Apply** the requested additions and removals to the candidate list.
+2. **Re-run the §2a thin-card guard** against the revised list. The guard's rules live in §2a and are not restated here; only the re-run behaviour is named.
+3. **Re-present** the revised preview block plus the AskUserQuestion with the same three canonical labels.
+
+**Invariant:** no candidate list is shown to the author unless it has passed the thin-card guard in the current loop iteration. The author never decides against a list that cannot fly.
+
+Guard re-runs inside the modify loop are **pre-qualification retries** — they are not rally-level strikes and do not count against any escalation budget, matching the framing used elsewhere in rally for pre-qualification retries (see `orbit/specs/2026-04-19-rally-subagent-model/spec.yaml` ac-04).
+
+The loop continues — verdict → (modify instructions → apply → re-guard → re-present) → verdict → … — until the author returns `approve-all` or `decline`.
 
 **The proposal gate is the only pre-design independence check.** The agent's scan proposes; the author's approval qualifies. Do not attempt a lightweight heuristic disjointness check — the definitive check happens after designs exist (§6).
 
