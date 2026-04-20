@@ -1,0 +1,119 @@
+goal: "Agents maintain spec fidelity through mid-flight disruptions without requiring the author to pull them back on track. Deliver the three-layer mission-resilience mechanism (progress.md state authority, session-context.sh notifier on resume, implement SKILL.md mid-session loop-back) including the authoritative progress.md schema extensions that card 0003 (implement session visibility) will consume."
+
+constraints:
+  - "Card 0009 owns the progress.md schema. Any future structural change to progress.md must route through this spec or a successor under orbit/specs/YYYY-MM-DD-mission-resilience*/. Card 0003 consumes the schema as a hard dependency."
+  - "Three-layer implementation is non-negotiable: progress.md (state authority) + session-context.sh (notifier on resume) + implement/SKILL.md (mid-session loop-back behaviour). Each layer owns a distinct failure phase and no layer may absorb another's role."
+  - "Reuse ac_type: gate as declared in plugins/orb/skills/spec-architect/SKILL.md. Do not introduce a new gate: boolean, a blocks: [...] list, or any other field. The blocking rule is declaration-order based and enforced at runtime by implement/SKILL.md — not encoded in spec.yaml fields."
+  - "Detours live inside progress.md (single source of truth) in a ## Detours section positioned between ## Hard Constraints and ## Acceptance Criteria. A separate findings.md is explicitly forbidden."
+  - "Drift detection is sha256 hash based. The hash is stored in progress.md as Spec hash: sha256:<hex>. Recomputation happens before each AC (implement skill) and on resume (session-context.sh). Monitor-tool real-time watching is deferred; do not introduce it here."
+  - "Rally-level AC-progress visibility is out of scope. rally.yaml continues to track card status only (queued / implementing / complete / parked). Do not add per-card AC counters or Current AC mirroring to rally.yaml."
+  - "Implement skill remains the runtime gate enforcer. review-spec Pass 1 adds a secondary structural check (gate verification-field presence) but does not replace runtime enforcement. spec-architect does not gain new logic."
+  - "progress.md parser semantics must ignore ## Detours content when determining AC status. The AC checklist section (## Acceptance Criteria) is the only region that decides AC completion."
+  - "Authoritative progress.md template lands verbatim as documented in the interview (Q5). The template is: Spec path, Spec hash, Started, Current AC, ## Hard Constraints, ## Detours, ## Acceptance Criteria (with gate annotation `- [ ] ac-NN (gate): ...` as a human-readable tag)."
+
+acceptance_criteria:
+  - id: ac-01
+    ac_type: code
+    description: "progress.md written by implement skill at session start includes a Spec hash: sha256:<hex> metadata field computed from the current spec.yaml file contents."
+    verification: "mrl_ac01_spec_hash_recorded: fixture spec triggers progress.md write; parse the resulting file and assert a Spec hash: line matches ^Spec hash: sha256:[0-9a-f]{64}$ with value equal to sha256 of the fixture spec bytes."
+
+  - id: ac-02
+    ac_type: code
+    description: "Before starting work on any AC, the implement skill recomputes sha256 of the spec file and compares to the Spec hash recorded in progress.md. On mismatch, the skill surfaces the fixed notice 'spec modified since implementation started, re-review recommended' and requires a checkpoint before continuing."
+    verification: "mrl_ac02_drift_detected_before_ac: fixture progress.md with hash A; fixture spec modified to produce hash B; simulate the implement skill's pre-AC check and assert the drift message is produced and that advancement blocks until acknowledged."
+
+  - id: ac-03
+    ac_type: code
+    description: "On session start (SessionStart hook), session-context.sh recomputes sha256 of the current spec.yaml and compares to the Spec hash recorded in progress.md. On mismatch, the hook prints the same drift notice so the resuming agent sees it immediately."
+    verification: "mrl_ac03_hook_drift_warning: fixture progress.md with stale hash; run session-context.sh against fixture repo layout; assert stdout contains 'spec modified since implementation started, re-review recommended'."
+
+  - id: ac-04
+    ac_type: code
+    description: "progress.md includes a Current AC: <ac-id|none> field that tracks the AC currently in flight. The implement skill updates Current AC when starting work on a new AC and when a detour is closed (set to the Return to: target)."
+    verification: "mrl_ac04_current_ac_updates: simulate the implement skill advancing from ac-01 to ac-02; assert progress.md Current AC: transitions from ac-01 to ac-02. Then simulate a detour close with Return to: ac-02; assert Current AC: returns to ac-02."
+
+  - id: ac-05
+    ac_type: code
+    description: "progress.md includes a ## Detours section positioned between ## Hard Constraints and ## Acceptance Criteria. Each detour entry is date-stamped, carries a short description, and ends with a Return to: <ac-id> field. Detour entries are never removed; closed detours retain their Return to: field as the audit trail."
+    verification: "mrl_ac05_detour_recorded: simulate implement skill appending a detour; assert the ## Detours section receives a new entry with YYYY-MM-DD prefix, description, and Return to: ac-NN. Assert the entry is positioned between the two other sections and survives a subsequent AC advancement."
+
+  - id: ac-06
+    ac_type: code
+    description: "Before starting any AC, the implement skill walks the AC list in declaration order and refuses to start the current AC if any preceding AC with ac_type: gate is not marked [x] in progress.md. The refusal names the blocking gate's id."
+    verification: "mrl_ac06_gate_blocks_subsequent: fixture spec with ac-01 (gate) unchecked and ac-02 (code) unchecked; simulate implement skill attempting to start ac-02; assert refusal output names ac-01 and that ac-02 work does not proceed. Then mark ac-01 [x] and assert ac-02 now proceeds."
+
+  - id: ac-07
+    ac_type: code
+    description: "After resolving a detour, the implement skill sets Current AC: to the Return to: target and re-reads progress.md and the spec's AC list before choosing the next action. The skill does not continue in the detour's direction by default."
+    verification: "mrl_ac07_reanchor_after_detour: simulate a detour during ac-03 with Return to: ac-03; simulate detour resolution; assert Current AC: is ac-03 and the next-action selector reads from progress.md's unchecked AC list rather than from in-memory detour context."
+
+  - id: ac-08
+    ac_type: code
+    description: "On session resume, session-context.sh reads progress.md and prints the next unchecked AC — including any blocking gate AC — alongside the existing hard-constraints block and the drift warning from ac-03 (if applicable)."
+    verification: "mrl_ac08_hook_surfaces_next_ac: fixture progress.md with ac-01 [x] and ac-02 [ ]; run session-context.sh; assert stdout includes a line naming ac-02 as the next AC. Fixture B: ac-01 (gate) [ ] and ac-02 [ ]; assert stdout names ac-01 as blocking and ac-02 as next-after-gate."
+
+  - id: ac-09
+    ac_type: code
+    description: "progress.md parser used by session-context.sh and the implement skill ignores ## Detours content when determining AC status. Detour text that contains a ' - [x] ' token or an ac-NN reference must not be interpreted as an AC completion."
+    verification: "mrl_ac09_parser_ignores_detours: fixture progress.md whose ## Detours section contains the literal strings '- [x] ac-02' and 'ac-02 complete'; run the parser; assert ac-02 is reported as [ ] (unchecked) because its authoritative marker in ## Acceptance Criteria is [ ]."
+
+  - id: ac-10
+    ac_type: doc
+    description: "plugins/orb/skills/implement/SKILL.md documents the authoritative progress.md template verbatim (step 4 'Write the Progress File'), including the Spec hash, Current AC, ## Detours, and gate-annotation conventions."
+    verification: "mrl_ac10_skill_md_documents_template: grep plugins/orb/skills/implement/SKILL.md for the template fence and assert the presence of Spec hash:, Current AC:, ## Detours, and the gate annotation pattern `- [ ] ac-NN (gate):`."
+
+  - id: ac-11
+    ac_type: code
+    description: "plugins/orb/skills/review-spec/SKILL.md Pass 1 structural scan flags any ac_type: gate AC whose verification field is empty, placeholder, or describes no observable completion criterion."
+    verification: "mrl_ac11_review_spec_flags_vague_gate: fixture spec with a gate AC whose verification is 'TBD'; run the review-spec Pass 1 checklist; assert a finding at MEDIUM+ severity is recorded citing the gate AC's id and the missing verification criterion."
+
+ontology_schema:
+  name: "MissionResilienceModel"
+  description: "The state and events that keep an implementing agent anchored to a spec through mid-flight disruptions. The model has three layers: (1) progress.md as the durable state authority; (2) session-context.sh as the resume-time notifier that reads that state and prints the next actionable item; (3) implement/SKILL.md as the mid-session loop-back behaviour that honours gates, records detours, re-anchors after detours, and checkpoints on drift."
+  fields:
+    - name: "spec_hash"
+      type: "string"
+      description: "sha256 hex digest of the spec.yaml file at session start, stored verbatim as `Spec hash: sha256:<hex>` in progress.md. Recomputed before each AC and on session resume; mismatches trigger the drift notice."
+    - name: "current_ac"
+      type: "string"
+      description: "The AC id the implement agent is currently working against (e.g. ac-01, ac-02). Stored as `Current AC:` in progress.md. Updated on AC advancement and on detour close (to the Return to: target). Value of 'none' is valid when nothing is in flight."
+    - name: "detour_entry"
+      type: "object"
+      description: "A single unplanned-work record inside the ## Detours section. Contains: date (YYYY-MM-DD), description (one-line summary), return_to (the AC id to resume against). Entries are append-only and retained after close as audit trail."
+    - name: "gate_ac"
+      type: "object"
+      description: "An AC with ac_type: gate. Blocks every subsequent AC by declaration order until marked [x]. Rendered in progress.md as `- [ ] ac-NN (gate): <description>`. No new YAML field; the authoritative signal is the existing ac_type value."
+    - name: "drift_notice"
+      type: "string"
+      description: "Fixed string 'spec modified since implementation started, re-review recommended' emitted by both the implement skill (before each AC) and session-context.sh (on resume) when sha256(spec.yaml) disagrees with the recorded Spec hash."
+    - name: "next_unchecked_ac"
+      type: "string"
+      description: "Derived value surfaced by session-context.sh: the first `[ ]` entry in progress.md's ## Acceptance Criteria, ignoring any ## Detours content. When a gate AC is the next unchecked item, the notifier names it explicitly as blocking."
+
+evaluation_principles:
+  - principle: "State durability survives session death — progress.md is the single source of truth"
+    weight: 0.25
+  - principle: "Three-layer coverage (state, surface, behaviour) — each layer guards a distinct failure phase and no layer is redundant"
+    weight: 0.20
+  - principle: "Drift is detected and surfaced, not silently tolerated — mismatched hashes always produce a checkpoint"
+    weight: 0.20
+  - principle: "Gate enforcement is deterministic — declaration-order blocking with named blocking AC, no ambiguity"
+    weight: 0.15
+  - principle: "Parser discipline — ## Detours content never counts as AC status; authoritative markers live only in ## Acceptance Criteria"
+    weight: 0.10
+  - principle: "No rally-level coupling — rally.yaml does not learn about per-card AC state in this iteration"
+    weight: 0.10
+
+exit_conditions:
+  - "All 11 ACs have passing verifications (mrl_ac01..mrl_ac11)."
+  - "plugins/orb/skills/implement/SKILL.md, plugins/orb/scripts/session-context.sh, and plugins/orb/skills/review-spec/SKILL.md are updated with the three-layer changes."
+  - "A fresh /orb:implement run against a fixture spec produces a progress.md matching the authoritative template verbatim."
+  - "A fresh session resume against a fixture progress.md (with stale Spec hash and an unchecked AC) surfaces both the drift notice and the next-AC line on session-context.sh output."
+  - "A fresh /orb:implement run against a fixture spec with a gate AC declared at ac-01 refuses to start ac-02 until ac-01 is marked [x]."
+
+metadata:
+  version: "1.0"
+  test_prefix: "mrl"
+  timestamp: "2026-04-20T19:30:00Z"
+  ambiguity_score: 0.12
+  interview_ref: "orbit/specs/2026-04-20-mission-resilience/interview.md"

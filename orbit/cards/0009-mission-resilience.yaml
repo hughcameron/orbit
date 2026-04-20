@@ -38,7 +38,8 @@ goal: "Agents maintain spec fidelity through mid-flight disruptions without requ
 
 maturity: planned
 
-specs: []
+specs:
+  - orbit/specs/2026-04-20-mission-resilience/spec.yaml
 
 references:
   - "orbit/discovery/mission-resilience.md"
