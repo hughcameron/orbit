@@ -58,7 +58,8 @@ goal: "every drive invocation runs review-spec and review-pr as forked context-s
 
 maturity: planned
 
-specs: []
+specs:
+  - specs/2026-04-20-drive-forked-reviews/spec.yaml
 
 references:
   - "specs/2026-04-19-rally-subagent-model/review-spec-2026-04-19.md: F-01 identified drive's inline reviews as the structural cause of rally's parallel-sub-agent contradiction"
