@@ -7,8 +7,8 @@ status: review-spec
 history: []
 started: 2026-04-20T20:15:00Z
 review_cycles:
-  review_spec: 0
+  review_spec: 1
   review_pr: 0
 review_cycle_dates:
-  review_spec: null
+  review_spec: "2026-04-20"
   review_pr: null
