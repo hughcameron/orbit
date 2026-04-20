@@ -5,13 +5,14 @@ started: 2026-04-20T08:52:52Z
 completed: null
 cards:
   - path: orbit/cards/0009-mission-resilience.yaml
-    status: implementing
+    status: complete
     spec_dir: orbit/specs/2026-04-20-mission-resilience/
     branch: rally/mission-resilience
     worktree: main
     parked_constraint: null
     stream: A
     order: 1
+    pr: "https://github.com/hughcameron/orbit/pull/12"
   - path: orbit/cards/0003-implement.yaml
     status: designed
     spec_dir: orbit/specs/2026-04-20-implement-session-visibility/
