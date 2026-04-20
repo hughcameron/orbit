@@ -230,39 +230,27 @@ if [[ "$has_spec" == "1" && "$has_progress" == "1" ]]; then
   fi
 
   # ac-08 — surface next unchecked AC from ## Acceptance Criteria.
-  # Parser discipline (ac-09): ## Detours content is ignored — only lines inside
-  # ## Acceptance Criteria decide AC status.
-  next_ac_line=$(awk '
-    /^## Acceptance Criteria[[:space:]]*$/ { in_ac=1; next }
-    /^## / && in_ac { in_ac=0 }
-    in_ac && /^- \[ \] ac-[0-9]+/ {
-      # extract ac-id
-      match($0, /ac-[0-9]+/)
-      id = substr($0, RSTART, RLENGTH)
-      # detect gate annotation
-      is_gate = ($0 ~ /\(gate\)/)
-      print id "\t" is_gate
-      exit
-    }
-  ' "$progress_path")
+  # Parser discipline (card 0009 ac-09): ## Detours content is ignored — only
+  # lines inside ## Acceptance Criteria decide AC status.
+  #
+  # Card 0003 ac-08 refactored the previously-inlined parsing into a single
+  # shared helper at plugins/orb/scripts/parse-progress.sh. Both the next-AC
+  # surfacing below and the resume reconcile block further down delegate to
+  # that helper. After merge, there is exactly one progress.md parser in
+  # the repo (ac-08(d)/(e)).
+  PARSE_PROGRESS="$(dirname "$0")/parse-progress.sh"
+
+  # Fetch the first unchecked AC (if any) via the shared helper.
+  next_ac_line=$("$PARSE_PROGRESS" next-unchecked-ac "$progress_path" 2>/dev/null || true)
 
   if [[ -n "$next_ac_line" ]]; then
-    next_id=$(echo "$next_ac_line" | awk -F'\t' '{print $1}')
-    next_is_gate=$(echo "$next_ac_line" | awk -F'\t' '{print $2}')
+    # Split tab-separated <ac-id>\t<is_gate> without external tools.
+    next_id="${next_ac_line%%	*}"
+    next_is_gate="${next_ac_line##*	}"
 
     if [[ "$next_is_gate" == "1" ]]; then
-      # Also find the first AC after the gate (if any) that would become startable.
-      post_gate_id=$(awk -v gate="$next_id" '
-        /^## Acceptance Criteria[[:space:]]*$/ { in_ac=1; next }
-        /^## / && in_ac { in_ac=0 }
-        in_ac && /^- \[ \] ac-[0-9]+/ {
-          match($0, /ac-[0-9]+/)
-          id = substr($0, RSTART, RLENGTH)
-          if (seen_gate) { print id; exit }
-          if (id == gate) seen_gate=1
-        }
-      ' "$progress_path")
-
+      # Ask the helper which AC becomes startable after the gate.
+      post_gate_id=$("$PARSE_PROGRESS" post-gate-ac "$progress_path" "$next_id" 2>/dev/null || true)
       if [[ -n "$post_gate_id" ]]; then
         echo "orbit: Next AC — $next_id is a blocking gate. $post_gate_id becomes startable once $next_id closes."
       else
@@ -272,10 +260,31 @@ if [[ "$has_spec" == "1" && "$has_progress" == "1" ]]; then
       echo "orbit: Next AC — $next_id"
     fi
   else
-    # No unchecked AC found in progress.md
+    # No unchecked AC found. Only comment if the section is present.
     if grep -q '^## Acceptance Criteria' "$progress_path" 2>/dev/null; then
       echo "orbit: No unchecked ACs remain in $topic/progress.md."
     fi
+  fi
+
+  # ac-03 — resume reconcile surface for orbit-implement tasks (card 0003).
+  #
+  # This block runs AFTER card 0009's pre-AC check sequence (backfill → drift
+  # check → gate surfacing) so the drift notice, if any, is already emitted.
+  # If the drift check halted the session non-interactively (exit 1), the
+  # hook never reaches here — which is the required skip behaviour (spec
+  # constraint #13 and ac-03 description).
+  #
+  # Claude Code's Task tools (TaskCreate, TaskList, TaskUpdate) are agent-turn
+  # primitives, not callable from a SessionStart bash hook. The hook's role
+  # is therefore limited to (1) surfacing that a reconcile is pending so the
+  # agent's first action on resume runs the §5 reconcile algorithm, and
+  # (2) invoking the shared parser so ac-08(d) and ac-08(e) are satisfied.
+  # The reconcile algorithm itself — the filter by metadata.spec_path, the
+  # in-sync / drift comparison, and the cancel-then-recreate on drift — is
+  # authored in implement/SKILL.md §5 and executed by the agent.
+  reconcile_spec_path=$("$PARSE_PROGRESS" spec-path "$progress_path" 2>/dev/null || true)
+  if [[ -n "$reconcile_spec_path" ]] && "$PARSE_PROGRESS" has-unchecked "$progress_path" 2>/dev/null; then
+    echo "orbit: Task list reconcile pending — /orb:implement will reconcile TaskList against progress.md on next turn (scoped by metadata.spec_path=$reconcile_spec_path)."
   fi
 fi
 
