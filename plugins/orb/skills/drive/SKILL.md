@@ -85,6 +85,49 @@ the prior /orb:drive version, or park and restart from the card.
 
 This is the honest migration path: inline-mode and forked-mode must not mix within a single drive. No Agent is launched; drive.yaml is unchanged. If the field is present (written either by a new drive on fresh creation or manually added by an operator taking explicit ownership of the bridge), proceed with the resumption.
 
+#### 2a. Schedule the live-visibility heartbeat (full autonomy only)
+
+After writing (or resuming) drive.yaml, if `autonomy == full`, schedule a recurring check-in that emits a one-line heartbeat every 5 minutes. The heartbeat is the author's "is this still running?" signal during long unattended drives.
+
+**Scope note.** `session-context.sh` (the shell-side SessionStart hook) is NOT modified by this live-visibility work. All cron reconciliation lives here, in the agent-side skill body, because CronList/CronCreate/CronDelete are agent-only tools.
+
+**Reconciliation, not re-creation.** Drive never delete-then-recreates the heartbeat on resume — that would defeat Claude Code's built-in `--resume` / `--continue` task restoration. The pattern is **idempotent CronList-first**:
+
+1. `CronList` — enumerate active cron tasks in the session.
+2. If a task with ID `drive-checkin-<spec-slug>` already exists, it was restored by the harness (or created earlier in this session). No-op.
+3. Otherwise, `CronCreate` a recurring task with:
+   - **ID:** `drive-checkin-<spec-slug>` (where `<spec-slug>` is the basename of `current_spec`, e.g. `2026-04-20-drive-live-visibility`).
+   - **Interval:** 5 minutes, recurring. **Hardcoded. No configuration knob.** (Matches drive's existing discipline — iteration budget and review-cycle budget are also hardcoded at 3. *Defaults are opinions; configuration is overhead until proven otherwise.*)
+   - **Prompt body:** the exact text below.
+
+**Heartbeat prompt body (verbatim, use this string when calling CronCreate):**
+
+```
+This is a read-only drive heartbeat. Read <current_spec>/drive.yaml for iter,
+budget, status, and started. If <current_spec>/progress.md exists, read it to
+find the most recent `- [ ] ac-NN` entry (the current AC); if none or not in
+Implement stage, use `-`. Compute elapsed as mm:ss since `started`. Emit
+exactly one line in the format:
+
+  drive: iter=<N>/<budget> stage=<status> ac=<id|-> elapsed=<mm:ss>
+
+Do not modify drive.yaml. Do not launch any Agent. Emit the single heartbeat
+line and stop.
+```
+
+The prompt body's read-only contract is load-bearing: the heartbeat fires as a fresh user-message-equivalent turn, and without the explicit "do not modify / do not launch" instruction a helpful agent could mutate state or spawn work mid-forked-review. The contract makes the heartbeat safe to fire at any point in the pipeline, including during a review fork.
+
+**Heartbeat format.** The literal output format is `drive: iter=<N>/<budget> stage=<status> ac=<id|-> elapsed=<mm:ss>`. When there is no current AC cursor (any stage other than Implement, or Implement before the first AC is marked in-progress), the `ac` field renders a literal `-` character — the same dash idiom `session-context.sh` uses for absent values. Example:
+
+```
+drive: iter=1/3 stage=implement ac=ac-04 elapsed=23:17
+drive: iter=2/3 stage=review-spec ac=- elapsed=01:42
+```
+
+**Non-fatal CronCreate.** If CronCreate fails at this step — harness doesn't support cron, rate limit, transient error — drive logs one line `heartbeat unavailable: <reason>` and continues the pipeline. The heartbeat is an observability affordance; its absence must not block design, spec, implement, or review. Drive never gates stage progression on the heartbeat.
+
+**Autonomy gate.** Guided and supervised drives pause interactively at their own gates and do not schedule the heartbeat. Skip step §2a entirely when `autonomy != full`.
+
 ### 3. Stage: Design
 
 Read the design skill instructions from `plugins/orb/skills/design/SKILL.md`. Follow its instructions with these drive-specific adaptations:
@@ -225,12 +268,20 @@ The constraint string is fixed and byte-identical across the codebase (spec ac-1
 
 **Resumption case:** If drive resumes with `review_cycles.<stage> == 3` and the stage has not already triggered a NO-GO (i.e. the session died between the counter increment and the synthetic-BLOCK write), synthesise the BLOCK on resumption — do not launch a 4th fork.
 
-**Supervised mode gate:** If autonomy is `supervised` AND the verdict was APPROVE, pause here:
-```
-AskUserQuestion: "Spec review complete — verdict: APPROVE. <N> findings (<severities>). Review saved at <path>. Proceed to implementation?"
-Suggested answers: ["GO — proceed to implement", "NO-GO — re-enter at design"]
-```
-If NO-GO → jump to §8 (NO-GO Handling). (On REQUEST_CHANGES or BLOCK, handling above applies unconditionally — the supervised gate only applies on APPROVE.)
+**Supervised mode gate:** If autonomy is `supervised` AND the verdict was APPROVE, pause here. **Severity dispatch (see §7a for the shared contract):**
+
+- If the review file reports **no findings** or **LOW-only findings**: use the 2-option prompt:
+  ```
+  AskUserQuestion: "Spec review complete — verdict: APPROVE. <N> findings (<severities>). Review saved at <path>. Proceed to implementation?"
+  Suggested answers: ["GO — proceed to implement", "NO-GO — re-enter at design"]
+  ```
+- If the review file reports **at least one finding at MEDIUM or HIGH severity**: use the **four-option verdict prompt** per §7a (`approve`, `request changes`, `block`, `read full review first`). Interpret the author's selection:
+  - `approve` → proceed to implement.
+  - `request changes` → treat as a post-APPROVE REQUEST_CHANGES; increment `review_cycles.review_spec` and return to §5.1 (budget-gated per §5a).
+  - `block` → jump to §8 NO-GO Handling with the block reason "author blocked post-APPROVE at MEDIUM+ review".
+  - `read full review first` → wait for the author's next turn, then re-present the same four-option prompt verbatim (§7a).
+
+If the 2-option prompt returns NO-GO → jump to §8 (NO-GO Handling). (On REQUEST_CHANGES or BLOCK from the forked review itself, handling above applies unconditionally — the supervised gate only applies on APPROVE.)
 
 ### 6. Stage: Implement
 
@@ -304,21 +355,54 @@ As §5.4 — strict canonical regex, case-sensitive, no fuzzy matching, retry on
 
 - **APPROVE:**
   - **In full mode:** Proceed directly to §10 (Completion).
-  - **In guided mode:** This is the **only gate in guided mode**. Present a rich summary of the entire drive:
-    ```
-    AskUserQuestion: "Drive summary for <card name>:
+  - **In guided mode:** This is the **only gate in guided mode**. Severity dispatch (see §7a for the shared contract):
+    - **No findings or LOW-only findings** — use the existing three-option rich summary:
+      ```
+      AskUserQuestion: "Drive summary for <card name>:
 
-    Spec: <spec path> — <goal summary>
-    Spec review: <verdict>, <N> findings
-    Implementation: <N>/<total> ACs addressed
-    PR review: APPROVE — <honest assessment one-liner>
+      Spec: <spec path> — <goal summary>
+      Spec review: <verdict>, <N> findings
+      Implementation: <N>/<total> ACs addressed
+      PR review: APPROVE — <honest assessment one-liner>
 
-    Review saved at <path>. Proceed to PR creation?"
-    Suggested answers: ["GO — create PR", "NO-GO — re-enter at design", "Let me read the reviews first"]
-    ```
-    If "Let me read the reviews first" → wait for the author to respond after reading, then re-present the gate.
-    If NO-GO → jump to §8 (NO-GO Handling).
+      Review saved at <path>. Proceed to PR creation?"
+      Suggested answers: ["GO — create PR", "NO-GO — re-enter at design", "Let me read the reviews first"]
+      ```
+      If "Let me read the reviews first" → wait for the author to respond after reading, then re-present the gate. If NO-GO → jump to §8 (NO-GO Handling).
+    - **At least one MEDIUM or HIGH finding** — use the **four-option verdict prompt** per §7a (`approve`, `request changes`, `block`, `read full review first`), prefaced by the same drive-summary block. Interpret the selection:
+      - `approve` → proceed to §10 (Completion).
+      - `request changes` → increment `review_cycles.review_pr` and return to §7.1 (budget-gated per §5a).
+      - `block` → jump to §8 NO-GO Handling with the block reason "author blocked post-APPROVE at MEDIUM+ PR review".
+      - `read full review first` → wait for the author's next turn, then re-present the same four-option prompt verbatim (§7a).
   - **In supervised mode:** Same gate as guided.
+
+### 7a. Four-option verdict prompt (shared contract)
+
+When a review-spec supervised-APPROVE gate (§5a) or a review-pr guided/supervised APPROVE gate (§7.5) dispatches to the four-option prompt, the following rules apply uniformly.
+
+**When the four-option prompt fires.** Only on APPROVE verdicts where the review file reports at least one finding at MEDIUM or HIGH severity. REQUEST_CHANGES and BLOCK verdicts are handled by the existing branch-to-next-cycle and NO-GO paths respectively — the four-option prompt never replaces those. LOW-only or zero-finding APPROVE gates retain the existing shorter prompt (two-option for review-spec supervised, three-option for review-pr guided/supervised).
+
+**Severity-read contract.** Drive reads severity labels (LOW / MEDIUM / HIGH) directly from the review file's findings table. **Drive does not re-classify findings, and does not invent severities.** If the review file uses only LOW or is finding-free, drive uses the shorter prompt. If the file contains any `[MEDIUM]` or `[HIGH]` finding, drive routes through the four-option prompt.
+
+**The four options (exact labels).** Use these labels verbatim as AskUserQuestion suggested answers — lower-case, single spaces, no hyphens, no punctuation:
+
+```
+approve
+request changes
+block
+read full review first
+```
+
+**Interpretation (same at both gates).**
+
+- `approve` — terminal verdict. Drive advances to the next stage (implement after a spec gate; §10 Completion after a PR gate).
+- `request changes` — treated as a post-APPROVE REQUEST_CHANGES: drive increments `review_cycles.<stage>`, checks the §5a budget, and re-enters the review cycle (§5.1 for spec, §7.1 for PR). The author is responsible for flagging the specific changes they want in the next reviewer brief *via updating the spec or implementation first*; drive does not pass freeform text through to the forked reviewer.
+- `block` — drive jumps to §8 NO-GO Handling. The constraint is `author blocked post-APPROVE at MEDIUM+ <review-spec | PR> review`.
+- `read full review first` — **deferral, not a verdict.** Drive waits for the author's next turn (they may ask follow-up questions, request clarification, or signal ready). On their next turn, drive re-presents the **same four-option prompt verbatim** — same preamble, same four options, no iteration counter added. The deferral is open-ended; drive does not time out. This matches how §7.5's existing three-option prompt handles "Let me read the reviews first."
+
+**Why four options and not three.** The scenario "Review verdicts route via structured choice" (card 0005) names exactly four options. Reading the full review is itself a valid deferred state that the terminal verbs do not express — collapsing it into "NO-GO" conflates deferral with rejection. The four-option shape preserves the signal.
+
+**Applicability boundary.** The four-option prompt does not fire in full autonomy (full mode has no APPROVE gates at either review stage — review APPROVE flows directly to the next stage). It only fires in supervised mode for review-spec, and in guided/supervised mode for review-pr.
 
 ### 8. NO-GO Handling
 
@@ -384,7 +468,21 @@ Escalation is triggered by **budget exhaustion** (3 NO-GO iterations) OR by a **
      <What the card needs before another drive attempt.>
    ```
 
-3. **Stop.** The card needs human rethinking. Escalation is not giving up — it is the mechanism by which difficult work gets human judgment at the right moment.
+3. **Clean up the recurring heartbeat (full autonomy only).** If `autonomy == full`, attempt `CronDelete drive-checkin-<spec-slug>` to stop the recurring heartbeat. If CronDelete fails (e.g. task already expired, harness error), log one line `heartbeat cleanup skipped: <reason>` and continue. **Failure is non-fatal** — it must not abort escalation. This step executes **before** scheduling the one-shot escalation ping in step 4, so the recurring heartbeat cannot fire between the summary output and the ping.
+
+4. **Fire a one-shot escalation ping (full autonomy only).** If `autonomy == full`, schedule a one-shot `CronCreate` to fire approximately 30 seconds after the escalation summary renders. This gives the summary time to appear first so the ping's "see prior output" reference is accurate.
+
+   - **Delay:** ~30 seconds (one-shot, not recurring).
+   - **Task ID:** `drive-escalation-<spec-slug>`.
+   - **Prompt body:** emit the single line below verbatim (including the bold markdown header — the scenario asks for a "prominent" message and bold is the available emphasis mechanism):
+
+     ```
+     **DRIVE ESCALATED** on <card-slug> after <iterations> iterations. See prior output for findings and recommendation.
+     ```
+
+   Drive does not nag — the ping is one-shot, not recurring. If `CronCreate` for the ping fails, log one line `escalation ping skipped: <reason>` and continue. The escalation summary emitted in step 2 is the authoritative channel; the ping is notification amplification, not the signal itself.
+
+5. **Stop.** The card needs human rethinking. Escalation is not giving up — it is the mechanism by which difficult work gets human judgment at the right moment.
 
 ### 10. Completion
 
@@ -408,6 +506,8 @@ On successful review (APPROVE verdict, gates passed):
    ```yaml
    status: complete
    ```
+
+5. **Clean up the recurring heartbeat (full autonomy only).** If `autonomy == full`, attempt `CronDelete drive-checkin-<spec-slug>` to stop the recurring heartbeat. **Failure is non-fatal** — if CronDelete fails (task already expired, harness error), log one line `heartbeat cleanup skipped: <reason>` and continue. Completion must not abort on a cleanup failure; the PR is already created and drive.yaml already reads `complete`.
 
 ### 11. Resumption
 
@@ -437,14 +537,19 @@ When `/orb:drive` is invoked and `drive.yaml` already exists in the expected loc
 
 5. **File presence overrides drive.yaml status** when they disagree on completion. If drive.yaml says `implement` but `progress.md` already exists with completed ACs, advance to `review`. The files are ground truth for stage completion; drive.yaml may be stale from an interrupted session. This rule does NOT override the `review_cycles` migration check — that check is unconditional.
 
-6. **Announce the resumption:**
+6. **Re-run §2a's heartbeat reconciliation (full autonomy only).** If `autonomy == full`, re-execute the §2a idempotent CronList-first flow: if `drive-checkin-<spec-slug>` exists (restored by the harness), leave it untouched; if absent (task expired or lost during the interrupted session), re-create it via CronCreate. This is the mechanism that satisfies the "Check-ins survive resume" scenario — drive never delete-then-recreates, so a surviving task is preserved, and an absent task is repaired.
+
+7. **Announce the resumption:**
    ```
    Resuming drive for <card path>
    Autonomy: <level>
    Iteration: <N> of <budget>
    Resuming at: <stage>
    Review cycles: review-spec=<N>/3, review-pr=<N>/3
+   Heartbeat: <active | created | n/a (non-full autonomy) | unavailable>
    ```
+
+   The `Heartbeat` line reports the outcome of the step-6 reconciliation: `active` if the task was already present, `created` if it was re-created, `n/a` if autonomy is guided or supervised, `unavailable` if CronCreate failed (with the non-fatal log from §2a).
 
 ## Disposition
 
@@ -489,3 +594,6 @@ A mechanical agent runs 3 iterations by rote and escalates with "tried 3 times, 
 - **REQUEST_CHANGES is bounded per stage.** Each review stage has an independent 3-cycle budget (see §5a). The 4th would-be cycle is converted to a synthetic BLOCK with a fixed constraint string and consumes a top-level iteration normally.
 - **No migration scaffolding.** Drives initialised before forked reviews shipped refuse to resume under the new code. Finish or park in-flight drives before upgrade. No `review_mode` field, no dual code paths, no flag day.
 - **Reviews are the quality gates.** In guided mode, the spec review and PR review replace explicit go/no-go prompts. The only interactive gate is the final verdict summary before PR creation.
+- **Live-visibility heartbeat is read-only and full-autonomy-only.** The recurring `drive-checkin-<spec-slug>` task fires only when `autonomy == full`. The cron prompt body carries an explicit read-only contract ("do not modify drive.yaml, do not launch any Agent, emit the single heartbeat line and stop") so it is safe to fire at any point in the pipeline, including mid-forked-review. Heartbeat CronCreate failure at §2 and heartbeat CronDelete failure at §9/§10 are non-fatal — drive logs one line and continues, never gating stage progression on heartbeat state.
+- **Cron tasks are reconciled idempotently.** Drive uses CronList-then-CronCreate-iff-absent (§2a) on every initialise and every resume. Drive never delete-then-recreates a heartbeat task — doing so would defeat Claude Code's built-in task restoration on `--resume` / `--continue`.
+- **MEDIUM+ review verdicts route through a four-option AskUserQuestion prompt.** At APPROVE gates where the review file reports any MEDIUM or HIGH finding, the prompt surfaces `approve / request changes / block / read full review first` (§7a). LOW-only APPROVE gates retain the existing shorter prompt. Drive reads severity from the review file directly and never re-classifies. `read full review first` is a deferral, not a verdict — drive re-presents the same four-option prompt verbatim on the author's next turn.
