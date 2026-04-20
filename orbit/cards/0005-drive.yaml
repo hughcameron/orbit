@@ -49,6 +49,30 @@ scenarios:
     when: /orb:drive is invoked
     then: the autonomy level defaults to "guided"
 
+  - name: Drive schedules a check-in at start
+    given: /orb:drive begins an unattended run in full autonomy
+    when: drive.yaml is written
+    then: the drive creates a recurring CronCreate task that prints a one-line status (current stage, current AC, iteration count, time elapsed) every N minutes
+    source_lines: "tools-reference: CronCreate — Schedules a recurring or one-shot prompt within the current session. Tasks are session-scoped and restored on --resume or --continue if unexpired"
+
+  - name: Escalation fires a one-shot ping
+    given: the drive hits its 3-iteration budget on an AC
+    when: the escalation path is taken
+    then: a one-shot CronCreate task fires a prominent "drive escalated on <spec>" message so the author notices even in a long session
+    source_lines: "tools-reference: see scheduled tasks"
+
+  - name: Check-ins survive resume
+    given: a session is resumed via --resume after a drive check-in was scheduled
+    when: the session reopens
+    then: the check-in is restored and continues firing on schedule
+    source_lines: "tools-reference: Tasks are session-scoped and restored on --resume or --continue if unexpired"
+
+  - name: Review verdicts route via structured choice
+    given: a spec review or PR review has surfaced findings at MEDIUM+ severity
+    when: the drive presents the verdict to the author
+    then: the next-action prompt is AskUserQuestion with options (approve / request-changes / block / read-full-review)
+    source_lines: "tools-reference: AskUserQuestion — Asks multiple-choice questions to gather requirements or clarify ambiguity"
+
 goal: "agents deliver cards end-to-end within declared autonomy bounds"
 
 maturity: planned

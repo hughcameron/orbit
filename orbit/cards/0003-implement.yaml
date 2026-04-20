@@ -39,6 +39,30 @@ scenarios:
     when: the session started with an in-flight spec
     then: the hard constraints are already in context from the SessionStart hook
 
+  - name: Pre-flight checklist populates the session task list
+    given: /orb:implement reads a spec with N acceptance criteria
+    when: the pre-flight checklist is generated
+    then: each AC is written as a task via TaskCreate with status "pending", and each hard constraint is a task with status "pending"
+    source_lines: "tools-reference: TaskCreate — Creates a new task in the task list"
+
+  - name: AC completion updates the task list in real time
+    given: the implementing agent finishes work on an AC
+    when: progress.md is updated to mark the AC done
+    then: the corresponding task is updated via TaskUpdate to status "completed" in the same tool-call turn
+    source_lines: "tools-reference: TaskUpdate — Updates task status, dependencies, details, or deletes tasks"
+
+  - name: Session resume recovers task state from progress.md
+    given: a session is resumed mid-implementation
+    when: the SessionStart hook fires
+    then: the hook reads progress.md and rebuilds the session task list so the author sees the same AC-by-AC status that was visible in the prior session
+    source_lines: "tools-reference: TaskList — Lists all tasks with their current status"
+
+  - name: Test failures stream back during implementation
+    given: /orb:implement runs a test suite that takes several minutes
+    when: the implementing agent runs the test command
+    then: a Monitor feeds each failing line back to the agent as it appears, so failures surface mid-run rather than on completion
+    source_lines: "tools-reference: Monitor — Runs a command in the background and feeds each output line back to Claude, so it can react to log entries, file changes, or polled status mid-conversation"
+
 maturity: established
 
 specs:
