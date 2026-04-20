@@ -14,10 +14,10 @@ cards:
     order: 1
     pr: "https://github.com/hughcameron/orbit/pull/12"
   - path: orbit/cards/0003-implement.yaml
-    status: designed
+    status: implementing
     spec_dir: orbit/specs/2026-04-20-implement-session-visibility/
     branch: rally/implement-session-visibility
-    worktree: null
+    worktree: main
     parked_constraint: null
     stream: A
     order: 2
