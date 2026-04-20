@@ -47,6 +47,16 @@
 - decisions/0010-rally-thin-card-guard.md — refuse at proposal, unconditional (first PR)
 - decisions/0009-rally-parallel-drive-full.md — delegate to drive-full; nested forked Agents are transitive (follow-up PR; cites 0004–0007)
 
+## Cross-Spec Verification — drive-forked-reviews ac-18
+
+`specs/2026-04-20-drive-forked-reviews/spec.yaml` ac-18 (gate) records the post-ship verification that rally sub-agents inherit forked reviews transitively from drive, with no rally-specific nested-fork plumbing. Verified on 2026-04-20 after this spec's follow-up PR (#7) merged:
+
+- **Rally SKILL.md §7c:** contains the "Recursive context separation" callout with the explicit statement "Rally does not invoke reviewers directly; drive does, once per stage per cycle." Four drive-internal decisions (`0004-drive-verdict-contract`, `0005-drive-review-artefact-contract`, `0006-drive-cold-re-review`, `0007-drive-rerequest-budget`) are cited by title as inherited contracts that rally does not override.
+- **Rally SKILL.md Integration section:** the review-spec / review-pr bullet points to drive-forked-reviews decisions 0004–0007 rather than redeclaring a rally-local protocol.
+- **This spec's ac-07 + constraint #2:** satisfied by §7c + Integration; scope is documentation of transitive inheritance, not rally-specific plumbing. Confirmed shipped on main at `b9c1bb7`.
+
+Verification lives here per drive-forked-reviews' own instruction ("Record completion in the rally refinement spec's progress.md, not this spec's"). drive-forked-reviews' progress.md has been updated to cross-reference this section.
+
 ## Verification Evidence (follow-up PR)
 
 ```
