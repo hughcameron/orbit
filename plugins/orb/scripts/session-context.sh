@@ -197,8 +197,87 @@ fi
 topic=$(basename "$latest_spec")
 has_interview=$(test -f "$latest_spec/interview.md" && echo 1 || echo 0)
 has_spec=$(test -f "$latest_spec/spec.yaml" && echo 1 || echo 0)
+has_progress=$(test -f "$latest_spec/progress.md" && echo 1 || echo 0)
 has_spec_review=$(find "$latest_spec" -maxdepth 1 -name 'review-spec-*.md' 2>/dev/null | head -1)
 has_pr_review=$(find "$latest_spec" -maxdepth 1 -name 'review-pr-*.md' 2>/dev/null | head -1)
+
+# ac-03 / ac-08 — mission-resilience drift check and next-AC surface.
+# Canonical drift-notice string (declared in plugins/orb/skills/implement/SKILL.md §4a).
+# Any change to the wording is a schema change that routes through card 0009.
+DRIFT_NOTICE="spec modified since implementation started, re-review recommended"
+
+if [[ "$has_spec" == "1" && "$has_progress" == "1" ]]; then
+  spec_path="$latest_spec/spec.yaml"
+  progress_path="$latest_spec/progress.md"
+
+  # Extract recorded Spec hash from progress.md. Raw bytes, no normalisation.
+  # ac-03: silently skip the drift check when the field is absent.
+  recorded_hash=$(grep -m1 '^Spec hash: sha256:' "$progress_path" 2>/dev/null | sed 's/^Spec hash: sha256://' || true)
+
+  if [[ -n "$recorded_hash" ]]; then
+    # Compute sha256 over raw bytes — no line-ending conversion, no trimming.
+    # shasum -a 256 on macOS, sha256sum on Linux. Both read in binary mode by default.
+    if command -v sha256sum >/dev/null 2>&1; then
+      current_hash=$(sha256sum "$spec_path" | awk '{print $1}')
+    else
+      current_hash=$(shasum -a 256 "$spec_path" | awk '{print $1}')
+    fi
+
+    if [[ "$current_hash" != "$recorded_hash" ]]; then
+      echo ""
+      echo "orbit: $DRIFT_NOTICE"
+    fi
+  fi
+
+  # ac-08 — surface next unchecked AC from ## Acceptance Criteria.
+  # Parser discipline (ac-09): ## Detours content is ignored — only lines inside
+  # ## Acceptance Criteria decide AC status.
+  next_ac_line=$(awk '
+    /^## Acceptance Criteria[[:space:]]*$/ { in_ac=1; next }
+    /^## / && in_ac { in_ac=0 }
+    in_ac && /^- \[ \] ac-[0-9]+/ {
+      # extract ac-id
+      match($0, /ac-[0-9]+/)
+      id = substr($0, RSTART, RLENGTH)
+      # detect gate annotation
+      is_gate = ($0 ~ /\(gate\)/)
+      print id "\t" is_gate
+      exit
+    }
+  ' "$progress_path")
+
+  if [[ -n "$next_ac_line" ]]; then
+    next_id=$(echo "$next_ac_line" | awk -F'\t' '{print $1}')
+    next_is_gate=$(echo "$next_ac_line" | awk -F'\t' '{print $2}')
+
+    if [[ "$next_is_gate" == "1" ]]; then
+      # Also find the first AC after the gate (if any) that would become startable.
+      post_gate_id=$(awk -v gate="$next_id" '
+        /^## Acceptance Criteria[[:space:]]*$/ { in_ac=1; next }
+        /^## / && in_ac { in_ac=0 }
+        in_ac && /^- \[ \] ac-[0-9]+/ {
+          match($0, /ac-[0-9]+/)
+          id = substr($0, RSTART, RLENGTH)
+          if (seen_gate) { print id; exit }
+          if (id == gate) seen_gate=1
+        }
+      ' "$progress_path")
+
+      if [[ -n "$post_gate_id" ]]; then
+        echo "orbit: Next AC — $next_id is a blocking gate. $post_gate_id becomes startable once $next_id closes."
+      else
+        echo "orbit: Next AC — $next_id is a blocking gate. No AC follows it."
+      fi
+    else
+      echo "orbit: Next AC — $next_id"
+    fi
+  else
+    # No unchecked AC found in progress.md
+    if grep -q '^## Acceptance Criteria' "$progress_path" 2>/dev/null; then
+      echo "orbit: No unchecked ACs remain in $topic/progress.md."
+    fi
+  fi
+fi
 
 if [[ "$has_spec" == "0" && "$has_interview" == "1" ]]; then
   echo "orbit: $topic — interview done, needs spec. Next: /orb:spec $latest_spec/interview.md"
