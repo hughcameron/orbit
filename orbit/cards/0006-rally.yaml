@@ -57,7 +57,7 @@ scenarios:
   - name: Rally approval is a structured prompt
     given: a rally has been proposed with N candidate cards
     when: the author is asked to approve
-    then: the approval uses AskUserQuestion with options (approve-all / select-subset / decline) rather than a free-text prompt
+    then: the approval uses AskUserQuestion with options (approve-all / modify-list / decline) rather than a free-text prompt
     source_lines: "tools-reference: AskUserQuestion — Asks multiple-choice questions to gather requirements or clarify ambiguity"
 
 goal: "agents coordinate multi-card delivery with fewer human touchpoints per card than serial drives"
@@ -67,6 +67,7 @@ maturity: planned
 specs:
   - orbit/specs/2026-04-19-rally/spec.yaml
   - orbit/specs/2026-04-19-rally-subagent-model/spec.yaml
+  - orbit/specs/2026-04-20-rally-approval-prompt/spec.yaml
 
 references:
   - "orbit/discovery/rally.md: observed pattern from parallel design session"
