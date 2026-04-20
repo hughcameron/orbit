@@ -21,7 +21,7 @@ Verify an implementation before merge. This skill runs in a **forked context** â
 
 - If a branch name or PR number is provided via $ARGUMENTS: use it
 - If not: check the current branch or most recent PR
-- Locate the associated spec (check PR description, recent `specs/*/spec.yaml`, or search)
+- Locate the associated spec (check PR description, recent `orbit/specs/*/spec.yaml`, or search)
 - Gather the diff: `git diff main...HEAD`
 
 ### 2. Phase 1: Read the Diff
@@ -30,7 +30,7 @@ Verify an implementation before merge. This skill runs in a **forked context** â
 2. Read the spec to understand what was intended
 3. If `progress.md` exists alongside the spec, read it â€” this is the implementer's self-reported AC tracker from `/orb:implement`. Cross-reference it with your own findings.
 4. Identify which acceptance criteria this implementation claims to satisfy
-5. Run a keyword scan (see `/orb:keyword-scan`) against `decisions/` using terms from the spec's goal and constraints. If relevant decisions exist, verify the implementation respects them. Flag violations as findings.
+5. Run a keyword scan (see `/orb:keyword-scan`) against `orbit/decisions/` using terms from the spec's goal and constraints. If relevant decisions exist, verify the implementation respects them. Flag violations as findings.
 
 ### 3. Phase 2: Run Tests + AC Coverage Check
 
@@ -116,7 +116,7 @@ The header line `**Verdict:** APPROVE | REQUEST_CHANGES | BLOCK` is a **contract
 
 ### Output path (invoked inline vs forked)
 
-- **Inline invocation** (a human running `/orb:review-pr` directly): save to the default path `specs/YYYY-MM-DD-<topic>/review-pr-<date>.md`.
+- **Inline invocation** (a human running `/orb:review-pr` directly): save to the default path `orbit/specs/YYYY-MM-DD-<topic>/review-pr-<date>.md`.
 - **Forked-Agent invocation** (e.g. launched by `/orb:drive`): the invoking agent's brief will supply an explicit output path â€” **use the brief's path verbatim**. It takes precedence over the default. Drive uses cycle-ordinal suffixes (`-v2.md`, `-v3.md`) to disambiguate REQUEST_CHANGES cycles; writing to the default path when the brief specified a cycle-specific path will cause drive to report the review as missing and trigger a retry.
 
 ## Critical Rules

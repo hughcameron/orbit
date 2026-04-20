@@ -26,7 +26,7 @@ A reviewer who watched you build something has confirmation bias. A fresh agent 
 ### 1. Gather the Spec
 
 - If a spec file path is provided via $ARGUMENTS: read it
-- If not: look for the most recent `specs/*/spec.yaml` file
+- If not: look for the most recent `orbit/specs/*/spec.yaml` file
 - Also read the associated interview file (from `metadata.interview_ref`)
 - If neither exists, report that no spec was found
 
@@ -126,7 +126,7 @@ The header line `**Verdict:** APPROVE | REQUEST_CHANGES | BLOCK` is a **contract
 
 ### Output path (invoked inline vs forked)
 
-- **Inline invocation** (a human running `/orb:review-spec` directly): save to the default path `specs/YYYY-MM-DD-<topic>/review-spec-<date>.md`.
+- **Inline invocation** (a human running `/orb:review-spec` directly): save to the default path `orbit/specs/YYYY-MM-DD-<topic>/review-spec-<date>.md`.
 - **Forked-Agent invocation** (e.g. launched by `/orb:drive`): the invoking agent's brief will supply an explicit output path — **use the brief's path verbatim**. It takes precedence over the default. Drive uses cycle-ordinal suffixes (`-v2.md`, `-v3.md`) to disambiguate REQUEST_CHANGES cycles; writing to the default path when the brief specified a cycle-specific path will cause drive to report the review as missing and trigger a retry.
 
 ## Verdicts

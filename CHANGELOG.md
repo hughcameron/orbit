@@ -2,6 +2,17 @@
 
 All notable changes to orbit are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [Unreleased]
+
+### Changed
+- **Artefact layout consolidated under `orbit/`.** The four top-level directories (`cards/`, `specs/`, `decisions/`, `discovery/`) have moved to `orbit/cards/`, `orbit/specs/`, `orbit/decisions/`, and `orbit/discovery/`. All skill docs, hooks, examples, and references have been rewritten to point at the new paths. The move was done via `git mv` so history is preserved (`git log --follow` traces every artefact back through the rename).
+- `/orb:setup` now detects four repo states — **greenfield** (create fresh `orbit/`), **brownfield** (legacy bare dirs present → single all-or-nothing migration prompt), **idempotent** (already migrated, no-op), and **mixed** (refuse with a clear collision report). Brownfield migration runs one `git mv` transaction covering every detected bare dir; untracked residue is reported after the move.
+- `SessionStart` hook (`session-context.sh`) now gates on the presence of `orbit/` and emits a one-line nudge (`orbit: legacy layout detected. Run /orb:setup to migrate.`) when bare-layout dirs are found without `orbit/`.
+- `CLAUDE.md` snippet appended by `/orb:setup` now references `orbit/cards/`, `orbit/specs/`, and `orbit/decisions/`.
+
+### Notes
+- Prior review artefacts (e.g. `review-pr-*.md`, `review-spec-*.md`) that quoted old bare paths were rewritten in place. This is a deliberate evidence-fidelity trade-off in favour of a clean end-state; the migration commit itself is the audit trail for the path change.
+
 ## [0.2.18] - 2026-04-17
 
 ### Added

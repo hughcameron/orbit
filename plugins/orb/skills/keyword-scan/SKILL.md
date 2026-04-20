@@ -59,12 +59,12 @@ Both commands return file paths only (`-l`), not content — keeping token usage
 
 | Skill | Target | What you're looking for |
 |-------|--------|------------------------|
-| `/orb:design` | `specs/` | Orphaned specs not in the card's `specs` array |
-| `/orb:distill` | `cards/` | Existing cards that overlap with candidates being drafted |
-| `/orb:card` | `cards/`, `specs/` | Overlap with existing capabilities before creating a new card |
-| `/orb:discovery` | `specs/`, `decisions/` | Prior art — specs or decisions that already explored this topic |
+| `/orb:design` | `orbit/specs/` | Orphaned specs not in the card's `specs` array |
+| `/orb:distill` | `orbit/cards/` | Existing cards that overlap with candidates being drafted |
+| `/orb:card` | `orbit/cards/`, `orbit/specs/` | Overlap with existing capabilities before creating a new card |
+| `/orb:discovery` | `orbit/specs/`, `orbit/decisions/` | Prior art — specs or decisions that already explored this topic |
 | `/orb:implement` | Project source | Existing code, patterns, or tests related to the spec's ACs |
-| `/orb:review-pr` | `decisions/` | Decisions the implementation should have respected |
+| `/orb:review-pr` | `orbit/decisions/` | Decisions the implementation should have respected |
 
 ## Interpreting Results
 

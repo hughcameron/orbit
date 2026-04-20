@@ -1,0 +1,36 @@
+---
+status: accepted
+date-created: 2026-04-20
+date-modified: 2026-04-20
+---
+# 0004. Drive's Verdict Contract: Strict Canonical Markdown Line
+
+## Context and Problem Statement
+
+With `/orb:drive` launching `review-spec` and `review-pr` as forked Agents (card 0007), drive must extract the verdict from the review file on disk rather than from a synchronous skill return value. The verdict format is now a machine-readable contract between drive and its forked reviewers. The contract shape determines parse complexity, review-file readability, and how silently the contract can drift.
+
+## Considered Options
+
+- **Option A: Strict canonical markdown line.** A single line `**Verdict:** APPROVE | REQUEST_CHANGES | BLOCK` matched by the regex `^\*\*Verdict:\*\* (APPROVE|REQUEST_CHANGES|BLOCK)\s*$`. Case-sensitive, no fuzzy matching.
+- **Option B: YAML frontmatter.** A frontmatter block at the top of the review file with `verdict: APPROVE`. Parsed by a YAML library.
+- **Option C: Sidecar file.** A `verdict.txt` or `verdict.json` written alongside the markdown review. Parser reads the sidecar.
+- **Option D: Fuzzy header match.** Parser accepts variations — `Verdict: APPROVE`, `**Verdict:** approve`, inline prose — via a relaxed regex or heuristics.
+
+## Decision Outcome
+
+Chosen option: "Option A — Strict canonical markdown line", because the existing reviews already produce this line, keeping reviews human-readable as single artefacts and adding no new files or dependencies. The strict regex turns drift into a loud failure (retry → escalation) rather than a silent miscategorisation. Drive's parser is one regex match; the forked reviewer writes one line exactly; if either side drifts, drive catches it immediately.
+
+### Consequences
+
+- Good, because no new artefact to maintain (verdict is part of the review markdown, not a separate file)
+- Good, because strict parsing fails fast — ambiguous reviews don't produce misleading verdicts
+- Good, because the review files stay plain markdown, readable as-is by humans
+- Good, because the regex is trivial — no YAML parser, no JSON deserialization, no heuristics to tune
+- Bad, because a reviewer who writes `Verdict: APPROVE` (no bold) silently fails the contract and triggers retry/escalation — mitigated by documenting the contract explicitly in both `review-spec/SKILL.md` and `review-pr/SKILL.md` Output sections
+- Bad, because any future verdict vocabulary expansion (e.g., `APPROVE_WITH_CONDITIONS`) requires coordinated updates to the regex and both skills — accepted as the cost of a closed vocabulary
+
+## Evidence
+
+- All prior review files (`orbit/specs/*/review-*.md`) already produce the canonical line; the contract is made explicit rather than introduced
+- Reviewed by the progressive spec-review on `orbit/specs/2026-04-20-drive-forked-reviews/spec.yaml` — Pass 1 and Pass 2 both clean on this decision
+- Constraint #2 in the spec captures the rule: "The verdict contract is a single canonical markdown line — `**Verdict:** APPROVE | REQUEST_CHANGES | BLOCK` — matched by a strict regex."

@@ -9,8 +9,8 @@ orbit is a Claude Code plugin that provides specification-driven workflow skills
 ## Working in This Repo
 
 - **Skills live in** `plugins/orb/skills/<name>/SKILL.md`
-- **Cards describe orbit's own capabilities** in `cards/`
-- **Specs for orbit changes** live in `specs/`
+- **Cards describe orbit's own capabilities** in `orbit/cards/`
+- **Specs for orbit changes** live in `orbit/specs/`
 - orbit uses itself — cards, specs, and decisions apply to orbit's own development
 
 ## Key Concepts
