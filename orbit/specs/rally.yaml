@@ -22,20 +22,22 @@ cards:
     stream: A
     order: 2
   - path: orbit/cards/0005-drive.yaml
-    status: implementing
+    status: complete
     spec_dir: orbit/specs/2026-04-20-drive-live-visibility/
     branch: rally/drive-live-visibility
     worktree: /home/hugh/github/hughcameron/orbit-rally-drive-live-visibility
     parked_constraint: null
     stream: B
     order: 1
+    pr: "https://github.com/hughcameron/orbit/pull/11"
   - path: orbit/cards/0006-rally.yaml
-    status: implementing
+    status: complete
     spec_dir: orbit/specs/2026-04-20-rally-approval-prompt/
     branch: rally/rally-approval-prompt
     worktree: /home/hugh/github/hughcameron/orbit-rally-rally-approval-prompt
     parked_constraint: null
     stream: B
     order: 2
+    pr: "https://github.com/hughcameron/orbit/pull/10"
 implementation_order: "Stream A serial: 0009 → 0003. Stream B parallel to A: 0005, 0006 (each in its own worktree)."
 order_rationale: "0009 is the authoritative schema owner for progress.md extensions and the implement/SKILL.md + session-context.sh changes those extensions require. 0003 consumes that schema and writes into the same two files, so it must wait until 0009 lands to avoid branch-level file collisions. 0005 (drive skill only) and 0006 (rally skill §2b only, plus one card scenario edit) touch disjoint surfaces from 0003/0009 and from each other — safe to parallelise in isolated worktrees concurrently with Stream A."
