@@ -36,7 +36,7 @@ scenarios:
 
 goal: "Agents maintain spec fidelity through mid-flight disruptions without requiring the author to pull them back on track"
 
-maturity: planned
+maturity: active
 
 specs:
   - orbit/specs/2026-04-20-mission-resilience/spec.yaml
