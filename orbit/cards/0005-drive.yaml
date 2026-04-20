@@ -79,6 +79,7 @@ maturity: planned
 
 specs:
   - orbit/specs/2026-04-15-drive/spec.yaml
+  - orbit/specs/2026-04-20-drive-live-visibility/spec.yaml
 
 references:
   - "Prior experience: disposition embedded in agent definition + CLAUDE.md proved effective for focus and throughput"
