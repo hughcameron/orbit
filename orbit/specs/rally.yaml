@@ -1,8 +1,8 @@
 rally: "orbit UX uplift via Claude Code tools — mission resilience, live visibility, structured prompts"
 autonomy: guided
-phase: implementing
+phase: complete
 started: 2026-04-20T08:52:52Z
-completed: null
+completed: 2026-04-20T10:30:00Z
 cards:
   - path: orbit/cards/0009-mission-resilience.yaml
     status: complete
@@ -14,13 +14,14 @@ cards:
     order: 1
     pr: "https://github.com/hughcameron/orbit/pull/12"
   - path: orbit/cards/0003-implement.yaml
-    status: implementing
+    status: complete
     spec_dir: orbit/specs/2026-04-20-implement-session-visibility/
     branch: rally/implement-session-visibility
     worktree: main
     parked_constraint: null
     stream: A
     order: 2
+    pr: "https://github.com/hughcameron/orbit/pull/13"
   - path: orbit/cards/0005-drive.yaml
     status: complete
     spec_dir: orbit/specs/2026-04-20-drive-live-visibility/
