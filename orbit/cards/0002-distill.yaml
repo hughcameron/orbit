@@ -1,0 +1,54 @@
+feature: Distill capability cards from source material
+as_a: author
+i_want: to extract structured feature cards from memos, documents, or an existing project
+so_that: the product's capabilities are described as cards without re-interviewing
+
+scenarios:
+  - name: Distill a memo into a card
+    given: a memo exists at orbit/cards/memos/2026-04-04-search-ux.md
+    when: I run /orb:distill orbit/cards/memos/2026-04-04-search-ux.md
+    then: one or more capability cards are presented for my approval
+
+  - name: Distill a discovery interview
+    given: a discovery interview exists at orbit/specs/2026-04-01-topic/interview.md
+    when: I run /orb:distill orbit/specs/2026-04-01-topic/interview.md
+    then: distinct capabilities are identified and offered as separate cards
+
+  - name: Distill an existing project
+    given: a project has a README, docs, source code, and specs
+    when: I run /orb:distill with a directory or natural-language scope
+    then: the product's capabilities are identified from first principles and offered as cards
+
+  - name: First-principles lens always applies
+    given: source material contains TODOs, roadmap items, or planned enhancements
+    when: distill extracts features
+    then: cards describe capabilities users experience, not incremental changes developers plan
+
+  - name: Staged review — draft then review then write
+    given: distill has extracted candidate cards
+    when: it presents them to me
+    then: all cards are shown as a numbered batch with nothing written to disk yet
+
+  - name: Batch feedback
+    given: I'm reviewing the drafted card set
+    when: I spot overlaps, gaps, or cards to merge/drop/rename
+    then: I give feedback on the batch and the agent revises until I say "write"
+
+  - name: Nothing written until explicit approval
+    given: distill is presenting drafted cards
+    when: the review is still in progress
+    then: no files are created on disk until I explicitly approve the final set
+
+  - name: Card references its source
+    given: a card is created via distill
+    when: I look at the card
+    then: the references field includes the source artifacts
+
+maturity: established
+
+specs:
+  - orbit/specs/2026-04-04-distill/spec.yaml
+
+references:
+  - "/orb:card: interactive interview produces one card"
+  - "/orb:discovery: Socratic Q&A produces interview.md — a common distill input"

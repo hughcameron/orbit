@@ -37,7 +37,7 @@ Observed pattern (from parallel design across 3 cards):
 - **Serial surprise** — designs that looked independent revealed shared trait changes only once designs were written
 - **No durable plan** — the session died and the coordination state was lost
 
-Rally resolves each with a declared artefact path, a definitive post-design disjointness check, and `specs/rally.yaml` as durable state.
+Rally resolves each with a declared artefact path, a definitive post-design disjointness check, and `orbit/specs/rally.yaml` as durable state.
 
 > **Principle:** The goal of rally is to have the highest quality interactions at ideation and assertion. This means maximum clarity based on the best available evidence. Agent work between gates exists to make the next gate sharper — not just faster.
 
@@ -50,7 +50,7 @@ Rally resolves each with a declared artefact path, a definitive post-design disj
 Before anything else, check whether a rally is already in flight.
 
 ```
-if specs/rally.yaml exists:
+if orbit/specs/rally.yaml exists:
   read and validate it (see §11 Resumption + §12 Validation)
   if phase != "complete":
     resume from the recorded phase — do not start a new rally
@@ -64,9 +64,9 @@ if specs/rally.yaml exists:
 
 Parse the goal string from `$ARGUMENTS[0]` and autonomy from `$ARGUMENTS[1]` (default `guided`).
 
-**Scan `cards/` for candidate cards:**
+**Scan `orbit/cards/` for candidate cards:**
 
-1. Read every `cards/*.yaml` (ignore `cards/memos/`)
+1. Read every `orbit/cards/*.yaml` (ignore `orbit/cards/memos/`)
 2. For each card, score relevance to the goal string using the card's `feature`, `goal`, `scenarios`, and `references`
 3. Surface the top candidates (usually 3–6) with a one-line rationale per card
 
@@ -77,9 +77,9 @@ Before the proposal is presented to the author, check the scenario count on ever
 ```
 Rally cannot proceed — the following candidate card is too thin:
 
-  cards/0017-<slug>.yaml — 2 scenarios
+  orbit/cards/0017-<slug>.yaml — 2 scenarios
 
-Thicken this card via `/orb:card cards/0017-<slug>.yaml` or remove it from
+Thicken this card via `/orb:card orbit/cards/0017-<slug>.yaml` or remove it from
 the rally list before continuing.
 ```
 
@@ -97,9 +97,9 @@ The thin-card refusal is **unconditional on the eventual serial-or-parallel outc
 ## Rally Proposal — <goal string>
 
 Candidate cards:
-  1. cards/<id>-<slug>.yaml — <feature line>
+  1. orbit/cards/<id>-<slug>.yaml — <feature line>
      Rationale: <why this card fits the goal>
-  2. cards/<id>-<slug>.yaml — <feature line>
+  2. orbit/cards/<id>-<slug>.yaml — <feature line>
      Rationale: <why this card fits the goal>
   ...
 
@@ -119,7 +119,7 @@ If the author adds a card not in the scan's top-N, include it — then re-run th
 
 **rally.yaml lives only on main.** The lead writes rally.yaml while checked out to main. Before delegating to a card's rally branch (serial) or its worktree (parallel), the lead returns to main to write rally.yaml, then checks out again. Rally branches never contain rally.yaml.
 
-On approval, create `specs/rally.yaml` while on main:
+On approval, create `orbit/specs/rally.yaml` while on main:
 
 ```yaml
 rally: "<goal string>"
@@ -128,15 +128,15 @@ phase: approved
 started: <ISO-8601 timestamp>
 completed: null
 cards:
-  - path: cards/0015-<slug>.yaml
+  - path: orbit/cards/0015-<slug>.yaml
     status: proposed
-    spec_dir: specs/YYYY-MM-DD-<slug>/
+    spec_dir: orbit/specs/YYYY-MM-DD-<slug>/
     branch: rally/<slug>
     worktree: null          # null until launch; 'main' for serial, absolute path for parallel
     parked_constraint: null
-  - path: cards/0016-<slug>.yaml
+  - path: orbit/cards/0016-<slug>.yaml
     status: proposed
-    spec_dir: specs/YYYY-MM-DD-<slug>/
+    spec_dir: orbit/specs/YYYY-MM-DD-<slug>/
     branch: rally/<slug>
     worktree: null
     parked_constraint: null
@@ -197,7 +197,7 @@ After the sub-agent returns, the lead runs all three checks:
 
 1. **Self-report (contract):** parse the sub-agent's returned JSON `files` list. If the JSON is missing or malformed, reject.
 2. **Artefact assertion (completeness):** assert `<spec_dir>/decisions.md` exists; assert every path in the returned list is under `<spec_dir>`.
-3. **Snapshot diff (independent verification):** capture a post-snapshot (`git status --porcelain`) and compute the set difference `post \ pre`. Any entry in that difference that is neither under `<spec_dir>` nor on the fixed lead-owned allowlist (`specs/rally.yaml`) rejects the sub-agent's output. Entries present in both pre and post are pre-existing lead-side state and are ignored. (constraint #9, ac-04)
+3. **Snapshot diff (independent verification):** capture a post-snapshot (`git status --porcelain`) and compute the set difference `post \ pre`. Any entry in that difference that is neither under `<spec_dir>` nor on the fixed lead-owned allowlist (`orbit/specs/rally.yaml`) rejects the sub-agent's output. Entries present in both pre and post are pre-existing lead-side state and are ignored. (constraint #9, ac-04)
 
 On the **first** violation: the lead re-briefs the same sub-agent with an explicit path warning naming the offending entry (e.g. `your previous return created 'plugins/orb/scratch.md' outside <spec_dir>; do not write outside <spec_dir>`). This re-brief is a **pre-qualification retry** — it is NOT a rally-level strike and does not count against any drive-full escalation budget.
 
@@ -267,7 +267,7 @@ Compute the intersection. Any non-empty intersection is a hard input to implemen
 ```
 Shared symbols detected:
   - Engine trait — referenced by <card A> and <card C>
-  - specs/.../hook.sh — both <card B> and <card C> modify it
+  - orbit/specs/.../hook.sh — both <card B> and <card C> modify it
 
 Proposed implementation order: <card A> → <card C> → <card B>
 Rationale: Card A establishes the Engine trait; card C extends it; card B depends on the hook update card C ships.
@@ -297,7 +297,7 @@ Before delegating any card to drive (serial or parallel), the lead commits the a
 ```bash
 # on main
 git checkout -b rally/<slug>            # or: git checkout rally/<slug>
-git add specs/<spec_dir>/interview.md
+git add orbit/specs/<spec_dir>/interview.md
 git commit -m "rally/<slug>: approved design"
 ```
 
@@ -430,9 +430,9 @@ A NO-GO verdict at **any** stage (spec review BLOCK, supervised gate NO-GO, PR r
 ```yaml
 # rally.yaml update (on main)
 cards:
-  - path: cards/0016-<slug>.yaml
+  - path: orbit/cards/0016-<slug>.yaml
     status: parked
-    spec_dir: specs/YYYY-MM-DD-<slug>/
+    spec_dir: orbit/specs/YYYY-MM-DD-<slug>/
     branch: rally/<slug>
     worktree: <path-or-'main'-at-time-of-park>
     parked_constraint: "[<label>] <one-line constraint from the NO-GO verdict>"
@@ -484,11 +484,11 @@ When all cards are in `complete` or `parked` status:
 
 2. **Update rally.yaml (on main):** `phase: complete`, `completed: <ISO-8601 timestamp>`.
 
-3. **Do not archive yet.** The file remains at `specs/rally.yaml`. Archival happens when the **next** rally begins (§1 / §11).
+3. **Do not archive yet.** The file remains at `orbit/specs/rally.yaml`. Archival happens when the **next** rally begins (§1 / §11).
 
 ### 11. Resumption
 
-When `/orb:rally` is invoked and `specs/rally.yaml` exists:
+When `/orb:rally` is invoked and `orbit/specs/rally.yaml` exists:
 
 1. Read and validate rally.yaml on main (§12)
 2. Detect the current phase and per-card statuses
@@ -515,7 +515,7 @@ The path-resolution rule is the only mechanism distinguishing serial (main-check
 Rally "<goal>" completed on <completed>. Start a new rally?
 
 Options:
-  - Archive: move specs/rally.yaml → specs/archive/rally-<timestamp>.yaml, then propose new rally
+  - Archive: move orbit/specs/rally.yaml → orbit/specs/archive/rally-<timestamp>.yaml, then propose new rally
   - Cancel: keep the old rally.yaml and exit
 ```
 
@@ -541,7 +541,7 @@ On every read, validate rally.yaml before trusting it. Required checks:
 On validation failure:
 
 ```
-rally.yaml at specs/rally.yaml is invalid: <specific problem, e.g. "card 2 has status 'implementing' but worktree is null">
+rally.yaml at orbit/specs/rally.yaml is invalid: <specific problem, e.g. "card 2 has status 'implementing' but worktree is null">
 
 Fix the file or remove it to start fresh. Rally will not proceed with corrupt state.
 ```
@@ -552,7 +552,7 @@ Never silently repair. Never half-resume.
 
 | Layer | File | Scope | Location |
 |-------|------|-------|----------|
-| Rally coordination | `specs/rally.yaml` | Per-card coordination status, implementation order, phase, goal, timestamps | **main only** |
+| Rally coordination | `orbit/specs/rally.yaml` | Per-card coordination status, implementation order, phase, goal, timestamps | **main only** |
 | Card sub-stage | `<spec_dir>/drive.yaml` (per card) | Per-card drive stage (spec/review-spec/implement/review-pr), iteration history | Card's worktree, or main for serial cards |
 
 Each implementing card runs drive-full and maintains its own `drive.yaml`. Rally reads drive.yaml on resumption via the ac-11 path-resolution rule to know **which sub-stage** a card is in; rally.yaml on main tells it **which card**.

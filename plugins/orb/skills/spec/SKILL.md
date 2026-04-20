@@ -80,12 +80,12 @@ metadata:
   test_prefix: "remat"  # short label for this spec — disambiguates ACs across specs
   timestamp: "YYYY-MM-DDTHH:MM:SSZ"
   ambiguity_score: 0.15
-  interview_ref: "specs/YYYY-MM-DD-<topic>/interview.md"
+  interview_ref: "orbit/specs/YYYY-MM-DD-<topic>/interview.md"
 ```
 
 ### 4. Save the Spec
 
-Save to: `specs/YYYY-MM-DD-<topic-slug>/spec.yaml`
+Save to: `orbit/specs/YYYY-MM-DD-<topic-slug>/spec.yaml`
 
 If the interview file exists in a spec directory, save alongside it.
 
@@ -96,7 +96,7 @@ The spec references a card (from the interview's `Card:` line). After saving `sp
 1. Parse the card path from the interview record (the `**Card:**` line) or from conversation context
 2. If no card is identified, skip this step — not all specs originate from a card
 3. Read the card YAML
-4. Append the new spec path (e.g. `specs/2026-04-12-topic/spec.yaml`) to the `specs` array
+4. Append the new spec path (e.g. `orbit/specs/2026-04-12-topic/spec.yaml`) to the `specs` array
 5. If the `specs` array doesn't exist yet, create it
 6. Write the updated card back to disk
 
