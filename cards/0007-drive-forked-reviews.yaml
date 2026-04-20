@@ -1,0 +1,71 @@
+feature: Drive's reviews fork
+as_a: developer
+i_want: /orb:drive to honour its component skills' context:fork declaration by running review-spec and review-pr as context-separated forked agents
+so_that: every drive invocation gets the confirmation-bias-resistant review the component skills already promise, and rallies can nest drive-full inside sub-agents without carrying an architectural mismatch
+
+scenarios:
+  - name: Forked review returns APPROVE
+    given: a drive has reached its review-spec or review-pr stage
+    when: the forked reviewer agent returns an APPROVE verdict
+    then: drive parses the verdict from the saved review file, advances drive.yaml to the next stage, and continues the pipeline without further prompting
+
+  - name: Forked review returns REQUEST_CHANGES
+    given: a forked review has completed
+    when: the verdict is REQUEST_CHANGES with specific findings
+    then: drive addresses the findings in the spec or implementation, launches a fresh forked reviewer (new context, not a continuation), and re-evaluates the new verdict independently
+
+  - name: Forked review returns BLOCK
+    given: a forked review has completed
+    when: the verdict is BLOCK
+    then: drive treats the verdict as a NO-GO, records the block reason in drive.yaml as the iteration's failure constraint, and re-enters at design per the existing NO-GO handling
+
+  - name: Forked reviewer fails to return a verdict
+    given: a forked review agent is launched
+    when: the agent errors, times out, or returns a response without a parseable verdict
+    then: drive retries the review once with a fresh fork; on second failure drive escalates with a clear "review could not be completed" message rather than silently proceeding
+
+  - name: Drive state survives the fork boundary
+    given: drive.yaml exists and records the stage as review-spec or review
+    when: a forked review is launched, completes, and returns
+    then: drive resumes from the drive.yaml record without re-deriving state from the forked agent's context — the review file on disk and drive.yaml are the only state contract
+
+  - name: Verdict contract is machine-parseable
+    given: review-spec and review-pr produce markdown files
+    when: drive reads a review file to extract the verdict
+    then: drive locates a canonical verdict line (format specified in the drive spec) and fails fast if absent — no heuristic fuzzy parsing
+
+  - name: Review file is authoritative over agent response
+    given: a forked review has returned both a chat response and a saved review file
+    when: drive reads the verdict
+    then: drive reads the verdict from the saved review file on disk, not the agent's chat response — if they disagree the file wins
+
+  - name: Re-review after REQUEST_CHANGES is genuinely fresh
+    given: drive is addressing REQUEST_CHANGES findings
+    when: drive launches the re-review
+    then: the re-review runs as a new forked agent with no shared context from the prior review — each iteration's verdict is independently derived
+
+  - name: Component skill's context declaration is honoured
+    given: review-spec and review-pr SKILL.md frontmatter declare context:fork
+    when: drive invokes these skills during its pipeline
+    then: drive launches them via the Agent tool as forked general-purpose agents, not by reading SKILL.md and following instructions inline
+
+  - name: Rally sub-agents inherit forked reviews for free
+    given: a rally sub-agent is running drive in full autonomy inside a worktree
+    when: the sub-agent's drive reaches review-spec or review-pr
+    then: the sub-agent launches its own forked reviewer, producing recursive context separation without rally-specific plumbing
+
+goal: "every drive invocation runs review-spec and review-pr as forked context-separated agents, honouring the components' declared fork contract and eliminating confirmation-bias-prone inline review at the architectural root"
+
+maturity: planned
+
+specs: []
+
+references:
+  - "specs/2026-04-19-rally-subagent-model/review-spec-2026-04-19.md: F-01 identified drive's inline reviews as the structural cause of rally's parallel-sub-agent contradiction"
+  - "specs/2026-04-19-rally/review-pr-2026-04-19.md: the v2.0 rally spec's F-05 finding, traced back to drive's inline-review pattern"
+  - "plugins/orb/skills/review-spec/SKILL.md: frontmatter declares context:fork — drive currently violates this"
+  - "plugins/orb/skills/review-pr/SKILL.md: frontmatter declares context:fork, agent:general-purpose — drive currently violates this"
+  - "plugins/orb/skills/drive/SKILL.md §5, §7, Critical Rules: current inline-review instructions that require amendment"
+  - "cards/0006-rally.yaml: blocked on this card — rally's parallel path collapses to drive's natural behaviour once drive forks its reviews"
+  - "MetaGPT artefact-path contracts: state in files (drive.yaml, progress.md, review files), not sessions — makes fork-and-return safe"
+  - "LangGraph interrupt/resume at batch boundaries: the pattern rally already uses, now extended to drive's review stages"
