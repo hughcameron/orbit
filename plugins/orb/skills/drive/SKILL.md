@@ -64,9 +64,26 @@ current_spec: <path to current spec directory>
 status: design
 history: []
 started: <ISO-8601 timestamp>
+review_cycles:
+  review_spec: 0
+  review_pr: 0
+review_cycle_dates:
+  review_spec: null
+  review_pr: null
 ```
 
-If `drive.yaml` already exists, read it and **resume from the recorded state** (see §11 Resumption).
+The `review_cycles` and `review_cycle_dates` fields track the REQUEST_CHANGES budget and review-file cycle discipline described in §5a. They are part of the initial write on every fresh drive — their presence is the marker that distinguishes drives running under forked-review semantics from pre-change drives.
+
+**If `drive.yaml` already exists**, read it and **resume from the recorded state** (see §11 Resumption).
+
+**Refusal on pre-change drive.yaml.** If the existing `drive.yaml` has no `review_cycles` field — i.e. it was initialised before forked reviews shipped — do NOT auto-initialise the field and do NOT advance state. Output the refusal message and exit:
+
+```
+drive.yaml was initialised before forked reviews shipped; finish the drive under
+the prior /orb:drive version, or park and restart from the card.
+```
+
+This is the honest migration path: inline-mode and forked-mode must not mix within a single drive. No Agent is launched; drive.yaml is unchanged. If the field is present (written either by a new drive on fresh creation or manually added by an operator taking explicit ownership of the bridge), proceed with the resumption.
 
 ### 3. Stage: Design
 
@@ -105,26 +122,115 @@ If NO-GO → jump to §8 (NO-GO Handling).
 
 ### 5. Stage: Review-Spec
 
-Read the review-spec skill instructions from `plugins/orb/skills/review-spec/SKILL.md`. Follow its instructions **inline** — read the spec cold, run the assumption audit, failure mode analysis, test adequacy check, gap analysis, and constraint check.
+Review-spec runs as a **forked Agent** via the Agent tool. The component skill declares `context: fork` in its frontmatter — drive honours that contract and launches the review in a fresh context, not inline in this session.
 
-**Important:** Do NOT invoke `/orb:review-spec` as a skill call. Read the SKILL.md file and follow its instructions directly within this session. The review runs inline to keep the drive's single-session model intact.
+#### 5.1 Compute the cycle-specific output path
 
-**Output:** Save `review-spec-<date>.md` in the current spec directory.
+Read `review_cycles.review_spec` from drive.yaml. Let N = that value + 1 (the cycle ordinal for this fork — 1-indexed).
 
-**Review-spec verdict handling:**
+Capture or reuse the date token:
+- If `review_cycle_dates.review_spec` is null, set it to today's ISO date (YYYY-MM-DD) and persist drive.yaml. This is cycle 1's date.
+- Otherwise, reuse the stored value. The date is fixed at cycle 1 for the whole stage so long-running drives don't split cycle files across date boundaries.
 
-- **APPROVE:** Proceed to Implement (§6).
-- **REQUEST_CHANGES:** Address the specific changes in the spec. Re-run the review. If the review now approves, proceed.
-- **BLOCK:** Jump to §8 (NO-GO Handling). The spec needs rework — the block reason becomes the NO-GO constraint.
+Compute the output path:
+- **Cycle 1 (N=1):** `<current_spec>/review-spec-<date>.md` (no suffix — preserves the inline-convention path shape)
+- **Cycle 2 (N=2):** `<current_spec>/review-spec-<date>-v2.md`
+- **Cycle 3 (N=3):** `<current_spec>/review-spec-<date>-v3.md`
 
-Update `drive.yaml`: `status: implement`
+#### 5.2 Idempotent resumption check
 
-**Supervised mode gate:** If autonomy is `supervised`, pause here:
+Before launching any fork, check whether a valid review already exists at the cycle-specific path (a prior session may have crashed after the fork wrote the file but before drive parsed it):
+
+- If the file exists AND contains a line matching the canonical verdict regex (§5.4), parse that verdict and proceed to §5.5 verdict handling **without launching any Agent**.
+- Otherwise, continue to §5.3.
+
+#### 5.3 Launch the forked review
+
+Invoke the Agent tool with:
+- `subagent_type: general-purpose`
+- A brief containing **only**:
+  - The absolute path to the spec under review (`<current_spec>/spec.yaml`)
+  - The absolute path where the review must be written (the cycle-specific path from §5.1)
+  - The instruction to read the spec cold, follow the `/orb:review-spec` skill, and write the review to the specified path using the canonical verdict line format
+
+The brief must NOT include:
+- Any conversation context from this drive session
+- The iteration counter, cycle number, or the existence of prior review files (the re-review is functionally identical to the first — see ac-08)
+- drive.yaml contents or any other state
+
+Example brief shape:
+
 ```
-AskUserQuestion: "Spec review complete — verdict: <verdict>. <N> findings (<severities>). Review saved at <path>. Proceed to implementation?"
+Run /orb:review-spec on the spec at <absolute spec path>.
+Write the review to exactly <absolute output path> (this path takes precedence
+over the default path in the skill). Use the canonical verdict line format
+`**Verdict:** APPROVE | REQUEST_CHANGES | BLOCK`.
+```
+
+The forked Agent's chat response may contain a summary. **Drive does not parse the chat response for the verdict** — the file on disk is the only authoritative source (see §5.4).
+
+#### 5.4 Parse the verdict from the file
+
+After the fork returns, read the file at the cycle-specific output path. Locate the first line matching the canonical regex:
+
+```
+^\*\*Verdict:\*\* (APPROVE|REQUEST_CHANGES|BLOCK)\s*$
+```
+
+- The match is **case-sensitive** on the verdict token. `**verdict:** approve` does not match. `Verdict: APPROVE` (no bold) does not match. `The verdict is APPROVE.` does not match. No fuzzy matching, no heuristics — canonical or no-verdict.
+- If multiple matches exist, use the first.
+- If zero matches exist, or the file is missing entirely, treat as **no verdict** and fall through to §5.4.1 retry.
+
+##### 5.4.1 Retry on missing verdict (budget: 1)
+
+If no verdict was parseable from the file, launch **one** retry fork with a fresh brief identical to the original (§5.3). The retry writes to the same cycle-specific path, overwriting any partial file from the failed attempt.
+
+**Retry does not increment `review_cycles.review_spec`** — that counter only advances on a successfully-parsed REQUEST_CHANGES verdict. The fork-retry budget is independent of the REQUEST_CHANGES budget.
+
+If the retry also produces no parseable verdict, drive escalates:
+- Update `drive.yaml` `status: escalated`
+- Output: `review could not be completed after 2 forked attempts at review-spec`
+- Stop — do not re-enter at design, this is a harness-level failure not a review outcome.
+
+#### 5.5 Verdict handling
+
+Once a verdict is parsed:
+
+- **APPROVE:** Update `drive.yaml` `status: implement`. Proceed to §6 Implement.
+
+- **REQUEST_CHANGES:**
+  - Increment `review_cycles.review_spec` in drive.yaml.
+  - Check the synthetic-BLOCK budget (§5a).
+  - If the budget allows another cycle: address the specific changes in the spec (edit spec.yaml per the review's findings), then return to §5.1 for the next cycle. The next fork's brief is functionally identical to the first — the new reviewer sees only the updated spec, with no pointer to prior review files and no iteration counter.
+
+- **BLOCK:** Jump to §8 NO-GO Handling. The block reason (the review file's findings, summarised) becomes the NO-GO constraint.
+
+#### 5a. REQUEST_CHANGES budget & synthetic BLOCK (applies to both review stages)
+
+Each stage (review-spec, review-pr) has an **independent budget of 3 REQUEST_CHANGES cycles per top-level iteration**. The counters live at `review_cycles.review_spec` and `review_cycles.review_pr` in drive.yaml and reset to 0 when drive enters a new top-level iteration (new spec directory after a NO-GO re-entry).
+
+After incrementing `review_cycles.<stage>` on a REQUEST_CHANGES verdict:
+
+- If the new counter value is **< 3**: the stage has budget remaining. Address the findings and launch the next cycle (§5.1 → §5.5 for review-spec, symmetric path for review-pr).
+- If the new counter value **== 3**: this was the 3rd real REQUEST_CHANGES on the stage in this iteration. The budget is exhausted. Do NOT launch a 4th fork. Instead, synthesise a BLOCK verdict:
+  - Record in `drive.yaml` `history`:
+    ```yaml
+    - dir: <current_spec>
+      result: NO-GO
+      constraint_added: "review converged on REQUEST_CHANGES after 3 iterations; findings have not been addressable within budget"
+    ```
+  - The synthetic BLOCK consumes a top-level iteration the same way a real BLOCK does — jump to §8 NO-GO Handling with this constraint string.
+
+The constraint string is fixed and byte-identical across the codebase (spec ac-10 and this section). Do not paraphrase.
+
+**Resumption case:** If drive resumes with `review_cycles.<stage> == 3` and the stage has not already triggered a NO-GO (i.e. the session died between the counter increment and the synthetic-BLOCK write), synthesise the BLOCK on resumption — do not launch a 4th fork.
+
+**Supervised mode gate:** If autonomy is `supervised` AND the verdict was APPROVE, pause here:
+```
+AskUserQuestion: "Spec review complete — verdict: APPROVE. <N> findings (<severities>). Review saved at <path>. Proceed to implementation?"
 Suggested answers: ["GO — proceed to implement", "NO-GO — re-enter at design"]
 ```
-If NO-GO → jump to §8 (NO-GO Handling).
+If NO-GO → jump to §8 (NO-GO Handling). (On REQUEST_CHANGES or BLOCK, handling above applies unconditionally — the supervised gate only applies on APPROVE.)
 
 ### 6. Stage: Implement
 
@@ -143,21 +249,58 @@ If NO-GO → jump to §8 (NO-GO Handling).
 
 ### 7. Stage: Review-PR
 
-Read the review-pr skill instructions from `plugins/orb/skills/review-pr/SKILL.md`. Follow its instructions **inline** — read the diff, check AC coverage, probe edge cases, write the review file.
+Review-pr runs as a **forked Agent** via the Agent tool. The component skill declares `context: fork, agent: general-purpose` in its frontmatter — drive honours that contract and launches the review in a fresh context, not inline in this session.
 
-**Important:** Do NOT invoke `/orb:review-pr` as a skill call. Read the SKILL.md file and follow its instructions directly within this session. The review runs inline to preserve the full implementation context.
+The mechanics mirror §5 Review-Spec exactly. The differences are:
+- The brief references the current branch diff (`git diff main...HEAD`) instead of the spec path
+- The output path uses `review-pr` in place of `review-spec`
+- The budget counter is `review_cycles.review_pr`; the date token is `review_cycle_dates.review_pr`
 
-**Output:** Save `review-pr-<date>.md` in the current spec directory.
+#### 7.1 Compute the cycle-specific output path
 
-**Review verdict handling:**
+As §5.1, using `review_cycles.review_pr` and `review_cycle_dates.review_pr`:
+- Cycle 1: `<current_spec>/review-pr-<date>.md`
+- Cycle 2: `<current_spec>/review-pr-<date>-v2.md`
+- Cycle 3: `<current_spec>/review-pr-<date>-v3.md`
+
+#### 7.2 Idempotent resumption check
+
+As §5.2 — if a valid review file already exists at the cycle-specific path, parse it and skip the fork.
+
+#### 7.3 Launch the forked review
+
+Invoke the Agent tool with:
+- `subagent_type: general-purpose`
+- A brief containing **only**:
+  - The branch name or the `git diff main...HEAD` reference
+  - The absolute path to the spec (for AC cross-reference)
+  - The absolute path where the review must be written (the cycle-specific path from §7.1)
+  - The instruction to read the diff cold, follow the `/orb:review-pr` skill, and write the review to the specified path using the canonical verdict line format
+
+Example brief shape:
+
+```
+Run /orb:review-pr against the current branch. The implementation is on
+<branch_name>; diff against main. Spec is at <absolute spec path>.
+Write the review to exactly <absolute output path> (this path takes precedence
+over the default path in the skill). Use the canonical verdict line format
+`**Verdict:** APPROVE | REQUEST_CHANGES | BLOCK`.
+```
+
+The brief must NOT include any conversation context, iteration counter, or references to prior review files. Re-reviews are functionally identical to the first.
+
+#### 7.4 Parse the verdict from the file
+
+As §5.4 — strict canonical regex, case-sensitive, no fuzzy matching, retry once on no-verdict per §5.4.1 (with the review-pr escalation message: `review could not be completed after 2 forked attempts at review-pr`).
+
+#### 7.5 Verdict handling
 
 - **REQUEST_CHANGES:**
-  - Address the specific changes requested in the review.
-  - Re-run the review after fixes.
-  - If changes are addressed and review now approves, continue to APPROVE handling below.
+  - Increment `review_cycles.review_pr` in drive.yaml.
+  - Check the §5a budget. If 3: synthetic BLOCK per §5a.
+  - Otherwise: address the findings (edit the implementation), then return to §7.1 for the next cycle. The re-reviewer sees only the updated diff, with no pointer to prior review files.
 
-- **BLOCK (NO-GO):**
-  - Jump to §8 (NO-GO Handling).
+- **BLOCK (real or synthetic):** Jump to §8 NO-GO Handling.
 
 - **APPROVE:**
   - **In full mode:** Proceed directly to §10 (Completion).
@@ -191,11 +334,17 @@ A NO-GO means the current iteration failed a review (spec or PR) or was rejected
 
 2. **Check budget:** If `iteration == budget` (i.e., this was the last allowed iteration), jump to §9 (Escalation). Do not increment.
 
-3. **Increment iteration:**
+3. **Increment iteration** and reset the per-stage REQUEST_CHANGES counters for the new iteration (each iteration has its own fresh 3-cycle budget per stage):
    ```yaml
    iteration: <current + 1>
    current_spec: <new spec directory path>
    status: design
+   review_cycles:
+     review_spec: 0
+     review_pr: 0
+   review_cycle_dates:
+     review_spec: null
+     review_pr: null
    ```
 
 4. **Create the new spec directory** (e.g. `specs/YYYY-MM-DD-drive-v2/`).
@@ -264,27 +413,37 @@ On successful review (APPROVE verdict, gates passed):
 
 When `/orb:drive` is invoked and `drive.yaml` already exists in the expected location:
 
-1. **Read `drive.yaml`** to determine current state.
-2. **Determine which stage to resume from** using file-presence detection:
+1. **Check for the `review_cycles` field.** This is the first check on any resumption — it enforces the forked-reviews migration boundary.
+   - **Absent:** drive.yaml was initialised before forked reviews shipped. Refuse to resume per §2. Output the refusal message and exit without advancing state or launching any Agent.
+   - **Present:** proceed with resumption. Read `review_cycles.review_spec`, `review_cycles.review_pr`, and the corresponding `review_cycle_dates` entries into working state.
+
+2. **Read `drive.yaml`** for the rest of the state (card, autonomy, iteration, budget, current_spec, status, history).
+
+3. **Determine which stage to resume from** using file-presence detection:
 
    | drive.yaml status | Files present | Resume at |
    |-------------------|---------------|-----------|
    | `design` | no interview.md | Design (§3) |
    | `spec` | interview.md, no spec.yaml | Spec (§4) |
-   | `review-spec` | spec.yaml, no review-spec-*.md | Review-Spec (§5) |
-   | `implement` | review-spec-*.md, no progress.md | Implement (§6) |
-   | `review` | progress.md, no review-pr-*.md | Review-PR (§7) |
+   | `review-spec` | spec.yaml | Review-Spec (§5) — see review_cycles handling below |
+   | `implement` | review-spec-*.md (with APPROVE verdict), no progress.md | Implement (§6) |
+   | `review` | progress.md | Review-PR (§7) — see review_cycles handling below |
    | `complete` | review-pr-*.md | Already done — report status |
    | `escalated` | — | Already escalated — report status |
 
-3. **File presence overrides drive.yaml status** when they disagree. If drive.yaml says `implement` but `progress.md` already exists with completed ACs, advance to `review`. The files are ground truth; drive.yaml may be stale from an interrupted session.
+4. **Review-stage resumption (review-spec or review-pr):**
+   - If `review_cycles.<stage> == 3` and the budget-exhausted synthetic BLOCK was not yet written to history (session died between the counter increment and the §8 NO-GO write), synthesise the BLOCK on resumption per §5a — do not launch a 4th fork.
+   - Otherwise, enter the stage at §5.1 / §7.1 and compute the cycle-specific path from the counter. The §5.2 / §7.2 idempotent-resumption check will parse any valid review file already on disk before launching a fork, so a session that died after the fork wrote a valid file but before drive parsed it advances cleanly on resume with no extra fork.
 
-4. **Announce the resumption:**
+5. **File presence overrides drive.yaml status** when they disagree on completion. If drive.yaml says `implement` but `progress.md` already exists with completed ACs, advance to `review`. The files are ground truth for stage completion; drive.yaml may be stale from an interrupted session. This rule does NOT override the `review_cycles` migration check — that check is unconditional.
+
+6. **Announce the resumption:**
    ```
    Resuming drive for <card path>
    Autonomy: <level>
    Iteration: <N> of <budget>
    Resuming at: <stage>
+   Review cycles: review-spec=<N>/3, review-pr=<N>/3
    ```
 
 ## Disposition
@@ -324,5 +483,9 @@ A mechanical agent runs 3 iterations by rote and escalates with "tried 3 times, 
 - **drive.yaml is the single source of orchestration state.** Do not track drive state anywhere else.
 - **Existing file-presence model is authoritative for stage completion.** drive.yaml tracks the orchestration layer; individual files (interview.md, spec.yaml, review-spec-*.md, progress.md, review-pr-*.md) prove stage completion.
 - **Constraints accumulate across iterations.** Every NO-GO adds a constraint. Iteration 3 carries constraints from iterations 1 and 2.
-- **Both reviews run inline.** Do not invoke `/orb:review-spec` or `/orb:review-pr` as skill calls — read their SKILL.md files and follow the instructions within this session.
+- **Reviews run as forked Agents.** `review-spec` and `review-pr` declare `context: fork` in their frontmatter; drive honours that contract by launching each review via the Agent tool (`subagent_type: general-purpose`) in a fresh context. Drive never reads their SKILL.md files inline at runtime.
+- **Verdicts are read from disk only.** The review file's canonical verdict line (`**Verdict:** APPROVE | REQUEST_CHANGES | BLOCK`, matched by strict regex) is the single authoritative source. Drive never parses the forked Agent's chat response for the verdict — if chat and file disagree, the file wins by construction.
+- **Re-reviews are fully cold.** When a REQUEST_CHANGES cycle re-forks the reviewer, the new fork's brief is functionally identical to the first cycle's brief — no path to prior review files, no iteration counter, no summary of prior findings. Confirmation-bias resistance is the whole point; context bleed defeats it.
+- **REQUEST_CHANGES is bounded per stage.** Each review stage has an independent 3-cycle budget (see §5a). The 4th would-be cycle is converted to a synthetic BLOCK with a fixed constraint string and consumes a top-level iteration normally.
+- **No migration scaffolding.** Drives initialised before forked reviews shipped refuse to resume under the new code. Finish or park in-flight drives before upgrade. No `review_mode` field, no dual code paths, no flag day.
 - **Reviews are the quality gates.** In guided mode, the spec review and PR review replace explicit go/no-go prompts. The only interactive gate is the final verdict summary before PR creation.
