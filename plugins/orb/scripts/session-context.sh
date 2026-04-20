@@ -136,8 +136,13 @@ fi
 active_drive=""
 if [[ -n "$active_rally" ]]; then
   drive_file=""
+elif [[ -d "orbit/specs" ]]; then
+  # Guard on dir existence: under `set -euo pipefail`, a missing orbit/specs
+  # would cause `find` to exit 1 and abort the hook. The hook must survive
+  # partial orbit/ layouts (e.g. a manually-created orbit/ without subdirs).
+  drive_file=$(find orbit/specs -maxdepth 2 -name 'drive.yaml' 2>/dev/null | head -1 || true)
 else
-  drive_file=$(find orbit/specs -maxdepth 2 -name 'drive.yaml' 2>/dev/null | head -1)
+  drive_file=""
 fi
 if [[ -n "$drive_file" ]]; then
   drive_dir=$(dirname "$drive_file")
@@ -169,12 +174,20 @@ if [[ -n "$drive_file" ]]; then
   fi
 fi
 
-# Find the most recent spec directory
-latest_spec=$(find orbit/specs -maxdepth 1 -type d -name '20*' 2>/dev/null | sort -r | head -1)
+# Find the most recent spec directory.
+# Guard on dir existence so pipefail doesn't kill the hook when orbit/ was
+# created manually without its standard subdirs.
+latest_spec=""
+if [[ -d "orbit/specs" ]]; then
+  latest_spec=$(find orbit/specs -maxdepth 1 -type d -name '20*' 2>/dev/null | sort -r | head -1 || true)
+fi
 
 if [[ -z "$latest_spec" ]]; then
   # No specs yet — check for cards
-  card_count=$(find orbit/cards -maxdepth 1 -name '*.yaml' 2>/dev/null | wc -l | tr -d ' ')
+  card_count=0
+  if [[ -d "orbit/cards" ]]; then
+    card_count=$(find orbit/cards -maxdepth 1 -name '*.yaml' 2>/dev/null | wc -l | tr -d ' ')
+  fi
   if [[ "$card_count" -gt 0 ]]; then
     echo "orbit: $card_count card(s) in orbit/cards/. Next step: /orb:design to refine one into a spec."
   fi
