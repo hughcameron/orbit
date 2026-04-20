@@ -15,6 +15,8 @@ constraints:
   - "Authoritative progress.md template lands verbatim as documented in the interview (Q5). The template is: Spec path, Spec hash, Started, Current AC, ## Hard Constraints, ## Detours, ## Acceptance Criteria (with gate annotation `- [ ] ac-NN (gate): ...` as a human-readable tag)."
   - "Non-gate ACs do not block subsequent ACs — only ac_type: gate ACs block. The implement skill may advance out of strict declaration order across non-gate ACs; the only hard sequencing constraint is 'no AC may start while a preceding gate AC is unchecked' (ac-06)."
   - "Backwards compatibility is an ac — an existing in-flight progress.md without a Spec hash field MUST NOT error and MUST NOT produce a drift notice. The implement skill backfills the hash silently on first encounter; the session hook silently skips the drift check when the field is absent (ac-12)."
+  - "Pre-AC check sequence is fixed: (1) backfill Spec hash if absent (ac-12), (2) drift check if hash present and differs (ac-02), (3) gate enforcement walk (ac-06). A legacy progress.md is backfilled before gate enforcement runs, so the user-visible log shows 'Backfilled Spec hash...' before any gate-refusal message. This ordering is the same across the implement skill and the session-context.sh hook for symmetric paths."
+  - "ac-02's AskUserQuestion drift-acknowledgement path is only invoked when an interactive responder is available. In non-interactive runs (e.g. the implement skill is invoked under /orb:drive or any other autonomous harness, detected by the absence of a TTY on stdin OR an explicit ORBIT_NONINTERACTIVE=1 environment variable), the skill MUST NOT call AskUserQuestion. Instead it emits the canonical drift-notice string to stderr, leaves progress.md's Spec hash field unchanged, and halts with exit status 1. The autonomous caller is responsible for surfacing the non-zero exit as a NO-GO / checkpoint. No silent default hash overwrite is permitted in the non-interactive path."
 
 acceptance_criteria:
   - id: ac-01
@@ -24,8 +26,8 @@ acceptance_criteria:
 
   - id: ac-02
     ac_type: code
-    description: "Before starting work on any AC, the implement skill recomputes sha256 of spec.yaml (raw bytes) and compares to the Spec hash recorded in progress.md. On mismatch, the skill (i) prints the canonical drift-notice string to stderr/stdout, (ii) calls AskUserQuestion with exactly two options — 'Acknowledge drift and proceed (records new hash)' and 'Stop — re-run /orb:review-spec on the modified spec' — and (iii) refuses to start the AC until the author's response is received. On 'Acknowledge', the skill overwrites the Spec hash field in progress.md with the new hash and continues. On 'Stop', the skill halts with exit status 0 and leaves the stale hash in place. The acknowledgement contract is: progress.md's Spec hash field equals sha256(spec.yaml) after acknowledge and only after acknowledge."
-    verification: "mrl_ac02_drift_detected_before_ac: fixture progress.md with hash A; fixture spec modified to produce hash B. (i) Simulate the pre-AC check without responding — assert the drift-notice string was emitted verbatim and assert the AC did not start. (ii) Respond 'Acknowledge' — assert progress.md Spec hash is now hash B and the AC advances. (iii) Re-run the scenario and respond 'Stop' — assert progress.md Spec hash is still hash A and the skill halted without error."
+    description: "Before starting work on any AC, the implement skill recomputes sha256 of spec.yaml (raw bytes) and compares to the Spec hash recorded in progress.md. If the Spec hash field is absent, defer to ac-12's backfill path — do NOT emit the drift notice. On mismatch, the skill (i) prints the canonical drift-notice string to stderr/stdout, then branches by interactivity. INTERACTIVE path (TTY on stdin AND ORBIT_NONINTERACTIVE is not set to 1): (ii) calls AskUserQuestion with exactly two options — 'Acknowledge drift and proceed (records new hash)' and 'Stop — re-run /orb:review-spec on the modified spec' — and (iii) refuses to start the AC until the author's response is received. On 'Acknowledge', overwrite the Spec hash field in progress.md with the new hash and continue. On 'Stop', halt with exit status 0 and leave the stale hash in place. NON-INTERACTIVE path (no TTY on stdin OR ORBIT_NONINTERACTIVE=1): skip AskUserQuestion, leave the Spec hash field unchanged, and halt with exit status 1 so the autonomous harness (e.g. /orb:drive) surfaces the drift as a checkpoint. The acknowledgement contract is: progress.md's Spec hash field equals sha256(spec.yaml) after 'Acknowledge' and only after 'Acknowledge'; no other path modifies it."
+    verification: "mrl_ac02_drift_detected_before_ac: fixture progress.md with hash A; fixture spec modified to produce hash B. (i) Simulate the interactive pre-AC check without responding — assert the drift-notice string was emitted verbatim and assert the AC did not start. (ii) Respond 'Acknowledge' — assert progress.md Spec hash is now hash B and the AC advances. (iii) Re-run the scenario and respond 'Stop' — assert progress.md Spec hash is still hash A and the skill halted with exit status 0. (iv) Re-run with ORBIT_NONINTERACTIVE=1 and no TTY on stdin — assert the drift-notice string was emitted to stderr, AskUserQuestion was NOT called, Spec hash is still hash A, and the skill halted with exit status 1. (v) Fixture progress.md WITHOUT a Spec hash line under the same modified-spec conditions — assert the drift notice was NOT emitted (ac-12 backfill path, not ac-02 drift path)."
 
   - id: ac-03
     ac_type: code
@@ -74,8 +76,8 @@ acceptance_criteria:
 
   - id: ac-12
     ac_type: code
-    description: "Backwards compatibility for pre-ac-01 progress.md files (no Spec hash field). On a session where the implement skill writes or reads a progress.md that lacks a Spec hash: line, the skill MUST (i) compute the current sha256 of spec.yaml, (ii) insert a Spec hash: line in the file header with that value — this is the backfill, (iii) NOT emit the drift notice on this write, and (iv) log a single-line backfill notice 'Backfilled Spec hash for existing progress.md'. Session-context.sh MUST silently skip the drift check when Spec hash is absent, as specified in ac-03. Once backfilled, the file is indistinguishable from a fresh write."
-    verification: "mrl_ac12_missing_hash_backfill: (a) fixture progress.md without Spec hash → run implement skill's pre-AC check → assert progress.md now has Spec hash equal to current sha256(spec.yaml), assert the drift notice was NOT emitted, assert a backfill log line was emitted. (b) Re-run the pre-AC check → assert no backfill log and no drift (hash now matches). (c) Fixture progress.md without Spec hash → run session-context.sh → assert no drift notice, exit status 0."
+    description: "Backwards compatibility for pre-ac-01 progress.md files (no Spec hash field). On a session where the implement skill writes or reads a progress.md that lacks a Spec hash: line, the skill MUST (i) compute the current sha256 of spec.yaml, (ii) insert a Spec hash: line in the file header with that value — this is the backfill, (iii) NOT emit the drift notice on this write, and (iv) log a single-line backfill notice 'Backfilled Spec hash for existing progress.md'. The backfill is step (1) of the fixed pre-AC check sequence declared in constraints: backfill → drift check → gate enforcement. A legacy progress.md with an unchecked gate AC at ac-01 therefore logs 'Backfilled Spec hash...' BEFORE any gate-refusal message from ac-06, so user-visible causality is deterministic across implementations. Session-context.sh MUST silently skip the drift check when Spec hash is absent, as specified in ac-03. Once backfilled, the file is indistinguishable from a fresh write."
+    verification: "mrl_ac12_missing_hash_backfill: (a) fixture progress.md without Spec hash → run implement skill's pre-AC check → assert progress.md now has Spec hash equal to current sha256(spec.yaml), assert the drift notice was NOT emitted, assert a backfill log line was emitted. (b) Re-run the pre-AC check → assert no backfill log and no drift (hash now matches). (c) Fixture progress.md without Spec hash → run session-context.sh → assert no drift notice, exit status 0. (d) Fixture progress.md without Spec hash + spec with ac-01 ac_type: gate unchecked, attempt to start ac-02 → assert the backfill log line appears in output BEFORE the ac-06 gate-refusal message (ordering test — regex 'Backfilled.*\\n.*(?:cannot start|blocking gate|ac-01)' against captured stdout+stderr)."
 
 ontology_schema:
   name: "MissionResilienceModel"
@@ -131,12 +133,19 @@ exit_conditions:
   - "Running /orb:implement against a legacy progress.md (no Spec hash) backfills the hash, emits the backfill log line, and does NOT emit the drift notice on that run."
 
 metadata:
-  version: "1.1"
+  version: "1.2"
   test_prefix: "mrl"
-  timestamp: "2026-04-20T19:35:00Z"
-  ambiguity_score: 0.10
+  timestamp: "2026-04-20T19:45:00Z"
+  ambiguity_score: 0.08
   interview_ref: "orbit/specs/2026-04-20-mission-resilience/interview.md"
-  previous_review: "orbit/specs/2026-04-20-mission-resilience/review-spec-2026-04-20.md"
+  previous_reviews:
+    - "orbit/specs/2026-04-20-mission-resilience/review-spec-2026-04-20.md"
+    - "orbit/specs/2026-04-20-mission-resilience/review-spec-2026-04-20-v2.md"
+  changes_since_v1_1: |
+    Addressed review-spec-2026-04-20-v2.md (REQUEST_CHANGES, 3 findings):
+      - MEDIUM 1 (ac-02 non-interactive path): added constraint pinning the interactive/non-interactive branch via TTY + ORBIT_NONINTERACTIVE=1; ac-02 description split into INTERACTIVE and NON-INTERACTIVE paths with exit status 0/1 respectively; mrl_ac02 test adds fixture (iv) for non-interactive path.
+      - LOW 2 (ac-02 missing-hash handling): ac-02 description now states 'If the Spec hash field is absent, defer to ac-12's backfill path — do NOT emit the drift notice'; mrl_ac02 test adds fixture (v) asserting no drift notice on legacy files.
+      - LOW 3 (ac-12 vs ac-06 ordering): added constraint declaring fixed pre-AC sequence (backfill → drift → gate); ac-12 description makes the ordering explicit and cross-references ac-06; mrl_ac12 test adds fixture (d) with a regex-based ordering assertion.
   changes_since_v1_0: |
     Addressed review-spec-2026-04-20.md (REQUEST_CHANGES, 8 findings):
       - HIGH 1 (checkpoint undefined): ac-02 now specifies the exact AskUserQuestion contract with two terminal responses; progress.md Spec hash update IS the acknowledgement signal.
