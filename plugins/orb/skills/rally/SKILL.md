@@ -324,7 +324,16 @@ Every rally.yaml write happens on main (constraint #12); every card-level edit h
 
 Launch N implementation sub-agents concurrently, each in its own git worktree.
 
-> **Dependency note.** The parallel path requires drive-full's review-spec and review-pr stages to run as nested forked Agents — the recursive context-separation pattern shipped in the drive-forked-reviews work. Until those changes are merged to main (PR #6), drive's reviews run inline and this section's mechanism is aspirational. See `specs/2026-04-20-drive-forked-reviews/spec.yaml`. When PR #6 merges, this section's cross-refs (decisions on the verdict contract, review-artefact contract, cold re-review, and request-changes budget) become live.
+**Recursive context separation.** Each parallel sub-agent runs `/orb:drive <card> full` inside its worktree. Drive-full's review-spec and review-pr stages themselves run as nested forked Agents — the same context-separation pattern drive uses at its top level. This means a rally sub-agent (Agent tool, `general-purpose`) spawns its own forked reviewers (Agent tool, `general-purpose`) for review-spec and review-pr. Rally does not invoke reviewers directly; drive does, once per stage per cycle.
+
+The nested-fork contract drive honours inside each sub-agent:
+
+- **Verdict shape.** Drive parses a single canonical line `**Verdict:** APPROVE | REQUEST_CHANGES | BLOCK` from the review file — see decision `0004-drive-verdict-contract` (Drive's Verdict Contract: Strict Canonical Markdown Line).
+- **Authoritative source.** Drive reads the review file on disk; the forked Agent's chat return is informational — see decision `0005-drive-review-artefact-contract` (Drive's Review Artefact Contract: File-on-Disk Authoritative).
+- **Re-review context.** On REQUEST_CHANGES, drive re-forks with a fully cold brief — no pointer to prior review, no iteration counter — see decision `0006-drive-cold-re-review` (Drive's Re-Review Context: Fully Cold).
+- **Request-changes budget.** Each review stage has 3 REQUEST_CHANGES cycles per drive iteration; on the 4th would-be cycle drive synthesises BLOCK with the fixed constraint string and enters NO-GO handling — see decision `0007-drive-rerequest-budget` (Drive's REQUEST_CHANGES Budget: 3 Cycles Per Stage).
+
+These four decisions are drive-internal contracts. Rally does not implement or override them — it relies on drive to honour them inside each sub-agent. Rally's only contract with the sub-agent is the final JSON verdict (below). (ac-07)
 
 For each card:
 
@@ -353,17 +362,18 @@ lead agent and only exists on main — it is not present on your rally branch.
 When drive-full completes (APPROVE at review-pr), return a JSON object:
   { "verdict": "complete", "pr": "<pr-number-or-url>", "spec_dir": "<spec_dir>" }
 
-If drive-full escalates (budget exhaustion, recurring failure, contradicted
-hypothesis, diminishing signal, or review converged on REQUEST_CHANGES
-after 3 iterations), return:
+If drive-full escalates, return:
   { "verdict": "parked", "reason_label": "<label>", "reason": "<one-line>",
     "spec_dir": "<spec_dir>" }
+
+where `reason_label` is one of the five fixed tokens (see §9):
+  budget | recurring_failure | contradicted_hypothesis | diminishing_signal | review_converged
 
 Do not attempt rally-level retries — your internal drive iterations are the
 strike. (ac-08)
 ```
 
-(ac-06 and the escalation-absorbing ac-14 become live once PR #6 merges.)
+The Agent tool is invoked with `run_in_background: true` and `subagent_type: "general-purpose"`; every call is in the same message so the harness dispatches all N in parallel. (ac-06)
 
 **Parallel completion handling — Agent-return await (no polling, no sentinels).**
 
@@ -373,7 +383,7 @@ On each completion:
 
 1. Parse the sub-agent's JSON verdict.
 2. `git checkout main` (if not already there).
-3. Update rally.yaml for that card: `complete` on APPROVE, `parked` on escalation (with `parked_constraint` constructed per ac-14 once PR #6 is live).
+3. Update rally.yaml for that card: `complete` on APPROVE, `parked` on escalation (with `parked_constraint` constructed per the §9 label-mapping table).
 4. `git commit` on main.
 
 N sub-agent completions produce exactly N rally.yaml commits on main, in the order completions are surfaced by the harness.
@@ -428,7 +438,20 @@ cards:
     parked_constraint: "[<label>] <one-line constraint from the NO-GO verdict>"
 ```
 
-For drive-full escalations inside a parallel sub-agent, rally's single-strike absorbs all five triggers — budget exhaustion, recurring failure mode, contradicted hypothesis, diminishing signal, and the synthetic BLOCK from review converging on REQUEST_CHANGES after 3 iterations — with drive's escalation-reason label prepended as a bracketed prefix. Rally does not retry at its level; the sub-agent's internal iterations are the strike. (Full mechanism becomes live when PR #6 merges; see §7c note.)
+For drive-full escalations inside a parallel sub-agent, rally's single-strike absorbs all five triggers. Drive inside the sub-agent emits a `reason_label` token; rally prepends it in brackets to the escalation reason and writes the combined string to `parked_constraint`. The mapping is fixed: (ac-14)
+
+```
+Drive escalation trigger                     reason_label              parked_constraint prefix
+---------------------------------------------+-------------------------+-------------------------
+Budget exhausted (3 NO-GO iterations)        budget                    [budget]
+Recurring failure mode                       recurring_failure         [recurring_failure]
+Contradicted hypothesis                      contradicted_hypothesis   [contradicted_hypothesis]
+Diminishing signal                           diminishing_signal        [diminishing_signal]
+Synthetic BLOCK after 3× REQUEST_CHANGES     review_converged          [review_converged]
+  (decision 0007-drive-rerequest-budget)
+```
+
+Rally does not retry at its level; the sub-agent's internal iterations (drive's 3-iteration NO-GO budget plus each stage's 3-cycle REQUEST_CHANGES budget) are the strike. An unrecognised or missing `reason_label` in the sub-agent's JSON return parks the card with the literal string `[unknown]` prefixed — the card is still parked, and the label drift becomes visible in rally.yaml for later investigation.
 
 The parked card can be driven individually later with `/orb:drive`, where its full 3-iteration budget applies. The rally continues with remaining cards.
 
@@ -540,7 +563,7 @@ On resumption, read both layers: rally.yaml on main for coordination, each activ
 
 - **`/orb:drive`** — rally delegates every card to `/orb:drive` in full autonomy. Serial cards run drive-full in the main checkout against the rally branch; parallel cards run drive-full inside an isolated worktree. Rally never duplicates drive's stage logic — it delegates.
 - **`/orb:design`** — rally's decision-pack model is a rally-specific adaptation. The standard `/orb:design` skill is for single-card interactive sessions.
-- **`/orb:review-spec`** and **`/orb:review-pr`** — run inline per card as part of each card's drive-full execution. When drive-forked-reviews merges (PR #6), these stages fork into nested Agents (recursive context separation) — the drive-full inside a rally sub-agent spawns forked reviewers, independent of rally's own context.
+- **`/orb:review-spec`** and **`/orb:review-pr`** — each card's drive-full forks these stages into nested Agents (recursive context separation). A drive-full inside a rally sub-agent spawns forked reviewers independent of rally's own context. The verdict contract, review-artefact contract, cold re-review, and request-changes budget are drive's — see decisions `0004-drive-verdict-contract` through `0007-drive-rerequest-budget`. Rally relies on these contracts but does not re-specify them.
 - **SessionStart hook (`session-context.sh`)** — surfaces active rally state as primary, with per-card drive states subordinated.
 
 ## Critical Rules
