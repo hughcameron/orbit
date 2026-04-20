@@ -13,7 +13,7 @@ Read a spec, extract its acceptance criteria and constraints as a checklist, and
 /orb:implement <spec_path>
 ```
 
-Where `<spec_path>` is the path to a `spec.yaml` file (e.g. `specs/2026-04-04-topic/spec.yaml`).
+Where `<spec_path>` is the path to a `spec.yaml` file (e.g. `orbit/specs/2026-04-04-topic/spec.yaml`).
 
 ## Why This Exists
 
@@ -27,7 +27,7 @@ Without a pre-flight check, implementing agents treat the codebase as ground tru
 
 Read the spec YAML file provided via `$ARGUMENTS`.
 
-- If no argument is provided: look for the most recent `specs/*/spec.yaml`
+- If no argument is provided: look for the most recent `orbit/specs/*/spec.yaml`
 - If no spec exists: stop and tell the author — there's nothing to implement against
 
 Extract:

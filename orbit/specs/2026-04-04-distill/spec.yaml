@@ -1,0 +1,145 @@
+goal: >
+  Extract structured feature cards from unstructured input (memos, discovery
+  interviews, research output) so that existing work product becomes actionable
+  without re-interviewing.
+
+constraints:
+  - The user MUST approve each card individually before any file is written
+  - Each extracted card MUST follow the standard card YAML format (feature,
+    as_a, i_want, so_that, scenarios, references)
+  - The references field of each card MUST include the path to the source
+    document
+  - Multiple distinct features in a single source MUST be presented as
+    separate cards
+  - Cards are presented one-by-one for approve/edit/reject — not batch
+  - Candidate cards are presented as formatted YAML blocks. AskUserQuestion
+    suggested answers are ["approve", "edit", "reject"]. On "edit", the
+    user's next response is interpreted as free-text modification instructions.
+    The agent applies changes and re-presents for another approve/edit/reject
+    cycle, up to 3 edit rounds per card, then forces approve or reject.
+  - /orb:distill MUST NOT invent scenarios that aren't supported by the
+    source material — it extracts, not imagines. Each extracted scenario
+    MUST include a source_lines field quoting the originating passage from
+    the source document.
+  - Card numbering uses read-then-write on orbit/cards/ directory. This is a
+    single-user workflow tool — concurrent numbering is a known limitation,
+    not a bug to solve.
+
+acceptance_criteria:
+  - id: ac-01
+    description: >
+      /orb:distill reads the provided file path and identifies distinct
+      feature ideas within it.
+    verification: >
+      Provide a memo containing 3 distinct feature ideas. Verify distill
+      identifies all 3 as separate candidates.
+
+  - id: ac-02
+    description: >
+      Each candidate card is presented to the user one at a time using
+      AskUserQuestion with approve/edit/reject options.
+    verification: >
+      Run distill on a 3-feature memo. Verify 3 sequential prompts appear,
+      each showing one card and offering approve/edit/reject.
+
+  - id: ac-03
+    description: >
+      Approved cards are saved as orbit/cards/NNNN-slug.yaml with correct
+      sequential numbering.
+    verification: >
+      With existing cards 0001-0003, approve 2 distilled cards. Verify they
+      are saved as 0004-slug.yaml and 0005-slug.yaml.
+
+  - id: ac-04
+    description: >
+      Rejected cards are not written to disk.
+    verification: >
+      Reject one of 3 candidates. Verify only 2 files are created.
+
+  - id: ac-05
+    description: >
+      On "edit", the user provides free-text modification instructions. The
+      agent applies changes and re-presents the updated card for another
+      approve/edit/reject cycle, up to 3 rounds.
+    verification: >
+      Choose edit on a candidate, request "change the feature name to X and
+      add a scenario for error handling". Verify the re-presented card
+      reflects both changes. Approve on the second round. Verify the saved
+      YAML matches the final version.
+
+  - id: ac-06
+    description: >
+      Every saved card's references field includes the path to the source
+      document.
+    verification: >
+      Distill a memo at orbit/cards/memos/2026-04-04-search-ux.md. Verify each
+      resulting card has that path in its references list.
+
+  - id: ac-07
+    description: >
+      Distill works with discovery interview files (orbit/specs/<topic>/interview.md)
+      as input, not just memos.
+    verification: >
+      Run distill on an interview.md file. Verify it identifies features and
+      produces valid cards.
+
+  - id: ac-08
+    description: >
+      Each scenario in an extracted card includes a source_lines field that
+      quotes the originating passage from the source document. The quoted
+      text must exist verbatim (or near-verbatim) in the source.
+    verification: >
+      Distill a memo. For each scenario in each resulting card, verify the
+      source_lines field is present and grep the source document for the
+      quoted text. Every quote must match.
+
+  - id: ac-09
+    description: >
+      When the input file does not exist or is unreadable, distill reports
+      a clear error message and exits without creating any files.
+    verification: >
+      Run distill with a nonexistent path. Verify an error message is shown
+      and no card files are created.
+
+  - id: ac-10
+    description: >
+      When the input file contains no identifiable feature ideas, distill
+      reports "no features found" rather than hallucinating cards.
+    verification: >
+      Run distill on a file containing only a grocery list. Verify the
+      response says no features were found and no card files are created.
+
+deliverables:
+  - path: plugins/orb/skills/distill/SKILL.md
+    description: >
+      New skill definition for /orb:distill. Accepts a file path, reads it,
+      identifies distinct features, presents cards one-by-one for approval,
+      and writes approved cards to orbit/cards/.
+
+evaluation_principles:
+  - principle: "Extraction fidelity — cards reflect the source, not LLM invention"
+    weight: 0.4
+  - principle: "Human control — every card requires explicit approval"
+    weight: 0.35
+  - principle: "Pipeline integration — cards are valid orbit cards with references"
+    weight: 0.25
+
+exit_conditions:
+  - All 10 ACs pass verification
+  - Distill works with both memos and interview files
+  - No card is written without explicit user approval
+  - Error paths produce clean messages, not hallucinated output
+
+risk_tier: STANDARD
+
+dependencies:
+  - spec: orbit/specs/2026-04-04-memos/spec.yaml
+    reason: >
+      Memos must exist as a concept (orbit/cards/memos/ directory and naming
+      convention) before distill can consume them as input.
+
+metadata:
+  version: "1.1"
+  timestamp: "2026-04-04T00:00:00Z"
+  ambiguity_score: 0.14
+  card_ref: "orbit/cards/0002-distill.yaml"

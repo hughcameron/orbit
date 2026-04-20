@@ -1,0 +1,58 @@
+feature: Consolidated orbit artefact folder
+as_a: developer using the orbit workflow
+i_want: all orbit-generated artefacts (cards, specs, decisions, discovery) to live under a single top-level orbit/ folder
+so_that: my repo root stays clean, orbit's workflow state is clearly distinguished from source code and standard repo metadata, and the cognitive footprint of adopting orbit in a project is smaller
+
+scenarios:
+  - name: Fresh project adopts orbit
+    given: a new project runs /orb:setup
+    when: setup completes
+    then: a single orbit/ directory is created at the repo root, containing cards/, specs/, decisions/, and discovery/ subdirectories — no orbit artefact folders appear at the repo root
+    source_lines: "author-directed during distill: 'refactor to use an orbit folder to hold artefacts'"
+
+  - name: Skills write to the orbit folder
+    given: a user runs /orb:card, /orb:design, /orb:spec, /orb:discovery, or any skill that persists an artefact
+    when: the skill writes its output
+    then: the file lands under orbit/<subdir>/ (e.g. orbit/cards/NNNN-slug.yaml, orbit/specs/YYYY-MM-DD-topic/spec.yaml) rather than at the repo root
+    source_lines: "author-directed during distill — consequence of the capability"
+
+  - name: Skills read from the orbit folder
+    given: a skill needs to load prior artefacts (e.g. /orb:design reading a card's specs array, /orb:review-pr finding the spec for a PR)
+    when: the skill looks up paths
+    then: it resolves them under orbit/ — no skill references bare cards/, specs/, decisions/, or discovery/ at the root
+    source_lines: "author-directed during distill — consequence of the capability"
+
+  - name: Hooks and scripts respect the new layout
+    given: SessionStart hooks or coherence-scan scripts look for outstanding memos, active drives, or keyword matches
+    when: they run
+    then: they scan orbit/cards/memos/, orbit/specs/, orbit/decisions/ — not the old root locations
+    source_lines: "author-directed during distill — consequence of the capability"
+
+  - name: Existing orbit-using repo migrates
+    given: a repo already has cards/, specs/, decisions/, discovery/ at the root from a prior orb version
+    when: the repo upgrades to the new orb
+    then: the author has a clear, deterministic way to move the four directories under orbit/ — either a one-shot migration skill, a documented git mv recipe, or both — with zero silent breakage of cross-references inside shipped artefacts
+    source_lines: "author-directed during distill — orbit is used on itself, so this repo is the first migration case"
+
+  - name: orbit repo itself is migrated
+    given: this repository currently has cards/, specs/, decisions/, discovery/ at its root
+    when: the refactor ships
+    then: those four directories live under orbit/ in this repo, and every skill, hook, script, card, spec, decision, progress file, and memo reference that points at the old paths has been rewritten — a grep for the old bare paths in any live file returns nothing
+    source_lines: "Repo audit 2026-04-20: cards/, specs/, decisions/, discovery/ all present at /home/hugh/github/hughcameron/orbit/ root (ls output)"
+
+goal: "Orbit-workflow artefacts in any project live under a single orbit/ folder; no cards/, specs/, decisions/, or discovery/ directory appears at the repo root"
+
+maturity: planned
+
+specs:
+  - orbit/specs/2026-04-20-orbit-artefact-folder/spec.yaml
+
+notes:
+  - "No top-level designs/ folder. Per rally/drive (plugins/orb/skills/rally/SKILL.md §4a, §6a) and /orb:design for single-card sessions, design artefacts live inside the per-topic <spec_dir>/ — decisions.md and interview.md sit alongside spec.yaml so one spec equals one directory with full audit trail. The flat designs/NNNN-<slug>.md pattern from rally's inspiring interaction was an informal pre-rally precursor; rally's formalisation supersedes it. This card does not introduce a designs/ folder."
+
+references:
+  - "author-directed during distill (2026-04-20 session close)"
+  - "repo audit 2026-04-20: /home/hugh/github/hughcameron/orbit root contains cards/, specs/, decisions/, discovery/ alongside plugins/, README.md, CHANGELOG.md, CLAUDE.md, LICENSE, .claude-plugin/"
+  - "plugins/orb/skills/*/SKILL.md — every path reference to cards/, specs/, decisions/, discovery/ is a rewrite site"
+  - "plugins/orb/scripts/session-context.sh, plugins/orb/scripts/rally-coherence-scan.sh — hook and scan sites that touch these paths"
+  - "plugins/orb/skills/rally/SKILL.md §4a, §6a: design artefacts co-locate in <spec_dir>/, not a flat designs/"

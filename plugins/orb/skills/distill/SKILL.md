@@ -14,7 +14,7 @@ Extract structured feature cards from source material. Takes a memo, a document,
 ```
 
 Where `<scope>` is one of:
-- **A file path** — `cards/memos/2026-04-07-progress.md` or `specs/topic/interview.md`
+- **A file path** — `orbit/cards/memos/2026-04-07-progress.md` or `orbit/specs/topic/interview.md`
 - **A directory path** — `docs/` or `.` (the whole project)
 - **A natural-language description** — `"the readme, docs, git history and specs"`
 
@@ -62,7 +62,7 @@ For example:
 - If the source contains only one feature, that's fine — produce one card
 - If the source contains **no identifiable feature ideas** (e.g. a grocery list, meeting notes with no actionable features): report "No features found — nothing to distill." and stop. Do **not** hallucinate cards from non-feature content.
 
-**Check for overlap with existing cards:** Before drafting, run a keyword scan (see `/orb:keyword-scan`) against `cards/` using terms from the source material. If existing cards already describe a capability you're about to draft, note the overlap — it may mean updating an existing card rather than creating a new one. Surface overlaps during the Review phase.
+**Check for overlap with existing cards:** Before drafting, run a keyword scan (see `/orb:keyword-scan`) against `orbit/cards/` using terms from the source material. If existing cards already describe a capability you're about to draft, note the overlap — it may mean updating an existing card rather than creating a new one. Surface overlaps during the Review phase.
 
 Draft ALL cards before presenting any of them. Each card uses the standard YAML format:
 
@@ -142,10 +142,10 @@ After applying changes, re-present the updated set with the same numbered format
 
 When the author approves the final set:
 
-1. Read the `cards/` directory to determine the next available `NNNN` number. If `cards/` does not exist, create it and start at `0001`.
+1. Read the `orbit/cards/` directory to determine the next available `NNNN` number. If `orbit/cards/` does not exist, create it and start at `0001`.
 2. For each card in the approved set:
    - Generate a slug from the feature name (lowercase, hyphens, no special characters)
-   - Save as `cards/NNNN-<slug>.yaml`
+   - Save as `orbit/cards/NNNN-<slug>.yaml`
    - Increment the number for the next card
 3. Confirm what was written:
 
@@ -153,8 +153,8 @@ When the author approves the final set:
 Distill complete:
   Scope: <scope description>
   Written: N card(s)
-    - cards/NNNN-<slug>.yaml
-    - cards/NNNN-<slug>.yaml
+    - orbit/cards/NNNN-<slug>.yaml
+    - orbit/cards/NNNN-<slug>.yaml
     ...
   Dropped: M card(s) during review
 ```
@@ -166,7 +166,7 @@ If any cards were written, suggest next step: `/orb:design` to refine a card int
 ## Integration with Other Skills
 
 - **`/orb:card`** — distill produces the same YAML format, so distilled cards are interchangeable with interview-created cards
-- **`cards/memos/`** — the primary input source; the SessionStart hook tracks which memos have been distilled by checking card references
+- **`orbit/cards/memos/`** — the primary input source; the SessionStart hook tracks which memos have been distilled by checking card references
 - **`/orb:design`** — the natural next step after distilling a card
 - **`/orb:discovery`** — interview.md files from discovery sessions are valid distill inputs
 

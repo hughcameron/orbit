@@ -4,17 +4,38 @@
 
 set -euo pipefail
 
-# Only run if orbit directories exist (project uses orbit)
-if [[ ! -d "specs" ]] && [[ ! -d "cards" ]]; then
+# Gate: only run on repos using the orbit layout.
+# Four states (matching plugins/orb/skills/setup/SKILL.md §1):
+#   1. orbit/ present                       → run the full hook
+#   2. legacy bare dirs present, no orbit/  → emit one-line nudge, exit 0
+#   3. orbit/ AND bare dirs both present    → run the full hook, warn about mixed state
+#   4. neither                              → exit silently
+legacy_bare_present=0
+for d in cards specs decisions discovery; do
+  if [[ -d "$d" ]]; then
+    legacy_bare_present=1
+    break
+  fi
+done
+
+if [[ ! -d "orbit" ]]; then
+  if [[ "$legacy_bare_present" -eq 1 ]]; then
+    echo "orbit: legacy layout detected. Run /orb:setup to migrate."
+  fi
   exit 0
 fi
 
+if [[ "$legacy_bare_present" -eq 1 ]]; then
+  echo "orbit: mixed layout detected (orbit/ AND bare artefact dirs both present)."
+  echo "  Run /orb:setup to review — it will refuse and report the collisions."
+fi
+
 # Surface outstanding memos (not yet referenced by any card)
-if [[ -d "cards/memos" ]]; then
-  memo_files=$(find cards/memos -maxdepth 1 -name '*.md' 2>/dev/null | sort)
+if [[ -d "orbit/cards/memos" ]]; then
+  memo_files=$(find orbit/cards/memos -maxdepth 1 -name '*.md' 2>/dev/null | sort)
   if [[ -n "$memo_files" ]]; then
     # Collect all references from card YAML files
-    all_refs=$(grep -h '^\s*- ' cards/*.yaml 2>/dev/null | grep 'cards/memos/' | sed 's/^[[:space:]]*- //' | sed 's/^"//' | sed 's/"$//' || true)
+    all_refs=$(grep -h '^\s*- ' orbit/cards/*.yaml 2>/dev/null | grep 'orbit/cards/memos/' | sed 's/^[[:space:]]*- //' | sed 's/^"//' | sed 's/"$//' || true)
 
     outstanding=()
     while IFS= read -r memo; do
@@ -25,7 +46,7 @@ if [[ -d "cards/memos" ]]; then
     done <<< "$memo_files"
 
     if [[ ${#outstanding[@]} -gt 0 ]]; then
-      echo "orbit: ${#outstanding[@]} outstanding memo(s) in cards/memos/:"
+      echo "orbit: ${#outstanding[@]} outstanding memo(s) in orbit/cards/memos/:"
       for name in "${outstanding[@]}"; do
         echo "  - $name"
       done
@@ -33,11 +54,11 @@ if [[ -d "cards/memos" ]]; then
   fi
 fi
 
-# Detect active rally (specs/rally.yaml)
+# Detect active rally (orbit/specs/rally.yaml)
 # When a rally is active, it becomes the primary orchestration context
 # and individual drive states are subordinated (shown as sub-items, not independent status lines).
 active_rally=""
-rally_file="specs/rally.yaml"
+rally_file="orbit/specs/rally.yaml"
 if [[ -f "$rally_file" ]]; then
   # Parse top-level fields tolerantly: missing fields yield empty strings, never abort the hook.
   # `|| true` keeps set -e / pipefail from killing the script when grep finds no match.
@@ -115,8 +136,13 @@ fi
 active_drive=""
 if [[ -n "$active_rally" ]]; then
   drive_file=""
+elif [[ -d "orbit/specs" ]]; then
+  # Guard on dir existence: under `set -euo pipefail`, a missing orbit/specs
+  # would cause `find` to exit 1 and abort the hook. The hook must survive
+  # partial orbit/ layouts (e.g. a manually-created orbit/ without subdirs).
+  drive_file=$(find orbit/specs -maxdepth 2 -name 'drive.yaml' 2>/dev/null | head -1 || true)
 else
-  drive_file=$(find specs -maxdepth 2 -name 'drive.yaml' 2>/dev/null | head -1)
+  drive_file=""
 fi
 if [[ -n "$drive_file" ]]; then
   drive_dir=$(dirname "$drive_file")
@@ -148,14 +174,22 @@ if [[ -n "$drive_file" ]]; then
   fi
 fi
 
-# Find the most recent spec directory
-latest_spec=$(find specs -maxdepth 1 -type d -name '20*' 2>/dev/null | sort -r | head -1)
+# Find the most recent spec directory.
+# Guard on dir existence so pipefail doesn't kill the hook when orbit/ was
+# created manually without its standard subdirs.
+latest_spec=""
+if [[ -d "orbit/specs" ]]; then
+  latest_spec=$(find orbit/specs -maxdepth 1 -type d -name '20*' 2>/dev/null | sort -r | head -1 || true)
+fi
 
 if [[ -z "$latest_spec" ]]; then
   # No specs yet — check for cards
-  card_count=$(find cards -maxdepth 1 -name '*.yaml' 2>/dev/null | wc -l | tr -d ' ')
+  card_count=0
+  if [[ -d "orbit/cards" ]]; then
+    card_count=$(find orbit/cards -maxdepth 1 -name '*.yaml' 2>/dev/null | wc -l | tr -d ' ')
+  fi
   if [[ "$card_count" -gt 0 ]]; then
-    echo "orbit: $card_count card(s) in cards/. Next step: /orb:design to refine one into a spec."
+    echo "orbit: $card_count card(s) in orbit/cards/. Next step: /orb:design to refine one into a spec."
   fi
   exit 0
 fi

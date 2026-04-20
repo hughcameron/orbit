@@ -13,7 +13,7 @@ Take a card and an autonomy level. Drive the full orbit pipeline (design → spe
 /orb:drive <card_path> [full|guided|supervised]
 ```
 
-- `card_path` — path to a card YAML file (e.g. `cards/0005-drive.yaml`)
+- `card_path` — path to a card YAML file (e.g. `orbit/cards/0005-drive.yaml`)
 - Autonomy level defaults to **guided** if omitted
 
 ### Autonomy Levels
@@ -48,8 +48,8 @@ Count the card's `scenarios`. If fewer than 3 scenarios:
 ### 2. Initialise Drive State
 
 Determine the spec directory for this iteration:
-- **First iteration:** `specs/YYYY-MM-DD-<card-slug>/` (derive slug from card filename, e.g. `0005-drive` → `drive`)
-- **Subsequent iterations:** `specs/YYYY-MM-DD-<card-slug>-v<N>/` (e.g. `drive-v2`, `drive-v3`)
+- **First iteration:** `orbit/specs/YYYY-MM-DD-<card-slug>/` (derive slug from card filename, e.g. `0005-drive` → `drive`)
+- **Subsequent iterations:** `orbit/specs/YYYY-MM-DD-<card-slug>-v<N>/` (e.g. `drive-v2`, `drive-v3`)
 
 Create the directory if it doesn't exist.
 
@@ -347,7 +347,7 @@ A NO-GO means the current iteration failed a review (spec or PR) or was rejected
      review_pr: null
    ```
 
-4. **Create the new spec directory** (e.g. `specs/YYYY-MM-DD-drive-v2/`).
+4. **Create the new spec directory** (e.g. `orbit/specs/YYYY-MM-DD-drive-v2/`).
 
 5. **Re-enter at design** (§3) with the failure constraint carried forward. The constraint from the NO-GO becomes a hard constraint in the new iteration's design session.
 

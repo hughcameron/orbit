@@ -1,0 +1,49 @@
+feature: Pre-flight spec check before implementation
+as_a: author
+i_want: the implementing agent to read the spec and extract a checklist before writing any code
+so_that: hard constraints and acceptance criteria from the spec are not missed during implementation
+
+scenarios:
+  - name: Spec is loaded before any code is written
+    given: a spec exists for the current work
+    when: I run /orb:implement orbit/specs/2026-04-01-topic/spec.yaml
+    then: the agent reads the spec and presents the hard constraints and ACs as a checklist
+
+  - name: Codebase gaps are flagged not worked around
+    given: the spec describes a requirement the codebase doesn't yet implement
+    when: the agent encounters the gap
+    then: it implements what the spec prescribes rather than working around the missing code
+
+  - name: Checklist is referenced during work
+    given: the implementation checklist has been extracted
+    when: the agent completes a unit of work
+    then: it marks the relevant AC as addressed
+
+  - name: Works with review-pr
+    given: implementation used the checklist from /orb:implement
+    when: /orb:review-pr runs
+    then: AC coverage aligns because both skills read the same spec
+
+  - name: Unspecced decisions surface during implementation
+    given: the agent encounters a choice not covered by the spec
+    when: the decision has meaningful consequences
+    then: it pauses and presents options rather than choosing silently
+
+  - name: Hard constraints injected at session start
+    given: a spec is in-flight with hard constraints defined
+    when: a new session starts
+    then: the SessionStart hook surfaces the hard constraints in the session context
+
+  - name: Constraints visible even if skill is skipped
+    given: an agent begins implementation without running /orb:implement
+    when: the session started with an in-flight spec
+    then: the hard constraints are already in context from the SessionStart hook
+
+maturity: established
+
+specs:
+  - orbit/specs/2026-04-04-implement/spec.yaml
+
+references:
+  - "Prior incident: agent treated codebase as ground truth, missed spec-prescribed entrypoint pattern"
+  - "/orb:review-pr: post-hoc AC coverage check — implement is the pre-flight equivalent"

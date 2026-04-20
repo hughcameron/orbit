@@ -1,0 +1,72 @@
+feature: Rally — coordinated multi-card delivery
+as_a: developer
+i_want: to hand a group of independent cards to an agent and have it drive them through the pipeline as a coordinated rally
+so_that: agent throughput is maximised between the two stages where I need to be involved — ideation and assurance
+
+scenarios:
+  - name: Goal-scoped rally proposal
+    given: multiple cards exist for the same subsystem or goal
+    when: I invoke /orb:rally with a goal string
+    then: the agent scans orbit/cards/, proposes a rally with per-card rationale, and waits for my approval before proceeding
+
+  - name: Queued design decisions
+    given: I approve a rally of N cards
+    when: the design stage begins
+    then: N sub-agents analyse their cards and produce decision packs (options, trade-offs, recommendations), the lead agent presents all decisions grouped by card, and I approve or override
+
+  - name: Consolidated design review
+    given: all N designs have completed
+    when: the designs are presented for review
+    then: I review all designs in a single session, and the agent surfaces cross-cutting concerns (shared types, trait changes, execution order dependencies)
+
+  - name: Parallel-to-serial decision
+    given: the consolidated design review is complete
+    when: designs share types, traits, or interfaces
+    then: the agent proposes a serial implementation order with rationale, recorded in rally.yaml
+
+  - name: Implementation follows declared order
+    given: the rally has a declared implementation order
+    when: implementation begins
+    then: cards are implemented in order, each following the full drive stage logic (spec -> review-spec -> implement -> review-pr)
+
+  - name: Rally state persists across sessions
+    given: a rally is in progress and the session dies
+    when: a new session starts
+    then: the session-context hook surfaces the rally state and the agent resumes from where it stopped
+
+  - name: Single-card NO-GO does not kill the rally
+    given: one card in a rally receives a NO-GO verdict
+    when: the NO-GO is recorded
+    then: the failed card is parked with its constraint, remaining cards continue, and the rally summary reports the parked card
+
+  - name: Assurance gate scales with rally strategy
+    given: the rally has completed implementation
+    when: PR review begins
+    then: serial rallies use stacked PR review, parallel rallies use batched diff review, and individual review is the fallback
+
+  - name: Disjointness check at design review
+    given: all designs are complete and presented for consolidated review
+    when: the definitive disjointness check runs using actual design outputs
+    then: the agent identifies shared symbols and files, and proposes serial ordering or confirms parallel is safe
+
+  - name: Live rally visibility
+    given: a rally is in progress
+    when: I check progress mid-session
+    then: the task list shows per-card status, dependencies, and what is blocked or in progress
+
+goal: "agents coordinate multi-card delivery with fewer human touchpoints per card than serial drives"
+
+maturity: planned
+
+specs:
+  - orbit/specs/2026-04-19-rally/spec.yaml
+  - orbit/specs/2026-04-19-rally-subagent-model/spec.yaml
+
+references:
+  - "orbit/discovery/rally.md: observed pattern from parallel design session"
+  - "orbit/discovery/rally-research.md: precedent analysis across agent frameworks"
+  - "orbit/decisions/0003-rally-skill-boundary.md: rally as separate skill from drive"
+  - "CodeR task-graph artefact pattern: durable plan state"
+  - "MetaGPT structured communication: artefact-path contracts"
+  - "LangGraph interrupt/resume: parallel-interrupts at batch boundaries"
+  - "Claude Code TaskCreate/TaskList: live in-session progress visibility"

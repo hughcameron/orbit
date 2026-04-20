@@ -14,7 +14,7 @@ Audit the linkage between spec acceptance criteria and test files. Produces an a
 ```
 
 - If a spec path is provided: audit that single spec
-- If no argument: audit all specs under `specs/`
+- If no argument: audit all specs under `orbit/specs/`
 
 ## Why This Exists
 
@@ -26,7 +26,7 @@ It also handles the reality that not every AC is testable code. Document deliver
 
 ### 1. Locate Specs
 
-If `$ARGUMENTS` provides a path, use it. Otherwise, find all `specs/*/spec.yaml` files in the project.
+If `$ARGUMENTS` provides a path, use it. Otherwise, find all `orbit/specs/*/spec.yaml` files in the project.
 
 If no specs exist, stop: *"No specs found. Run `/orb:spec` to create one."*
 
