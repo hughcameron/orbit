@@ -47,8 +47,8 @@ acceptance_criteria:
 
   - id: ac-06
     ac_type: code
-    description: "Each design sub-agent is path-constrained — writes are blocked outside its assigned specs/<card-slug>/ directory via the sub-agent's tools allow-list"
-    verification: "Launch a design sub-agent. Attempt a write outside its assigned spec directory. Verify the write is blocked."
+    description: "Each design sub-agent's path discipline is trust + post-verify (refined in specs/2026-04-19-rally-subagent-model/spec.yaml v1.3, constraint #9 and ac-04). The brief names the assigned specs/<card-slug>/ directory as the write target; Claude Code's tools allow-list is NOT the enforcement mechanism. On return, the lead verifies via three primitives: self-report (sub-agent returns a JSON file list), artefact assertion (expected output exists under the assigned dir), and pre-vs-post `git status --porcelain` snapshot diff in the main checkout (unexpected new entries outside the assigned dir and not on the fixed lead-owned allowlist reject the sub-agent's output)."
+    verification: "Simulate a design sub-agent that writes an extra file at plugins/orb/scratch.md outside its assigned spec_dir. Verify the pre-vs-post snapshot diff catches the entry on the lead's return. Verify unexpected writes are detected on return via self-report + artefact assertion + snapshot diff, and the sub-agent output is rejected. First violation triggers a pre-qualification re-brief (not a rally-level strike); second violation parks the card."
 
   - id: ac-07
     ac_type: gate
@@ -167,9 +167,12 @@ ontology_schema:
     - name: "cards[].branch"
       type: "string"
       description: "Git branch name for this card's implementation (used for stacked PRs or worktree isolation)"
+    - name: "cards[].worktree"
+      type: "string"
+      description: "Added by specs/2026-04-19-rally-subagent-model/spec.yaml v1.3 ac-11. Explicit sentinels: the literal string 'main' for serial cards once launched (the lead's main checkout), an absolute path for parallel cards once launched, null only before launch. Used by the lead on resumption to locate each card's drive.yaml via the path-resolution rule: worktree=='main' → <main-checkout-root>/specs/<spec_dir>/drive.yaml (no worktree prefix); worktree==<absolute> → <worktree>/specs/<spec_dir>/drive.yaml. null-after-launch is a validation error."
     - name: "cards[].parked_constraint"
       type: "string"
-      description: "If status is parked, the one-line constraint from the NO-GO verdict"
+      description: "If status is parked, the one-line constraint from the NO-GO verdict. For drive-full escalations inside a parallel sub-agent (per subagent-model ac-14), the constraint is prefixed with a bracketed label (e.g. '[budget] ...', '[review_converged] ...')."
     - name: "implementation_order"
       type: "array"
       description: "Ordered list of card indices for serial implementation, or null for parallel"
@@ -216,7 +219,7 @@ metadata:
   review_ref: "specs/2026-04-19-rally/review-spec-2026-04-19.md"
   review_changes: |
     v2.0 addresses all 15 findings from the spec review:
-    HIGH: PreToolUse hook resolved — tools allow-list for design sub-agents, worktree isolation for parallel implementation (ac-06, ac-14)
+    HIGH: PreToolUse hook resolved — trust + post-verify with three-primitive snapshot-diff verification for design sub-agents (refined in specs/2026-04-19-rally-subagent-model/spec.yaml v1.3 constraint #9 and ac-04), worktree isolation for parallel implementation (ac-06, ac-14)
     HIGH: Design sub-agent interactivity resolved — queued decision packs model, sub-agents analyse and recommend, author approves (ac-05, ac-07, ac-08)
     HIGH: Open questions resolved — all three now explicit in constraints
     MEDIUM: Path constraint verification made functional, not observational (ac-06)
