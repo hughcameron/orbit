@@ -120,7 +120,14 @@ Produce a structured review:
 <one paragraph — is this plan ready? what's the biggest risk?>
 ```
 
-Save the review to: `specs/YYYY-MM-DD-<topic>/review-spec-<date>.md`
+### Verdict line contract (machine-parseable)
+
+The header line `**Verdict:** APPROVE | REQUEST_CHANGES | BLOCK` is a **contract**, not formatting. Downstream consumers — notably `/orb:drive` — parse the verdict from this line with a strict regex (`^\*\*Verdict:\*\* (APPROVE|REQUEST_CHANGES|BLOCK)\s*$`). Write the line exactly as shown, with one of the three tokens unquoted, case-sensitive, and no trailing prose on the same line. Deviation (lowercase, inline prose, frontmatter, sidecar files) silently breaks the contract.
+
+### Output path (invoked inline vs forked)
+
+- **Inline invocation** (a human running `/orb:review-spec` directly): save to the default path `specs/YYYY-MM-DD-<topic>/review-spec-<date>.md`.
+- **Forked-Agent invocation** (e.g. launched by `/orb:drive`): the invoking agent's brief will supply an explicit output path — **use the brief's path verbatim**. It takes precedence over the default. Drive uses cycle-ordinal suffixes (`-v2.md`, `-v3.md`) to disambiguate REQUEST_CHANGES cycles; writing to the default path when the brief specified a cycle-specific path will cause drive to report the review as missing and trigger a retry.
 
 ## Verdicts
 
