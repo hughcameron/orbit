@@ -1,0 +1,112 @@
+goal: "Extend the shipped /orb:implement pre-flight skill so the AC/constraint checklist is a first-class, real-time session artefact — created as tasks at pre-flight, kept in sync as the agent works, rebuilt faithfully on resume, and complemented by mid-run test visibility via Monitor. Do not alter the shipped behaviours (read spec, write progress.md, SessionStart constraint surfacing) and do not define any progress.md schema beyond what card 0009 owns."
+
+constraints:
+  - "Shipped pre-flight behaviour (card 0003 scenarios 1–7) is out of scope. The existing checklist-presentation, progress.md-write, and SessionStart constraint-surfacing must continue to work byte-identically. Any change to those paths is a regression."
+  - "progress.md schema is owned by card 0009. This card MUST NOT add fields, sections, or parsing conventions to progress.md. The 'Spec hash:', 'Current AC:', '## Detours' section, 'Return to:' line, and '(gate)' annotation are consumed as given — if a shape is missing, add it to a 0009 successor spec, not here."
+  - "progress.md is the single source of truth for task emission. TaskCreate (pre-flight) and TaskCreate/TaskUpdate (resume rebuild) derive from the parsed file, not from an in-memory extraction. No in-memory-only task emission path is permitted."
+  - "Task emission is FLAT: one task per AC, one task per hard constraint. No `addBlockedBy` or `addBlocks` wiring. Dependency wiring for gate ACs is reserved for card 0009 or a successor — this card must leave the slot unwired so 0009 can layer in additively without reshaping task creation."
+  - "TaskUpdate on AC completion is an agent-side SKILL rule — it fires in the same tool-call turn as the progress.md `- [x]` edit. It is NOT a PostToolUse hook, NOT a file watcher, NOT a batched checkpoint. Skill text must say so verbatim."
+  - "Orbit-implement tasks MUST be scoped by a `metadata.spec_path` tag equal to the absolute or repo-relative path of the spec the task belongs to. The resume hook MUST filter tasks by this tag and MUST NOT touch tasks without it or with a different value."
+  - "Monitor test invocations are only used when the test command is expected to exceed ~60s or is a full-suite run. Short tests (< ~60s, targeted subset) continue to use Bash. The rule is a SKILL.md heuristic, not a spec metadata field."
+  - "Every Monitor test invocation MUST include a line-buffered failure-marker filter. The canonical filter is `grep --line-buffered -E 'FAIL|ERROR|AssertionError|Traceback'`. Unfiltered Monitor on a test suite is forbidden — every stdout line becoming a notification swamps the agent."
+  - "On the first streamed failure line (FAIL/ERROR/AssertionError/Traceback), the agent MUST pause, acknowledge the failure inline, and AskUserQuestion the author (fix-now vs let-suite-finish) before continuing. Subsequent failures in the same run do not re-prompt — only the first."
+  - "The resume hook uses card 0009's `parse-progress.sh` (or equivalent shared awk block inside session-context.sh) for AC status extraction. No second parser is introduced. '## Detours' content MUST NOT count as AC status — this is card 0009's parser discipline (ac-09 there); this card relies on it."
+  - "Resume reconcile uses AC-ID + constraint-text matching. Match algorithm is deterministic and documented. On match (same set, same statuses), perform zero TaskCreate/TaskUpdate calls. On drift (count mismatch OR any status mismatch), full rebuild: TaskCreate replacements, with a single-line warning."
+  - "All behaviour changes land in existing files — `plugins/orb/skills/implement/SKILL.md`, `plugins/orb/scripts/session-context.sh` — or in a new shared helper under `plugins/orb/scripts/`. Do not add a new skill."
+
+acceptance_criteria:
+  - id: ac-01
+    ac_type: code
+    description: "After writing progress.md in step 4, the /orb:implement skill emits one pending task via TaskCreate for every hard constraint and every acceptance criterion parsed from progress.md. Each task carries `metadata.spec_path` set to the spec path (matching the value on the `Spec path:` line of progress.md). Task subjects are the constraint text (for constraint tasks) and `ac-NN: <description>` (for AC tasks). No `addBlockedBy` / `addBlocks` edges are set."
+    verification: "isv_ac01_preflight_tasks_created: fixture progress.md with 3 constraints and 4 ACs (ac-01..ac-04, one marked `(gate)`). Simulate the implement skill's step 4 tail. Assert (i) TaskList returns 7 new pending tasks, (ii) every task has metadata.spec_path equal to the fixture's Spec path line, (iii) constraint-task subjects match the constraint text verbatim, (iv) AC-task subjects match `ac-NN: <description>` verbatim (no `(gate)` suffix — annotation is progress.md only), (v) no task has blockedBy set."
+
+  - id: ac-02
+    ac_type: code
+    description: "When the /orb:implement agent marks a checkbox from `- [ ] ac-NN` to `- [x] ac-NN` in progress.md, it MUST call TaskUpdate with `status: completed` on the corresponding task (the one whose subject starts with `ac-NN:` and whose metadata.spec_path matches) in the SAME tool-call turn as the progress.md edit. The skill rule is stated verbatim in SKILL.md §5."
+    verification: "isv_ac02_task_update_on_ac_complete: (a) grep plugins/orb/skills/implement/SKILL.md for the literal string 'same tool-call turn' and assert the sentence states the TaskUpdate rule. (b) Simulate marking ac-02 complete via an Edit tool call on progress.md and a TaskUpdate in the same tool-call batch; assert the task's status transitions from pending to completed and the progress.md `- [x]` edit persisted. (c) Negative — simulate only the Edit (no TaskUpdate); assert the skill text explicitly calls this a protocol violation (grep for 'protocol violation' OR 'violation of §5 rule' near the same-turn sentence)."
+
+  - id: ac-03
+    ac_type: code
+    description: "On session resume, the SessionStart path (session-context.sh or a companion script it sources) reconciles existing tasks against progress.md. Reconcile algorithm: filter tasks by `metadata.spec_path == current spec path`; build the expected set from progress.md's ## Acceptance Criteria and ## Hard Constraints sections (using card 0009's parser discipline — ## Detours content is ignored); compare count and per-item status. If (count equal) AND (every `ac-NN` task's status matches the progress.md `[ ]`/`[x]` state) AND (every constraint task's status matches), the hook does NOTHING — zero TaskCreate, zero TaskUpdate calls. Otherwise, the hook full-rebuilds (delete + recreate the filtered tasks from scratch) and emits a single stderr warning `orbit: task list out of sync with progress.md, rebuilt from scratch`."
+    verification: "isv_ac03_resume_reconcile_or_rebuild: (a) In-sync fixture: task list matching progress.md exactly → run the resume reconcile → assert zero TaskCreate and zero TaskUpdate calls were issued (mock assertions) and no warning was emitted. (b) Status drift fixture: one task pending in task list but marked `[x]` in progress.md → run resume → assert the filtered tasks were rebuilt (TaskCreate called N times) AND the warning string appeared verbatim on stderr. (c) Count drift fixture: progress.md has 5 ACs, task list has 4 → run resume → same rebuild + warning assertions."
+
+  - id: ac-04
+    ac_type: code
+    description: "The resume reconcile MUST ignore tasks that do not carry `metadata.spec_path`, and tasks whose `metadata.spec_path` differs from the current spec. A test fixture with (i) orbit-implement tasks for spec A, (ii) orbit-implement tasks for spec B, (iii) unrelated tasks without the tag: resume against spec A must only touch category (i) tasks."
+    verification: "isv_ac04_resume_scoped_by_spec_path: fixture task list containing 3 tasks tagged spec-A, 2 tasks tagged spec-B, and 4 untagged tasks. Run resume reconcile against spec-A with a drifted progress.md → assert the 3 spec-A tasks were rebuilt (TaskCreate × 3), the 2 spec-B tasks were untouched (no TaskUpdate/TaskCreate/TaskDelete on them), and the 4 untagged tasks were untouched. Assert via task count: spec-A task-count consistent with progress.md, spec-B count unchanged, untagged count unchanged."
+
+  - id: ac-05
+    ac_type: code
+    description: "SKILL.md §5 gains a Monitor-for-tests rule stated verbatim: tests whose expected duration exceeds ~60s or which invoke a full-suite runner (e.g. `cargo test` without a filter, `pytest` at the repo root, `npm test`) MUST be launched via the Monitor tool with the command piped through `grep --line-buffered -E 'FAIL|ERROR|AssertionError|Traceback'`. Short targeted tests (< ~60s) continue to use Bash. The rule is a skill-text heuristic; no spec-level metadata field is introduced."
+    verification: "isv_ac05_monitor_heuristic_documented: grep plugins/orb/skills/implement/SKILL.md and assert (i) the literal string 'grep --line-buffered' appears, (ii) the failure markers 'FAIL|ERROR|AssertionError|Traceback' appear (case-sensitive, pipe-separated), (iii) the 60-second threshold (literal '60s' or '60 seconds') appears in the same section, (iv) no new field is added to any schema YAML (grep plugins/orb/skills/spec-architect/SKILL.md and plugins/orb/skills/spec/SKILL.md for 'monitor' or 'test_command' — neither should reference this heuristic as a spec field)."
+
+  - id: ac-06
+    ac_type: code
+    description: "SKILL.md §5 gains a first-failure checkpoint rule: on the first streamed line from Monitor that matches the failure-marker regex, the agent MUST pause mid-run, acknowledge the failure, and call AskUserQuestion with exactly two options — 'Fix the failure now (I will investigate and re-run)' and 'Let the suite finish, then triage'. Subsequent failure lines in the same Monitor run do NOT re-prompt. The `first` semantics is per-Monitor-invocation: a new test run resets the gate."
+    verification: "isv_ac06_first_failure_checkpoint: (a) grep plugins/orb/skills/implement/SKILL.md for the literal strings 'first streamed' AND 'AskUserQuestion' in the same section. (b) Assert both option strings appear verbatim in the skill text: 'Fix the failure now (I will investigate and re-run)' and 'Let the suite finish, then triage'. (c) Skill text must state that subsequent failures in the same Monitor run are surfaced but do NOT re-prompt — grep for 'subsequent failure' or 'do not re-prompt' near the first-failure rule."
+
+  - id: ac-07
+    ac_type: doc
+    description: "SKILL.md §4 ('Write the Progress File') is extended with a sub-step '4d — Emit tasks' that describes the TaskCreate loop (constraints + ACs, flat tasks, metadata.spec_path). SKILL.md §5 is extended with the TaskUpdate rule (ac-02), the Monitor heuristic (ac-05), and the first-failure checkpoint (ac-06). The pre-flight §1–§3 presentation flow and §4a–§4c template remain byte-identical to the shipped skill plus card 0009's additions — this card adds ONLY §4d and §5 additions."
+    verification: "isv_ac07_skill_md_extended: (a) grep plugins/orb/skills/implement/SKILL.md for '### 4d' OR '#### 4d' OR 'Emit tasks' (at least one present). (b) The §4d block MUST mention TaskCreate, metadata.spec_path, and 'flat' (no dependency edges). (c) §5 MUST contain the three new rules visibly separated (e.g. each under its own bullet or sub-heading). (d) Negative: diff against main (pre-card-0009 merge) must NOT alter §1, §2, §3, §4a, §4b, §4c — only adds §4d and §5 rules. Assert via a line-count check on the unchanged sections."
+
+  - id: ac-08
+    ac_type: code
+    description: "A shared helper (referenced as `plugins/orb/scripts/parse-progress.sh` OR an equivalent well-named awk block inside session-context.sh) extracts three datasets from a progress.md path argument: (1) the list of `(ac_id, status, description, is_gate)` tuples from ## Acceptance Criteria (ignoring ## Detours), (2) the list of constraint strings from ## Hard Constraints, (3) the `Spec path:` value. The resume reconcile (ac-03) and card 0009's next-unchecked-AC surfacing both consume this helper."
+    verification: "isv_ac08_shared_parser: (a) Assert the helper exists at plugins/orb/scripts/parse-progress.sh (standalone) OR that session-context.sh contains an awk function/block with a clearly-named label (e.g. `# parse-progress: shared by ac-03 resume and card 0009 ac-08 next-AC`). (b) Given a fixture progress.md with 3 ACs (ac-01 (gate) [x], ac-02 [ ], ac-03 [ ]) and '## Detours' containing '- [x] ac-02' literal text, the helper output MUST report ac-02 as [ ] (unchecked) — the detour text is ignored. (c) Given the same fixture, the helper output MUST correctly flag ac-01 as is_gate=true and ac-02 / ac-03 as is_gate=false. (d) The shared helper MUST be invoked by both the resume reconcile path (ac-03) and by session-context.sh's existing next-AC surfacing — grep-assert both code paths source or call the helper."
+
+ontology_schema:
+  name: "ImplementSessionVisibilityModel"
+  description: "Extensions to the /orb:implement skill that make the AC/constraint checklist a first-class session artefact via Claude Code's Task tools, plus mid-run test visibility via Monitor. Operates as a thin layer over card 0009's progress.md schema — this card defines no schema; it consumes 0009's and emits tasks derived from it."
+  fields:
+    - name: "task_emission"
+      type: "object"
+      description: "The TaskCreate loop fired in implement/SKILL.md §4d after progress.md is written. One task per hard constraint (subject = constraint text), one task per AC (subject = `ac-NN: <description>`), all with metadata.spec_path set to the spec's repo-relative path. Flat — no dependency edges."
+    - name: "task_update_rule"
+      type: "string"
+      description: "Agent-side SKILL.md §5 rule: when the progress.md checkbox is flipped from `- [ ] ac-NN` to `- [x] ac-NN`, a TaskUpdate to status `completed` MUST be emitted in the same tool-call turn. Not a hook, not a watcher — a text rule in the skill the agent follows."
+    - name: "resume_reconcile"
+      type: "object"
+      description: "SessionStart-time algorithm: filter tasks by metadata.spec_path, compare set + per-item statuses against progress.md (parsed via card 0009's shared parser, ignoring ## Detours). On match: zero mutations. On drift: full rebuild (delete + recreate filtered tasks), emit stderr warning `orbit: task list out of sync with progress.md, rebuilt from scratch`."
+    - name: "monitor_heuristic"
+      type: "string"
+      description: "SKILL.md §5 rule: tests expected to exceed ~60s or invoking a full-suite runner (cargo test, pytest at root, npm test, etc.) use the Monitor tool with the command piped through `grep --line-buffered -E 'FAIL|ERROR|AssertionError|Traceback'`. Short targeted tests stay on Bash. No spec metadata field is added."
+    - name: "first_failure_checkpoint"
+      type: "object"
+      description: "SKILL.md §5 rule: on the first failure-marker line surfaced by Monitor, the agent pauses and AskUserQuestions with two options — 'Fix the failure now (I will investigate and re-run)' and 'Let the suite finish, then triage'. Subsequent failures in the same Monitor invocation surface but do NOT re-prompt; the gate resets on the next Monitor call."
+    - name: "shared_progress_parser"
+      type: "string"
+      description: "A single source parser that extracts (ac_id, status, description, is_gate) tuples from progress.md's ## Acceptance Criteria section, constraint strings from ## Hard Constraints, and the Spec path. Consumed by both this card's resume reconcile and card 0009's next-unchecked-AC surfacing. Lives at plugins/orb/scripts/parse-progress.sh OR as a labelled awk block inside session-context.sh."
+
+evaluation_principles:
+  - principle: "Tasks mirror progress.md — every pending task corresponds to a `- [ ]` line; every completed task corresponds to a `- [x]` line; the Task tool is a live view of the markdown, never divergent"
+    weight: 0.22
+  - principle: "No schema overlap with card 0009 — this card's spec must never define, reference, or modify progress.md sections beyond consumption"
+    weight: 0.18
+  - principle: "Agent-side discipline over infrastructure — TaskUpdate-same-turn and first-failure-checkpoint are text rules in SKILL.md, not new hooks or watchers, matching the shipped skill's agent-driven style"
+    weight: 0.16
+  - principle: "Resume is cheap on the common path — zero mutations when in sync; rebuild only on detected drift"
+    weight: 0.14
+  - principle: "Monitor is filtered — no raw stdout streaming; FAIL/ERROR/AssertionError/Traceback markers only, via `grep --line-buffered`"
+    weight: 0.12
+  - principle: "Task scoping is spec-local — metadata.spec_path isolates orbit-implement tasks from everything else in the session's TaskList"
+    weight: 0.10
+  - principle: "Shared parser lives once — the resume reconcile and card 0009's next-unchecked-AC surfacing read progress.md through the same code path; schema drift is a single-site fix"
+    weight: 0.08
+
+exit_conditions:
+  - "All 8 ACs have passing verifications (isv_ac01..isv_ac08)."
+  - "plugins/orb/skills/implement/SKILL.md has a new §4d (task emission) and three new §5 rules (task-update-same-turn, monitor heuristic, first-failure checkpoint), with §1–§4c unchanged except for card 0009's additions."
+  - "The resume reconcile path is wired into session-context.sh (or a companion script it sources) and is gated by metadata.spec_path."
+  - "A shared progress.md parser exists and is consumed by both this card's resume reconcile and card 0009's next-AC surfacing (single source, no duplication)."
+  - "A fresh /orb:implement run against a fixture spec produces a TaskList entry for every AC and every constraint, tagged with the spec path."
+  - "A simulated session resume against an in-sync fixture performs zero Task mutations; against a drifted fixture, rebuild occurs and the canonical warning appears."
+
+metadata:
+  version: "1.0"
+  test_prefix: "isv"
+  timestamp: "2026-04-20T20:15:00Z"
+  ambiguity_score: 0.10
+  interview_ref: "orbit/specs/2026-04-20-implement-session-visibility/interview.md"
+  depends_on: "orbit/specs/2026-04-20-mission-resilience/spec.yaml"
+  depends_on_note: "Consumes card 0009's progress.md schema (Spec path, Spec hash, Current AC, ## Detours, gate annotation, shared parser). Card 0009 MUST merge before this card so the schema is present in the implement/SKILL.md template and the shared parser is available to reference."
