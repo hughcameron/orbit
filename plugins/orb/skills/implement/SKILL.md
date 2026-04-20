@@ -137,6 +137,24 @@ When unplanned work is resolved:
 2. Immediately set `Current AC:` to the entry's `Return to:` target.
 3. Re-read `progress.md` and the spec's AC list. Select the next action from the **first unchecked AC in `## Acceptance Criteria`** — not from any in-memory context left over from the unplanned work. The parser ignores `## Detours` content when determining AC status (ac-09).
 
+#### 4d. Emit tasks — first-class AC/constraint visibility (card 0003 ac-01)
+
+Immediately after writing `progress.md` (§4) and BEFORE running the first AC's pre-AC check sequence (§4b), the skill emits the checklist as a set of Claude Code tasks so the author has a live, structured view of the session's work. Task emission is derived from the parsed `progress.md` file (the single source of truth per constraint #3) using `plugins/orb/scripts/parse-progress.sh`:
+
+1. Call `parse-progress.sh spec-path <progress.md>` to obtain the spec path string — this value becomes the `metadata.spec_path` on every emitted task.
+2. Call `parse-progress.sh constraints <progress.md>` to enumerate hard-constraint strings. For each, call **TaskCreate** with:
+   - `subject`: the constraint text, verbatim
+   - `status`: `pending`
+   - `metadata.spec_path`: the spec path from step 1
+3. Call `parse-progress.sh acs <progress.md>` to enumerate `(ac-id, status, description, is_gate)` tuples. For each, call **TaskCreate** with:
+   - `subject`: `ac-NN: <description>` (verbatim — **no** `(gate)` suffix; the annotation lives on the `progress.md` line only)
+   - `status`: `pending` if `[ ]`, `completed` if `[x]` (pre-completed ACs in resumed sessions)
+   - `metadata.spec_path`: the spec path from step 1
+
+**Task emission is FLAT** — `addBlockedBy` / `addBlocks` are **never** set by this skill. Dependency wiring for gate ACs is reserved for a future card 0009 successor; leaving the slot unwired lets that wiring layer in additively without reshaping task creation.
+
+**Scoping discipline.** Every orbit-implement task carries `metadata.spec_path`. The resume reconcile (§5) and any future orbit tooling filter by this tag and MUST NOT touch tasks without it or with a different value.
+
 ### 5. Implement — Tracking as You Go
 
 **The pre-flight phase is over. Now write code.** Implement the deliverables from the spec, working through the acceptance criteria. After completing work that addresses an AC or satisfies a constraint:
@@ -151,6 +169,64 @@ When unplanned work is resolved:
 - **Constraints are non-negotiable.** If you find yourself about to violate a constraint, stop and flag it. Either the constraint needs updating or the approach needs changing.
 - **Assumption reversals require escalation.** When implementation evidence (phase results, benchmarks, test outcomes) contradicts a spec assumption, **stop immediately**. Do not silently adjust and continue. Instead: (1) Document the finding with exact numbers in `progress.md`, (2) State which spec assumption is invalidated and why, (3) Checkpoint with the author before proceeding. A spec built on a false assumption produces implementation that diverges silently — this is worse than stopping.
 - **Derive from evidence, don't ask for gut calls.** When you encounter a parameter or approach question during implementation, check whether prior research, phase results, or benchmarks answer it. If the data prescribes the answer, use it. Only escalate to the author when evidence is genuinely silent or contradictory. The author sets goals and constraints; you derive implementation from evidence.
+
+#### TaskUpdate rule — same tool-call turn as AC checkbox flip (card 0003 ac-02)
+
+When the agent edits `progress.md` to flip a checkbox from `- [ ] ac-NN` to `- [x] ac-NN`, it **MUST** call **TaskUpdate** with `status: completed` on the corresponding task — the one whose `subject` starts with `ac-NN:` and whose `metadata.spec_path` matches the current spec — **in the same tool-call turn** as the `progress.md` edit. Not in the next turn, not after the next phase, not in a deferred batch. The edit and the `TaskUpdate` ride together in one tool-call batch.
+
+This is an agent-side skill rule — it is **not** a PostToolUse hook, **not** a file watcher, **not** a batched checkpoint. Failing to emit the `TaskUpdate` in the same tool-call turn as the edit is a **protocol violation** of the §5 rule and produces a divergent task list. The same rule applies symmetrically to constraint tasks: when the agent ticks `- [ ] <constraint>` to `- [x] <constraint>`, it emits `TaskUpdate status: completed` on the matching constraint task in the same turn.
+
+#### Resume reconcile — cancel-then-recreate on drift (card 0003 ac-03, ac-04)
+
+On session resume, the `session-context.sh` hook surfaces whether a reconcile is pending. The agent's **first action** on resume is to execute the reconcile algorithm:
+
+1. Call `TaskList` filtered to only include tasks whose `metadata.spec_path == <current spec path>`. Tasks without the tag and tasks with a different `metadata.spec_path` value are untouched — never read, never mutated (ac-04).
+2. Build the **expected set** from `progress.md` using `plugins/orb/scripts/parse-progress.sh` (the `acs` and `constraints` subcommands — `## Detours` content is ignored per card 0009 ac-09).
+3. Compare: if the filtered task count equals the expected count AND every `ac-NN` task's status matches the `progress.md` `[ ]` / `[x]` state AND every constraint task's status matches, **perform zero Task mutations and emit no warning** — the session is in sync.
+4. Otherwise, rebuild: for each filtered task, call `TaskUpdate status: cancelled`. Then emit fresh tasks for every item in the expected set via `TaskCreate` (per §4d). Finally emit a single stderr warning whose text is the canonical single-source constant below.
+
+**Canonical resume-rebuild warning (single source of truth, card 0003 constraint #12):**
+
+> **RESUME_REBUILD_WARNING** = `orbit: task list out of sync with progress.md, rebuilt from scratch`
+
+This exact string is emitted by the agent on rebuild, copied literally from this declaration. Test fixtures grep `plugins/orb/skills/implement/SKILL.md` for the constant and assert the emitted warning matches byte-for-byte. No `TaskDelete` / `TaskStop` is used — cancellation via `TaskUpdate` is the disposal primitive (card 0003 constraint #11).
+
+If card 0009's non-interactive drift halt (exit status 1) fired before the hook reached the reconcile surface, the agent never reaches this rule — the session is aborted before any Task mutations.
+
+#### Monitor-for-tests heuristic (card 0003 ac-05)
+
+Long-running test invocations — expected duration over **60 seconds**, or full-suite runs (e.g. `cargo test` without a filter, `pytest` at the repo root, `npm test`) — **MUST** be launched via the **Monitor** tool with the command piped through a line-buffered failure-marker filter. The canonical filter is:
+
+```
+grep --line-buffered -E 'FAIL|ERROR|AssertionError|Traceback'
+```
+
+Short targeted tests (< 60 seconds, a named subset or single test) continue to use the `Bash` tool as before.
+
+**Unfiltered Monitor on a test suite is forbidden** — every stdout line becoming a notification swamps the agent. The `grep --line-buffered` wrapper ensures only failure markers surface as streamed events while the suite runs to completion.
+
+#### First-failure checkpoint — interactive / non-interactive split (card 0003 ac-06)
+
+On the **first streamed** line from Monitor that matches the failure-marker regex `FAIL|ERROR|AssertionError|Traceback`, the agent's behaviour branches by interactivity, mirroring card 0009 ac-02's `AskUserQuestion` discipline.
+
+**Interactive path** — stdin is a TTY AND `ORBIT_NONINTERACTIVE` is unset or not equal to `1`:
+
+The agent MUST pause mid-run, acknowledge the failure inline, and call `AskUserQuestion` with exactly two options:
+
+- `Fix the failure now (I will investigate and re-run)`
+- `Let the suite finish, then triage`
+
+Subsequent failure lines in the same Monitor run are surfaced but do NOT re-prompt. The `first` semantics is per-Monitor-invocation: a new test run resets the gate.
+
+**Non-interactive path** — no TTY on stdin OR `ORBIT_NONINTERACTIVE=1` (this is `/orb:drive`, rally, cron, CI):
+
+The agent MUST NOT call `AskUserQuestion`. On the first matching failure line, emit the canonical non-interactive marker string below to stderr, stop consuming further Monitor output, and halt with **exit status 2**. The upstream orchestrator (drive) uses the exit-2 convention to route to a checkpoint distinct from a clean test-suite failure (exit 1).
+
+**Canonical non-interactive first-failure marker (single source of truth, card 0003 constraint #9):**
+
+> **FIRST_FAILURE_NONINTERACTIVE_MARKER** = `orbit: first-failure checkpoint skipped (non-interactive); halting for upstream triage`
+
+This exact string is emitted verbatim. Test fixtures grep this file for the constant and assert the emitted marker matches byte-for-byte.
 
 ### 6. Final Check
 
