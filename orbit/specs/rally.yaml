@@ -1,32 +1,40 @@
 rally: "orbit UX uplift via Claude Code tools — mission resilience, live visibility, structured prompts"
 autonomy: guided
-phase: design-review
+phase: implementing
 started: 2026-04-20T08:52:52Z
 completed: null
 cards:
-  - path: orbit/cards/0003-implement.yaml
-    status: designed
-    spec_dir: orbit/specs/2026-04-20-implement-session-visibility/
-    branch: rally/implement-session-visibility
-    worktree: null
-    parked_constraint: null
-  - path: orbit/cards/0005-drive.yaml
-    status: designed
-    spec_dir: orbit/specs/2026-04-20-drive-live-visibility/
-    branch: rally/drive-live-visibility
-    worktree: null
-    parked_constraint: null
-  - path: orbit/cards/0006-rally.yaml
-    status: designed
-    spec_dir: orbit/specs/2026-04-20-rally-approval-prompt/
-    branch: rally/rally-approval-prompt
-    worktree: null
-    parked_constraint: null
   - path: orbit/cards/0009-mission-resilience.yaml
     status: designed
     spec_dir: orbit/specs/2026-04-20-mission-resilience/
     branch: rally/mission-resilience
     worktree: null
     parked_constraint: null
-implementation_order: null
-order_rationale: null
+    stream: A
+    order: 1
+  - path: orbit/cards/0003-implement.yaml
+    status: designed
+    spec_dir: orbit/specs/2026-04-20-implement-session-visibility/
+    branch: rally/implement-session-visibility
+    worktree: null
+    parked_constraint: null
+    stream: A
+    order: 2
+  - path: orbit/cards/0005-drive.yaml
+    status: designed
+    spec_dir: orbit/specs/2026-04-20-drive-live-visibility/
+    branch: rally/drive-live-visibility
+    worktree: null
+    parked_constraint: null
+    stream: B
+    order: 1
+  - path: orbit/cards/0006-rally.yaml
+    status: designed
+    spec_dir: orbit/specs/2026-04-20-rally-approval-prompt/
+    branch: rally/rally-approval-prompt
+    worktree: null
+    parked_constraint: null
+    stream: B
+    order: 2
+implementation_order: "Stream A serial: 0009 → 0003. Stream B parallel to A: 0005, 0006 (each in its own worktree)."
+order_rationale: "0009 is the authoritative schema owner for progress.md extensions and the implement/SKILL.md + session-context.sh changes those extensions require. 0003 consumes that schema and writes into the same two files, so it must wait until 0009 lands to avoid branch-level file collisions. 0005 (drive skill only) and 0006 (rally skill §2b only, plus one card scenario edit) touch disjoint surfaces from 0003/0009 and from each other — safe to parallelise in isolated worktrees concurrently with Stream A."
