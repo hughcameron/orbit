@@ -5,10 +5,10 @@ started: 2026-04-20T08:52:52Z
 completed: null
 cards:
   - path: orbit/cards/0009-mission-resilience.yaml
-    status: designed
+    status: implementing
     spec_dir: orbit/specs/2026-04-20-mission-resilience/
     branch: rally/mission-resilience
-    worktree: null
+    worktree: main
     parked_constraint: null
     stream: A
     order: 1
@@ -21,18 +21,18 @@ cards:
     stream: A
     order: 2
   - path: orbit/cards/0005-drive.yaml
-    status: designed
+    status: implementing
     spec_dir: orbit/specs/2026-04-20-drive-live-visibility/
     branch: rally/drive-live-visibility
-    worktree: null
+    worktree: /home/hugh/github/hughcameron/orbit-rally-drive-live-visibility
     parked_constraint: null
     stream: B
     order: 1
   - path: orbit/cards/0006-rally.yaml
-    status: designed
+    status: implementing
     spec_dir: orbit/specs/2026-04-20-rally-approval-prompt/
     branch: rally/rally-approval-prompt
-    worktree: null
+    worktree: /home/hugh/github/hughcameron/orbit-rally-rally-approval-prompt
     parked_constraint: null
     stream: B
     order: 2
