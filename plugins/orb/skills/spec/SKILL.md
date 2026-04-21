@@ -60,6 +60,9 @@ acceptance_criteria:
     description: "Measurable criterion"
     verification: "How to verify"
 
+implementation_notes:          # means-level leads from the design session — not constraints
+  - "Starting context for the implementing agent"
+
 ontology_schema:
   name: "DomainModel"
   description: "What this models"

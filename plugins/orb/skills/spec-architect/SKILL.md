@@ -18,11 +18,12 @@ Transform interview conversations into immutable specifications — the "constit
 1. **GOAL**: A clear, specific statement of the primary objective
 2. **CONSTRAINTS**: Hard limitations or requirements that must be satisfied
 3. **ACCEPTANCE_CRITERIA**: Specific, measurable criteria for success — each with an `id` in `ac-NN` format
-4. **ONTOLOGY_SCHEMA**: The data structure/domain model
+4. **IMPLEMENTATION_NOTES**: Means-level observations from the design session — starting context for the implementing agent. These are NOT constraints (non-negotiable). They're leads the agent can use or override with evidence.
+5. **ONTOLOGY_SCHEMA**: The data structure/domain model
    - name, description, fields (name:type:description)
    - Field types: string, number, boolean, array, object
-5. **EVALUATION_PRINCIPLES**: Principles for evaluating output quality (name:description:weight)
-6. **EXIT_CONDITIONS**: When the workflow should terminate
+6. **EVALUATION_PRINCIPLES**: Principles for evaluating output quality (name:description:weight)
+7. **EXIT_CONDITIONS**: When the workflow should terminate
 
 ## Output Format
 
@@ -40,6 +41,9 @@ acceptance_criteria:
     ac_type: doc
     description: "Measurable criterion 2"
     verification: "How to verify"
+implementation_notes:          # means-level leads from the design session — not constraints
+  - "Starting context for the implementing agent"
+  - "Agent can use or override with evidence"
 ontology_schema:
   name: "DomainModel"
   description: "What this models"
