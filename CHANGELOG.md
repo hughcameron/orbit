@@ -2,6 +2,17 @@
 
 All notable changes to orbit are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.3.2] - 2026-04-21
+
+### Changed
+- **Design interviews capture intent, not means.** `/orb:design` reframed from "works out the how" to "captures what good looks like." Questions target outcomes, priorities, risk appetite, and scope — not implementation approach. Means-level observations (which function, what algorithm, test structure) are recorded as implementation notes for the implementing agent instead of being asked as interview questions.
+- Interviewer persona gains a decision-level gate before the evidence hierarchy: "Would the author need codebase context to answer this?" If yes, it's a means question — record as an implementation note, don't ask.
+- `/orb:discovery` aligned with the same intent-level questioning principle.
+
+### Added
+- `implementation_notes` field in spec YAML format — means-level leads from the design session. Not constraints; starting context the implementing agent can use or override with evidence. Consumed by `/orb:implement`.
+- `orbit/decisions/0011-design-intent-not-means.md`
+
 ## [0.3.1] - 2026-04-21
 
 ### Changed
