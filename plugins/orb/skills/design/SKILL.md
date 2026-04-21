@@ -1,11 +1,11 @@
 ---
 name: design
-description: Focused design session — refine a feature card into technical decisions and constraints
+description: Focused design session — capture what good looks like for a feature card
 ---
 
 # /orb:design
 
-Focused design conversation that takes a well-formed feature card and works out the *how*. The card already answers who, what, and why — this stage clarifies constraints, selects approaches, and surfaces design decisions.
+Focused design conversation that captures what good looks like for a feature card. The card already answers who, what, and why — this stage clarifies constraints, priorities, risk appetite, and scope boundaries. Implementation approach is the implementing agent's job, not the author's.
 
 ## Usage
 
@@ -75,27 +75,32 @@ Don't re-ask what the author wants. They wrote a card. Instead:
 
 ### 4. Conduct the Design Session
 
-Adopt the socratic interviewer role (see `/orb:interviewer` for the full persona).
+Adopt the interviewer role (see `/orb:interviewer` for the full persona and the decision-level gate).
 
-Target: **4–6 questions** focused on:
+**The author's job is to define what good looks like. Everything else is derivable.** Only ask intent-level questions — goals, priorities, constraints, risk appetite. Implementation questions (which function, what algorithm, how to test) are recorded as implementation notes for the implementing agent.
 
-- **Approach selection** — when references or scenarios imply a choice between strategies, probe it explicitly. "You referenced uv and cargo — uv suppresses intermediate output while cargo shows every step. Which feel?" Each choice is a potential decision record.
-- **Technical constraints** — platform, performance, compatibility boundaries
-- **Edge cases** the scenarios don't cover — failure modes, concurrency, empty states
-- **Non-functional requirements** — speed, accessibility, security
-- **Integration** — how does this fit with what already exists?
+Target: **3–5 questions** focused on:
+
+- **Outcome priorities** — when goals or scenarios compete, what matters more? "You want both speed and correctness — when they conflict, which wins?"
+- **Risk appetite** — what's the acceptable blast radius? How much breakage is tolerable? "Is this a careful surgical fix, or an aggressive refactor?"
+- **Constraints** — platform, performance, compatibility *boundaries* (not implementation targets)
+- **Scope boundaries** — what's explicitly out of scope for this spec? What adjacent problems should be deferred?
+- **Quality of experience** — when references or scenarios imply different user-facing approaches, probe the feel. "You referenced uv and cargo — uv is quiet, cargo is verbose. Which feel?" These are UX preferences only the author can provide.
 
 **For each question:**
 
-1. Present the question using **AskUserQuestion** with contextually relevant suggested answers:
+1. Apply the decision-level gate: "Would the author need codebase context to answer this?" If yes, record as an implementation note — don't ask.
+
+2. Present the question using **AskUserQuestion** with contextually relevant suggested answers:
    - When the card has references, use them as suggested answers where relevant
-   - Binary questions: use the natural choices
-   - Technology choices: suggest common options for the context
+   - Priority questions: use the competing concerns as options
    - The author can always type a custom response
 
-2. Record the Q&A pair in your working notes
+3. Record the Q&A pair in your working notes
 
-3. After each answer, target the biggest remaining gap
+4. After each answer, target the biggest remaining gap in **intent**
+
+**Implementation notes:** As you explore the codebase and evidence base (§2), you'll identify implementation-level decisions — which module to modify, what patterns exist, what approach seems right. Record these under **Implementation Notes** in the interview record. They give the implementing agent a head start without burdening the author.
 
 ### 5. Ambiguity Assessment
 
@@ -157,8 +162,11 @@ Gap: <what remains between current state and goal>
 ### Decisions Surfaced
 - <choice made>: chose X over Y because Z (→ orbit/decisions/NNNN if recorded)
 
+### Implementation Notes
+- <means-level observations from codebase exploration — starting context for the implementing agent>
+
 ### Open Questions
-- <anything still unclear>
+- <anything still unclear — intent-level only>
 ```
 
 ---

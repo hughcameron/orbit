@@ -34,6 +34,7 @@ Extract:
 - `goal` — the primary objective
 - `constraints` — the hard limitations (these are non-negotiable)
 - `acceptance_criteria` — every `ac-NN` with its description
+- `implementation_notes` — means-level leads from the design session. These are starting context, not constraints. Use them as a head start, but override with evidence when your analysis contradicts them.
 - `metadata.test_prefix` — if present, use this prefix in test function names (e.g., `remat_ac01_*`)
 - `deliverables` — what files need to be created or modified
 

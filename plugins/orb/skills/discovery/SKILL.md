@@ -1,11 +1,11 @@
 ---
 name: discovery
-description: Socratic discovery — explore a vague idea through Q&A, save the record as markdown
+description: Discovery session — explore a vague idea through Q&A, capture what good looks like
 ---
 
 # /orb:discovery
 
-Explore a vague idea or requirement through Socratic questioning. Use this when there's no card yet, or the card is thin (< 3 scenarios). The outcome is clarity — an interview record that's ready for `/orb:spec`.
+Explore a vague idea or requirement through questioning. Use this when there's no card yet, or the card is thin (< 3 scenarios). The outcome is clarity — what good looks like, captured as an interview record ready for `/orb:spec`.
 
 ## Usage
 
@@ -35,14 +35,16 @@ Before asking questions, run a keyword scan (see `/orb:keyword-scan`) against `o
 
 ### 3. Conduct the Discovery
 
-Adopt the socratic interviewer role (see `/orb:interviewer` for the full persona).
+Adopt the interviewer role (see `/orb:interviewer` for the full persona and the decision-level gate).
 
-Target: **8–12 questions** covering:
+**The author's job is to define what good looks like.** Discovery questions stay at the intent level — goals, users, constraints, success criteria. Implementation questions are recorded as notes, not asked.
+
+Target: **6–10 questions** covering:
 - **Goal**: What are we trying to achieve? What does success look like?
 - **Users**: Who has this need? What's their context?
 - **Constraints**: Platform, performance, compatibility, budget
 - **Success criteria**: How will we know it works?
-- **Edge cases**: What could go wrong?
+- **Scope**: What's in, what's explicitly out?
 - **Prior art**: Are there existing approaches worth studying?
 
 **For each question:**
@@ -126,8 +128,11 @@ Save the Q&A as: `orbit/specs/YYYY-MM-DD-<topic-slug>/interview.md`
 ### Decisions Surfaced
 - <choice made>: chose X over Y because Z (→ orbit/decisions/NNNN if recorded)
 
+### Implementation Notes
+- <means-level observations from exploration — starting context for the implementing agent>
+
 ### Open Questions
-- <anything still unclear>
+- <anything still unclear — intent-level only>
 ```
 
 ---
