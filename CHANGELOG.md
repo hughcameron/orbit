@@ -2,6 +2,17 @@
 
 All notable changes to orbit are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.3.1] - 2026-04-21
+
+### Changed
+- **Rally state moves into a spec-shaped folder.** `rally.yaml` now lives at `orbit/specs/<date>-<slug>-rally/rally.yaml` instead of a flat `orbit/specs/rally.yaml`. Completed rallies stay where they are — the folder itself is the history record. No sibling `archive/` directory, no archival prompt when the next rally begins.
+- `/orb:rally` §1 scans `orbit/specs/*/rally.yaml` for an active rally (phase != complete); §3 Initialise creates the rally folder before writing `rally.yaml` inside it; §10 Completion and §11 Resumption drop the "awaiting archival" language and the archive prompt. Two or more rallies with `phase != complete` is a state error per §12.
+- `session-context.sh` scans `orbit/specs/*/rally.yaml` instead of checking a fixed path, and the `latest_spec` find excludes `*-rally` folders so the workflow surface never mistakes a rally folder for a spec folder.
+- CLAUDE.md vocabulary row for Rally state updated to the new folder-per-rally path.
+
+### Added
+- **Vocabulary glossary in `/orb:setup`.** The `## Workflow (orbit)` snippet appended to a project's `CLAUDE.md` now carries a six-row `## Orbit vocabulary` block (Card / Memo / Interview / Spec / Progress / Decision) and the "cards describe *what*, specs describe *work*" discipline line. Idempotent setup runs detect the pre-vocabulary shape and offer a targeted migration prompt — on `y`, the legacy "Artefacts live in…" line is replaced with the full `## Orbit vocabulary` block while the skills list and Current Sprint are left untouched.
+
 ## [0.3.0] - 2026-04-20
 
 UX uplift rally — four coordinated cards shipped together (PRs #12, #14, #11, #10) to make orbit sessions mission-resilient, visible in real time, and sharper at approval gates.
