@@ -116,21 +116,40 @@ a manually-created orbit/ directory, or a partial downstream pull.
 
 No filesystem changes. Exit with a non-zero status so the author sees it as a refusal, not a completion.
 
-### 5. Idempotent State: No-Op
+### 5. Idempotent State: No-Op on Filesystem
 
-The repo is already migrated. Do nothing:
+The orbit/ layout is already in place. The filesystem needs no changes:
 
 - Do not recreate `orbit/` or any subdir
-- Do not append to CLAUDE.md (the marker `## Workflow (orbit)` already exists, or the author opted out)
 - Do not run the first-card tutorial unless the author explicitly asks
 
-Tell the author setup is already complete and offer `/orb:card` if they want to write another card.
+**Still run §6's CLAUDE.md check** — an author on a newer plugin version may have an older snippet that lacks the vocabulary glossary. §6 detects this and offers a targeted migration. If no migration is needed (or the author declines), tell the author setup is already complete and offer `/orb:card`.
 
-### 6. Append the CLAUDE.md Snippet
+### 6. CLAUDE.md Snippet: Append or Migrate
 
-If `CLAUDE.md` does not exist, create it. If it exists, append to it — but only if the orbit snippet is not already present (check for the marker `## Workflow (orbit)`).
+Check for the marker `## Workflow (orbit)` in `CLAUDE.md`.
 
-**Snippet to append:**
+**Case A — marker absent (or file missing):** append the full snippet below (create `CLAUDE.md` if needed).
+
+**Case B — marker present, vocabulary missing:** the CLAUDE.md has a pre-vocabulary snippet. Detect this by both conditions holding:
+
+- The line `Artefacts live in \`orbit/cards/\`, \`orbit/specs/\`, and \`orbit/decisions/\`.` is present under the marker
+- No `## Orbit vocabulary` heading exists between `## Workflow (orbit)` and the next top-level section
+
+Offer a single migration prompt:
+
+```
+orbit: CLAUDE.md has the old workflow snippet, missing the vocabulary glossary.
+Migrate now? (y/N)
+```
+
+On `y`: replace the legacy "Artefacts live in..." line with the full `## Orbit vocabulary` block from the snippet below. Leave the rest of the snippet untouched (skills list, Current Sprint, etc. stay as the author left them).
+
+On anything else: leave CLAUDE.md untouched. Note that migration is available on next run of `/orb:setup`.
+
+**Case C — marker present, vocabulary present:** skip silently.
+
+**Snippet to append (Case A) / vocabulary block to insert (Case B):**
 
 ```markdown
 ## Workflow (orbit)
@@ -145,7 +164,16 @@ This project uses the orbit workflow: Card → Design → Spec → Implement →
 - `/orb:review-spec` — stress-test the spec before implementation
 - `/orb:review-pr` — verify the PR against the spec's acceptance criteria
 
-Artefacts live in `orbit/cards/`, `orbit/specs/`, and `orbit/decisions/`.
+## Orbit vocabulary
+
+- **Card** (`orbit/cards/*.yaml`) — a capability the product provides. User language. Never closed.
+- **Memo** (`orbit/cards/memos/*.md`) — raw idea awaiting distillation.
+- **Interview** (`orbit/specs/<slug>/interview.md`) — Q&A record from `/design` or `/discovery`.
+- **Spec** (`orbit/specs/<slug>/spec.yaml`) — a discrete unit of work with numbered ACs.
+- **Progress** (`orbit/specs/<slug>/progress.md`) — AC tracker during implementation.
+- **Decision** (`orbit/decisions/*.md`) — MADR record of an architectural choice.
+
+Cards describe *what*, specs describe *work*. Follow-up work is a new spec against an existing card — not a new card. New cards are for new capabilities.
 
 ## Current Sprint
 
