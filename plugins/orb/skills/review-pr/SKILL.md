@@ -123,3 +123,4 @@ The header line `**Verdict:** APPROVE | REQUEST_CHANGES | BLOCK` is a **contract
 
 - **Evidence over reasoning.** Every CRITICAL finding must include command output or file:line citations.
 - The reviewer sees the diff and spec but has NO context from the implementing session.
+- **Never suggest "open a follow-up card."** If you identify adjacent work or future improvements, note them in the Findings section. The implementing agent handles forwarding via memos — cards describe capabilities, not work items.

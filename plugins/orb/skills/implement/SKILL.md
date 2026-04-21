@@ -237,6 +237,19 @@ When implementation is complete:
 2. If any items remain pending, explain why
 3. Suggest next step: `/orb:review-pr` to verify the implementation
 
+### 6a. Forward Out-of-Scope Findings
+
+During implementation you'll often discover adjacent work — missing generators, unhandled edge cases, performance observations, data quality issues. These are valuable but out of scope for the current spec.
+
+**Write a memo, not a card.** Save findings as `orbit/cards/memos/YYYY-MM-DD-<slug>.md` with:
+- What you found (with data — counts, examples, evidence)
+- Where you found it (file, function, test output)
+- Which spec/card this was discovered during (provenance)
+
+**Never suggest "open a follow-up card."** Cards describe capabilities, not work items. The agent doesn't know whether this finding warrants a new capability or feeds an existing card's next spec. That's the author's call during distill.
+
+The memo channel preserves the finding without forcing a structural decision. The SessionStart hook surfaces outstanding memos. `/orb:distill` handles the card question later.
+
 ### 7. When a Spec Produces a NO-GO
 
 Not every spec ships code. Some produce evidence that an approach doesn't work — that's a valid outcome, not a failure. When results invalidate the spec's hypothesis:
