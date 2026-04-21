@@ -54,12 +54,44 @@ if [[ -d "orbit/cards/memos" ]]; then
   fi
 fi
 
-# Detect active rally (orbit/specs/rally.yaml)
+# Detect active rally — scan orbit/specs/*/rally.yaml.
+# Rally state lives inside a spec-shaped folder (orbit/specs/<date>-<slug>-rally/rally.yaml).
+# Active rally = the one with phase != "complete". Completed rallies stay in place as history.
 # When a rally is active, it becomes the primary orchestration context
 # and individual drive states are subordinated (shown as sub-items, not independent status lines).
 active_rally=""
-rally_file="orbit/specs/rally.yaml"
-if [[ -f "$rally_file" ]]; then
+rally_file=""
+latest_complete_rally_file=""
+if [[ -d "orbit/specs" ]]; then
+  # Collect candidate rally.yaml paths. find exits 0 on no matches with `|| true` safeguard.
+  rally_candidates=$(find orbit/specs -maxdepth 2 -name 'rally.yaml' -type f 2>/dev/null | sort || true)
+  if [[ -n "$rally_candidates" ]]; then
+    # First pass: pick the first active rally (phase != complete).
+    # Second pass (if no active): remember the most recent completed rally for the summary line.
+    while IFS= read -r candidate; do
+      [[ -z "$candidate" ]] && continue
+      cand_phase=$( { grep '^phase:' "$candidate" 2>/dev/null || true; } | head -1 | sed 's/^phase:[[:space:]]*//; s/^"//; s/"$//')
+      if [[ -n "$cand_phase" && "$cand_phase" != "complete" ]]; then
+        rally_file="$candidate"
+        break
+      fi
+      if [[ "$cand_phase" == "complete" ]]; then
+        latest_complete_rally_file="$candidate"
+      fi
+    done <<< "$rally_candidates"
+  fi
+fi
+
+# If no active rally was found but a completed one was, surface it so the author
+# knows history is present (and that a new /orb:rally will create its own folder).
+if [[ -z "$rally_file" && -n "$latest_complete_rally_file" ]]; then
+  lc_goal=$( { grep '^rally:' "$latest_complete_rally_file" 2>/dev/null || true; } | head -1 | sed 's/^rally:[[:space:]]*//; s/^"//; s/"$//')
+  if [[ -n "$lc_goal" ]]; then
+    echo "orbit: Last rally complete — \"$lc_goal\" (folder: $(dirname "$latest_complete_rally_file"))"
+  fi
+fi
+
+if [[ -n "$rally_file" ]]; then
   # Parse top-level fields tolerantly: missing fields yield empty strings, never abort the hook.
   # `|| true` keeps set -e / pipefail from killing the script when grep finds no match.
   rally_goal=$( { grep '^rally:' "$rally_file" 2>/dev/null || true; } | head -1 | sed 's/^rally:[[:space:]]*//; s/^"//; s/"$//')
@@ -68,13 +100,15 @@ if [[ -f "$rally_file" ]]; then
 
   # Validate required fields. If rally.yaml exists but is malformed, surface a clear error
   # and skip the rally display — do not silently abort the hook.
+  # Note: rally_file was already filtered to phase != complete in the scan above, so the
+  # active-rally branch is the only non-error path here.
   if [[ -z "$rally_phase" || -z "$rally_goal" ]]; then
     missing=()
     [[ -z "$rally_goal"  ]] && missing+=("rally")
     [[ -z "$rally_phase" ]] && missing+=("phase")
     echo "orbit: rally.yaml at $rally_file is malformed — missing required field(s): ${missing[*]}"
     echo "  Fix the file or remove it to start fresh. Rally state will not be surfaced."
-  elif [[ "$rally_phase" != "complete" ]]; then
+  else
     active_rally="$rally_file"
 
     # Count cards by status using awk — emits a single integer even when no matches.
@@ -125,8 +159,6 @@ if [[ -f "$rally_file" ]]; then
     fi
 
     echo "  Next: run /orb:rally to resume at phase \"$rally_phase\""
-  elif [[ "$rally_phase" == "complete" ]]; then
-    echo "orbit: Completed rally — \"$rally_goal\" (awaiting archival on next rally)"
   fi
 fi
 
@@ -175,11 +207,13 @@ if [[ -n "$drive_file" ]]; then
 fi
 
 # Find the most recent spec directory.
+# Rally folders share the YYYY-MM-DD-* prefix but end in `-rally` — exclude them so
+# the spec workflow surfaces below don't try to read a rally folder as a spec.
 # Guard on dir existence so pipefail doesn't kill the hook when orbit/ was
 # created manually without its standard subdirs.
 latest_spec=""
 if [[ -d "orbit/specs" ]]; then
-  latest_spec=$(find orbit/specs -maxdepth 1 -type d -name '20*' 2>/dev/null | sort -r | head -1 || true)
+  latest_spec=$(find orbit/specs -maxdepth 1 -type d -name '20*' \! -name '*-rally' 2>/dev/null | sort -r | head -1 || true)
 fi
 
 if [[ -z "$latest_spec" ]]; then
