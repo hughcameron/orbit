@@ -2,6 +2,14 @@
 
 All notable changes to orbit are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.3.3] - 2026-04-22
+
+### Added
+- `/orb:implement` §6a — out-of-scope findings during implementation are forwarded as memos (`orbit/cards/memos/`) with data and provenance. Agents no longer suggest "open a follow-up card" — cards describe capabilities, not work items. Distill handles the structural decision later.
+
+### Changed
+- `/orb:review-pr` — explicit rule: never suggest follow-up cards in findings.
+
 ## [0.3.2] - 2026-04-21
 
 ### Changed
