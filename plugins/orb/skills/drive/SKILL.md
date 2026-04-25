@@ -103,8 +103,17 @@ After writing (or resuming) drive.yaml, if `autonomy == full`, schedule a recurr
 **Heartbeat prompt body (verbatim, use this string when calling CronCreate):**
 
 ```
-This is a read-only drive heartbeat. Read <current_spec>/drive.yaml for iter,
-budget, status, and started. If <current_spec>/progress.md exists, read it to
+This is a drive heartbeat. Read <current_spec>/drive.yaml for iter,
+budget, status, and started.
+
+If status is `complete` or `escalated`, call CronDelete with ID
+`drive-checkin-<spec-slug>` and emit:
+
+  drive: heartbeat stopped (status=<status>)
+
+Then stop. Do not emit a heartbeat line.
+
+Otherwise: if <current_spec>/progress.md exists, read it to
 find the most recent `- [ ] ac-NN` entry (the current AC); if none or not in
 Implement stage, use `-`. Compute elapsed as mm:ss since `started`. Emit
 exactly one line in the format:
@@ -115,7 +124,7 @@ Do not modify drive.yaml. Do not launch any Agent. Emit the single heartbeat
 line and stop.
 ```
 
-The prompt body's read-only contract is load-bearing: the heartbeat fires as a fresh user-message-equivalent turn, and without the explicit "do not modify / do not launch" instruction a helpful agent could mutate state or spawn work mid-forked-review. The contract makes the heartbeat safe to fire at any point in the pipeline, including during a review fork.
+The prompt body's contract is load-bearing: the heartbeat fires as a fresh user-message-equivalent turn, and without the explicit "do not modify / do not launch" instruction a helpful agent could mutate state or spawn work mid-forked-review. The contract makes the heartbeat safe to fire at any point in the pipeline, including during a review fork. The one exception is self-termination: when drive.yaml shows a terminal state (`complete` or `escalated`), the heartbeat calls `CronDelete` on itself as a defence-in-depth backstop — §10 and §9 remain the primary cleanup path.
 
 **Heartbeat format.** The literal output format is `drive: iter=<N>/<budget> stage=<status> ac=<id|-> elapsed=<mm:ss>`. When there is no current AC cursor (any stage other than Implement, or Implement before the first AC is marked in-progress), the `ac` field renders a literal `-` character — the same dash idiom `session-context.sh` uses for absent values. Example:
 
@@ -594,6 +603,6 @@ A mechanical agent runs 3 iterations by rote and escalates with "tried 3 times, 
 - **REQUEST_CHANGES is bounded per stage.** Each review stage has an independent 3-cycle budget (see §5a). The 4th would-be cycle is converted to a synthetic BLOCK with a fixed constraint string and consumes a top-level iteration normally.
 - **No migration scaffolding.** Drives initialised before forked reviews shipped refuse to resume under the new code. Finish or park in-flight drives before upgrade. No `review_mode` field, no dual code paths, no flag day.
 - **Reviews are the quality gates.** In guided mode, the spec review and PR review replace explicit go/no-go prompts. The only interactive gate is the final verdict summary before PR creation.
-- **Live-visibility heartbeat is read-only and full-autonomy-only.** The recurring `drive-checkin-<spec-slug>` task fires only when `autonomy == full`. The cron prompt body carries an explicit read-only contract ("do not modify drive.yaml, do not launch any Agent, emit the single heartbeat line and stop") so it is safe to fire at any point in the pipeline, including mid-forked-review. Heartbeat CronCreate failure at §2 and heartbeat CronDelete failure at §9/§10 are non-fatal — drive logs one line and continues, never gating stage progression on heartbeat state.
+- **Live-visibility heartbeat is self-terminating and full-autonomy-only.** The recurring `drive-checkin-<spec-slug>` task fires only when `autonomy == full`. The cron prompt body carries a read-only contract ("do not modify drive.yaml, do not launch any Agent") with one exception: when drive.yaml shows a terminal state (`complete` or `escalated`), the heartbeat calls `CronDelete` on itself and stops. This is a defence-in-depth backstop — §10 and §9 remain the primary cleanup path, but if their `CronDelete` fails (non-fatal), the next heartbeat tick self-terminates instead of zombieing indefinitely.
 - **Cron tasks are reconciled idempotently.** Drive uses CronList-then-CronCreate-iff-absent (§2a) on every initialise and every resume. Drive never delete-then-recreates a heartbeat task — doing so would defeat Claude Code's built-in task restoration on `--resume` / `--continue`.
 - **MEDIUM+ review verdicts route through a four-option AskUserQuestion prompt.** At APPROVE gates where the review file reports any MEDIUM or HIGH finding, the prompt surfaces `approve / request changes / block / read full review first` (§7a). LOW-only APPROVE gates retain the existing shorter prompt. Drive reads severity from the review file directly and never re-classifies. `read full review first` is a deferral, not a verdict — drive re-presents the same four-option prompt verbatim on the author's next turn.
