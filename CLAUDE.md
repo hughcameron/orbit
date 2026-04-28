@@ -26,7 +26,7 @@ Each artefact has one job. Don't invent new names — if something doesn't fit, 
 | Artefact    | Where                                                       | What it is                                                                                                                   |
 |-------------|-------------------------------------------------------------|------------------------------------------------------------------------------------------------------------------------------|
 | Card        | `orbit/cards/NNNN-<slug>.yaml`                              | A capability the product provides. Written in user language. Never closed — updated in place as the capability evolves.       |
-| Memo        | `orbit/cards/memos/<date>-<slug>.md`                        | Raw idea awaiting distillation. Freeform markdown. Turned into cards via `/distill`.                                         |
+| Memo        | `orbit/cards/memos/<date>-<slug>.md`                        | Raw idea awaiting distillation. Freeform markdown. Turned into cards via `/distill`. Deleted after promotion.                |
 | Interview   | `orbit/specs/<date>-<slug>/interview.md`                    | Q&A record from a `/design` or `/discovery` session. Feeds the spec.                                                          |
 | Spec        | `orbit/specs/<date>-<slug>/spec.yaml`                       | A discrete unit of work with numbered acceptance criteria. One card may spawn many specs over time.                          |
 | Progress    | `orbit/specs/<date>-<slug>/progress.md`                     | AC tracker maintained during implementation. The implementation diary.                                                       |

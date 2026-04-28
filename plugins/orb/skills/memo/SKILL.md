@@ -69,7 +69,7 @@ Suggest next steps:
 ## Integration with Other Skills
 
 - **SessionStart hook** — surfaces outstanding memos (those not yet referenced by any card)
-- **`/orb:distill`** — reads a memo and extracts candidate feature cards from it
+- **`/orb:distill`** — reads a memo, extracts candidate feature cards, and deletes the memo after writing cards
 - **`/orb:card`** — if the idea is clear enough, skip memo and go straight to card
 
 ---
