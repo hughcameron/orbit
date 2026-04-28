@@ -198,6 +198,13 @@ Before launching any fork, check whether a valid review already exists at the cy
 
 #### 5.3 Launch the forked review
 
+**Pre-flight: verify Agent tool availability.** Run `ToolSearch select:Agent` to load the Agent tool schema. If ToolSearch returns no result, do NOT fall back to inline review — escalate immediately:
+- Update `drive.yaml` `status: escalated`
+- Output: `Agent tool unavailable — cannot launch cold-fork review for review-spec`
+- Stop — inline review violates the cold-fork separation contract (decisions 0005, 0006).
+
+This pre-flight is load-bearing when drive runs in nested contexts (e.g. inside a rally sub-agent) where the deferred-tool surface may not include Agent.
+
 Invoke the Agent tool with:
 - `subagent_type: general-purpose`
 - A brief containing **only**:
@@ -328,6 +335,8 @@ As §5.1, using `review_cycles.review_pr` and `review_cycle_dates.review_pr`:
 As §5.2 — if a valid review file already exists at the cycle-specific path, parse it and skip the fork.
 
 #### 7.3 Launch the forked review
+
+**Pre-flight: verify Agent tool availability.** As §5.3 — run `ToolSearch select:Agent` before invoking the Agent tool. If unavailable, escalate with `Agent tool unavailable — cannot launch cold-fork review for review-pr`. Do not fall back to inline review.
 
 Invoke the Agent tool with:
 - `subagent_type: general-purpose`

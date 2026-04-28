@@ -402,8 +402,8 @@ If drive-full escalates, return:
   { "verdict": "parked", "reason_label": "<label>", "reason": "<one-line>",
     "spec_dir": "<spec_dir>" }
 
-where `reason_label` is one of the five fixed tokens (see §9):
-  budget | recurring_failure | contradicted_hypothesis | diminishing_signal | review_converged
+where `reason_label` is one of the six fixed tokens (see §9):
+  budget | recurring_failure | contradicted_hypothesis | diminishing_signal | review_converged | tool_surface_incomplete
 
 Do not attempt rally-level retries — your internal drive iterations are the
 strike. (ac-08)
@@ -485,6 +485,8 @@ Contradicted hypothesis                      contradicted_hypothesis   [contradi
 Diminishing signal                           diminishing_signal        [diminishing_signal]
 Synthetic BLOCK after 3× REQUEST_CHANGES     review_converged          [review_converged]
   (decision 0007-drive-rerequest-budget)
+Agent tool unavailable for cold-fork       tool_surface_incomplete   [tool_surface_incomplete]
+  (drive §5.3/§7.3 pre-flight)
 ```
 
 Rally does not retry at its level; the sub-agent's internal iterations (drive's 3-iteration NO-GO budget plus each stage's 3-cycle REQUEST_CHANGES budget) are the strike. An unrecognised or missing `reason_label` in the sub-agent's JSON return parks the card with the literal string `[unknown]` prefixed — the card is still parked, and the label drift becomes visible in rally.yaml for later investigation.
