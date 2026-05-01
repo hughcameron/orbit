@@ -2,6 +2,43 @@
 
 All notable changes to orbit are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.4.0] - 2026-05-01
+
+Bead-native execution layer — orbit's four-card overhaul (orbit-6da.1–6da.4) makes beads the canonical substrate for AC tracking, drive orchestration, and rally state. The snapshot bridge between drive and the cold-fork reviewers is removed; reviewers read beads directly. `drive.yaml`, `progress.md`, and `rally.yaml` are gone. The bead graph IS the workflow.
+
+### Added
+
+- **Bead-native cold-fork reviews** (card 0016, orbit-6da.4). `/orb:review-spec` and `/orb:review-pr` read the bead directly via `bd show <bead-id> --json` and `parse-acceptance.sh acs <bead-id>` — the same parser `/orb:implement` uses, so AC interpretation cannot drift between implement and review. The snapshot bridge (`bead-snapshot-<date>.md`) is removed pipeline-wide. Verdict files land at `orbit/reviews/<bead-id>/review-{spec,pr}-<date>.md` for both forked and inline invocations.
+- **End-to-end gate semantics.** Card scenario `gate: true` propagates through `promote.sh` to bead AC `[gate]` marker. `parse-acceptance.sh acs` exposes `is_gate=1` as a parsed column. `/orb:review-spec` Pass-1 deterministic check (non-empty / not-placeholder / ≥20 chars) fires against gate-AC description text — was silently no-op under the snapshot bridge.
+- **Test fixtures for the bead-native review substrate.** `plugins/orb/scripts/tests/test-gate-ac-verification.sh` (parser + 3 deterministic rules) and `test-promote-gate-propagation.sh` (card scenario → promote.sh → bead AC `[gate]` marker).
+- **MADR 0013** — `orbit/decisions/0013-bead-acceptance-field-as-cold-fork-substrate.md`. Documents five design decisions (skill-reads-bead vs drive-prerender; AC-shape mapping; ac_type mapping; gate propagation via promote.sh; hard cutover), the substrate-mapping table, and full consequences including accepted losses (ac_type exemption fidelity; AC commit-provenance; cycle-history `[x]` leak).
+- **Card 0017** — `/orb:setup` is bead-aware (planned). Folds bd precondition check, orbit plugin version sanity, and `bd-init.sh` invocation into `/orb:setup` so the orbit/ layout and `.beads/` initialise atomically. Until this ships, the manual `MIGRATION-0.4.0.md` playbook is the canonical path.
+- **`MIGRATION-0.4.0.md`** — operator playbook for migrating downstream projects (private-project, FineType, Brightfield, Arcform) to the bead-native layer. Covers prerequisites, seven-step migration, rollout order (Arcform first), and known watchouts.
+- **Beads foundation** (orbit-6da.0). Beads issue tracker initialised in orbit itself. Acceptance-field convention (`orbit/conventions/acceptance-field.md`). Core scripts: `parse-acceptance.sh` (five subcommands for AC enumeration and check-off), `promote.sh` (card → bead with AC generation), `bd-init.sh` (project initialisation), `PRIME.md` (session-start context).
+- **`/orb:implement` rewritten against beads** (orbit-6da.1). Bead acceptance field replaces `progress.md` as the AC source of truth. `TaskCreate`, drift detection (sha256), and resume reconcile removed. Detours escalate as sub-beads via `bd create --parent ... --deps "discovered-from:..."`. Gate enforcement delegated entirely to `parse-acceptance.sh next-ac`.
+- **`/orb:drive` rewritten against beads** (orbit-6da.2). Design + Spec stages collapse into `promote.sh card→bead`. Drive state machine lives in bead metadata (`drive_stage`, `drive_iteration`, `drive_review_*_cycle`). Iteration history tracked via `discovered-from` dependency edges between iteration beads. NO-GO closes current bead and promotes a new iteration bead carrying constraint history in the description.
+- **`/orb:rally` collapses onto the bead dependency graph** (orbit-6da.3). `rally.yaml` removed. Epic bead + child beads IS the rally. `bd ready --type task --parent <epic>` replaces TaskList for in-session card visibility. Rally phase tracking lives in epic bead metadata. Mid-flight parallel→serial conversion is a single `bd dep add` invocation.
+
+### Changed
+
+- **Drive cold-fork brief** — Stage 1 (review-spec) and Stage 3 (review-pr) briefs carry only `<bead-id>`, absolute verdict output path, and verdict-line contract. Snapshot paths gone.
+- **Drive Completion** — commit-1 description and PR-body no longer reference bead snapshots (they no longer exist). Commit 1: `All code changes and the review files`.
+- **Inline-mode verdict paths** in both review skills moved to `orbit/reviews/<bead-id>/review-{spec,pr}-<date>.md` (was `orbit/specs/YYYY-MM-DD-<topic>/...`).
+- **Drive SKILL.md section renumbering** — Stage 1: §1.1 is now "Compute the cycle-specific verdict path" (was §1.2; §1.1 "Write the bead snapshot" is gone). Stages 1 and 3 section numbers updated throughout; Resumption table cross-references corrected.
+- **`/orb:review-spec` Step 1** renamed to "Gather the Bead"; takes a bead-id argument; reads `bd show <bead-id> --json` + `parse-acceptance.sh acs <bead-id>`. Spec.yaml lookup, interview_ref lookup removed.
+- **`/orb:review-pr` Phase 1/2** reads bead via `bd show` + `parse-acceptance.sh`; `progress.md` cross-reference removed; `ac_type` / `test_prefix` field references removed; AC coverage check uses bare `ac<NN>` test-name pattern; reviewer contextualises exemptions in the honest-assessment paragraph.
+- **Decision 0002 (`ac-test-prefix`)** status updated to `superseded by 0013 (review-pr scope only)` — `test_prefix` remains live in `/orb:spec`, `/orb:spec-architect`, `/orb:audit`, `/orb:implement`.
+- **Decision numbering collision resolved** — `0011-design-intent-not-means.md` renamed to `0012-design-intent-not-means.md`. New substrate MADR is `0013`.
+- **Drive heartbeat self-termination** — full-autonomy heartbeat calls `CronDelete` on itself when the bead transitions to `closed`, as a backstop alongside primary cleanup in §Completion and §Escalation.
+- **Cold-fork review gate hardened** against nested Agent unavailability — drive escalates immediately rather than falling back to inline review, preserving the cold-fork separation contract.
+
+### Removed
+
+- `drive.yaml` per-iteration orchestration state — replaced by bead metadata fields.
+- `progress.md` AC tracker — replaced by bead `acceptance_criteria` field via `parse-acceptance.sh`.
+- `rally.yaml` rally state — replaced by epic bead + child bead graph.
+- Bead snapshot bridge (`bead-snapshot-<date>.md`, `bead-snapshot-<date>-pr.md`) from drive's review pipeline.
+
 ## [0.3.3] - 2026-04-22
 
 ### Added
