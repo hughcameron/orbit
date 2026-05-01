@@ -1,0 +1,324 @@
+goal: >
+  Rewrite /orb:rally so that rally.yaml is removed and the bead dependency
+  graph is the rally's durable state. Rally creates an epic bead at proposal
+  approval; each card becomes a child task bead linked via promote.sh +
+  bd update --parent. bd ready --type task --parent <epic> replaces TaskList
+  and rally.yaml-driven orchestration. bd dep add wires implementation order
+  from the disjointness check (and supports mid-flight serial conversion).
+  Single-strike NO-GO becomes bd close --reason "PARKED: ...". The proposal
+  gate, thin-card refusal, decision-pack design, three-primitive snapshot-
+  diff verification, consolidated decision gate, disjointness check, and
+  PR strategies are preserved.
+
+constraints:
+  - rally.yaml is removed; orchestration state lives on the epic bead and per-card child beads
+  - The rally-as-epic mapping is canonical — bd create -t epic for the rally; promote.sh + bd update --parent <epic> for each card
+  - Phase tracking lives in epic metadata via rally_phase (proposing | approved | designing | design-review | implementing | complete)
+  - Per-card phase tracking lives in child metadata via rally_card_phase (proposed | designing | designed | implementing | complete | parked)
+  - bd ready --type task --parent <epic-id> replaces TaskCreate / TaskList for in-session visibility
+  - Implementation order is encoded as bd dep add <later-bead> <earlier-bead> edges between child beads — graph topology IS the order
+  - Mid-flight parallel→serial conversion is a single bd dep add invocation; no rally.yaml mutation
+  - Single-strike NO-GO becomes bd close <child> --reason "PARKED: [<reason_label>] <constraint>" — no parked_constraint field
+  - The two-layer state model (rally.yaml + drive.yaml) is removed; the bead graph is the only layer
+  - The §11 worktree path-resolution rule is removed; drive resumes from bead metadata, not drive.yaml
+  - The §12 rally.yaml validation section is removed; beads enforces structural validity
+  - Sub-agents run /orb:drive <bead-id> (drive accepts bead-id since orbit-6da.2); they never read or write rally.yaml or any rally-coordination file
+  - The proposal gate three options (approve-all / modify-list / decline) are preserved verbatim with their AskUserQuestion descriptions
+  - Thin-card refusal at proposal (≥3 scenarios) is preserved with no silent downgrade
+  - The three-primitive snapshot-diff verification (pre/post git status, returned JSON, artefact assertion under <spec_dir>) is preserved with the same retry/park rules
+  - Drive autonomy inside a rally is always full — rally-level autonomy (guided | supervised) governs rally-phase pauses only
+  - The reason_label vocabulary (budget | recurring_failure | contradicted_hypothesis | diminishing_signal | review_converged | tool_surface_incomplete) is preserved and emitted inline in close --reason
+  - Stacked PRs (serial) and batched diff review (parallel) strategies are preserved; rally.yaml is removed but git/PR mechanics are unchanged
+  - There is no migration path for in-flight rally.yaml rallies — they finish under the prior version
+  - Card and memo formats are unchanged
+
+acceptance_criteria:
+  - id: ac-01
+    ac_type: gate
+    description: >
+      Lock the input contract. /orb:rally accepts:
+      (a) `<goal_string> [guided|supervised]` — fresh rally; resolution
+          runs the §pre-flight scan first to refuse if an in-progress
+          rally epic exists; or
+      (b) `<epic-id>` — resume an existing rally epic.
+      With no argument, drive resolves an in-progress rally epic via
+      `bd list --type epic --status in_progress --json` filtered to
+      epics carrying a `rally_phase` metadata key whose value is not
+      `complete`. Single match → resume; zero matches → proceed to
+      proposal stage if a goal_string is provided, otherwise halt;
+      multiple matches → halt and ask the agent to pass the epic-id
+      explicitly.
+    verification: >
+      "Input contract" section in SKILL.md names the three branches
+      with concrete bd commands (bd list --type epic --status
+      in_progress with rally_phase filter).
+
+  - id: ac-02
+    ac_type: gate
+    description: >
+      Thin-card refusal preserved verbatim at proposal. Before the
+      proposal is presented to the author, drive checks the scenario
+      count on every candidate card. If any candidate has fewer than 3
+      scenarios, the proposal refuses with the existing message
+      template that names the offending card and offers thicken /
+      remove / individual drive paths. Guard re-runs inside the
+      modify-list loop are pre-qualification retries (not strikes).
+    verification: >
+      "Pre-flight: thin-card guard" section in SKILL.md contains the
+      BLOCKED message template, the ≥3-scenario rule, the modify-list
+      re-run rule, and the explicit "no silent downgrade" framing.
+
+  - id: ac-03
+    ac_type: code
+    description: >
+      Proposal stage produces an epic bead and child beads. SKILL.md
+      instructs the lead to:
+      (a) scan `orbit/cards/*.yaml` (excluding memos) and rank
+          candidates against the goal string;
+      (b) run the §thin-card guard;
+      (c) present the §proposal preview block + AskUserQuestion with
+          the three canonical options (approve-all / modify-list /
+          decline), descriptions preserved verbatim;
+      (d) on approve-all, create an epic bead via
+          `EPIC=$(bd create "<goal>" -t epic -p 1 --description ... --silent)`
+          and seed metadata via
+          `bd update <epic> --set-metadata "rally_phase=approved"
+           --set-metadata "rally_autonomy=<level>"
+           --set-metadata "rally_started=<timestamp>"`;
+      (e) for each approved card, run
+          `CHILD=$(plugins/orb/scripts/promote.sh <card>)`
+          then
+          `bd update <child> --parent <epic>
+           --set-metadata "rally_card_phase=proposed"
+           --set-metadata "rally_branch=rally/<slug>"
+           --set-metadata "rally_spec_dir=<spec_dir>"`.
+      No rally.yaml is written.
+    verification: >
+      "Proposal stage" section uses bd create -t epic, the three
+      canonical AskUserQuestion options verbatim, promote.sh per
+      child, bd update --parent + --set-metadata, and contains zero
+      rally.yaml write instructions.
+
+  - id: ac-04
+    ac_type: code
+    description: >
+      Decision-pack design stage preserved with snapshot-diff
+      verification. Sub-agent brief (per card) is preserved with
+      these adjustments:
+      (a) brief tells the sub-agent its `<spec_dir>` (read from
+          `bd show <child> --json` metadata `rally_spec_dir`);
+      (b) brief tells the sub-agent NOT to read or write rally.yaml
+          (any rally state) — the lead owns rally state on the epic
+          bead;
+      (c) on return, lead runs the three-primitive verification:
+          self-report (returned JSON `files` list), artefact
+          assertion (`<spec_dir>/decisions.md` exists, all returned
+          paths under `<spec_dir>`), and snapshot diff (post \ pre
+          git status --porcelain restricted to <spec_dir> + the
+          fixed lead-allowlist; rally.yaml is NOT on the allowlist
+          because it does not exist).
+      First violation → re-brief same sub-agent with explicit warning
+      (pre-qualification retry, not strike). Second violation for the
+      same card → park the card via
+      `bd close <child> --reason "PARKED: [tool_surface_incomplete]
+      sub-agent violated path discipline"` and continue.
+    verification: >
+      "Stage 2: Decision packs" section in SKILL.md retains the
+      sub-agent brief shape, the three-primitive verification, the
+      retry-vs-strike distinction, and parks via bd close --reason
+      (not by writing parked_constraint anywhere).
+
+  - id: ac-05
+    ac_type: code
+    description: >
+      Consolidated decision gate + interview production. Lead reads
+      every `<spec_dir>/decisions.md`, presents them grouped by card
+      in a single response, and uses AskUserQuestion per card to
+      capture approvals and per-decision overrides. After approvals,
+      lead invokes interview production (re-launch sub-agents OR have
+      lead write directly) to produce `<spec_dir>/interview.md` per
+      card following the design skill's interview format. The same
+      three-primitive verification applies to any re-launched
+      sub-agent. After interviews exist, lead transitions epic
+      metadata: `rally_phase=design-review` and each child's
+      `rally_card_phase=designed`.
+    verification: >
+      "Stage 3: Decision gate" section uses AskUserQuestion per card,
+      retains the override-capture flow, and updates epic + child
+      metadata via bd update --set-metadata. No rally.yaml writes.
+
+  - id: ac-06
+    ac_type: code
+    description: >
+      Consolidated design review + disjointness wiring. Lead presents
+      a consolidated review of all interviews, then runs the
+      disjointness check (extract files / symbols / shared references
+      from each interview; compute pairwise intersections). On
+      non-empty intersection: lead proposes an implementation order
+      via AskUserQuestion; on confirm, lead encodes the order as
+      `bd dep add <later-bead> <earlier-bead>` for each ordered pair.
+      On empty intersection: no edges added (parallel-safe). Update
+      epic `rally_phase=implementing`. In supervised mode, pause for
+      greenlight before proceeding to implementation.
+    verification: >
+      "Stage 4: Disjointness" section uses bd dep add to encode order
+      between child beads, names the empty-intersection parallel-safe
+      branch, and gates the implementation transition behind the
+      supervised greenlight.
+
+  - id: ac-07
+    ac_type: code
+    description: >
+      Implementation stage uses bd ready as the queue. Serial flow
+      (when edges exist): the lead repeatedly runs
+      `bd ready --type task --parent <epic-id>` to surface the next
+      claimable card; the lead either claims and runs `/orb:drive
+      <bead-id>` inline (main checkout, against the rally branch) or
+      delegates to a sub-agent via the Agent tool. Parallel flow
+      (no edges): the lead uses
+      `bd list --type task --parent <epic-id> --status open --json`
+      to enumerate all cards, creates a worktree per card via
+      `git worktree add ../<repo>-rally-<slug> rally/<slug>`,
+      writes `rally_worktree=<absolute-path>` on each child, then
+      spawns N sub-agents via the Agent tool with
+      `run_in_background: true`, each running `/orb:drive <bead-id>`
+      inside its worktree. Sub-agent brief contains: bead-id,
+      worktree path, instruction to claim atomically, and the JSON
+      return contract.
+    verification: >
+      "Stage 5: Implementation" section uses bd ready --type task
+      --parent for serial, bd list + worktree + Agent for parallel,
+      and delegates per-card execution to /orb:drive <bead-id>. No
+      inlined drive logic. No TaskCreate references.
+
+  - id: ac-08
+    ac_type: code
+    description: >
+      Single-strike NO-GO via bd close --reason. When a sub-agent
+      returns `{ "verdict": "parked", "reason_label": "<label>",
+      "reason": "<text>", "spec_dir": "<spec_dir>" }`, the lead runs
+      `bd close <child-bead> --reason "PARKED: [<reason_label>]
+      <reason>"`. No retry at rally level. The reason_label
+      vocabulary is preserved (six tokens: budget, recurring_failure,
+      contradicted_hypothesis, diminishing_signal, review_converged,
+      tool_surface_incomplete). Unrecognised or missing label → use
+      literal `[unknown]` prefix. After park, the lead continues with
+      the remaining ready cards.
+    verification: >
+      "Single-strike NO-GO" section uses bd close --reason with
+      "PARKED:" prefix, preserves the six reason_label tokens, and
+      explicitly disallows rally-level retry.
+
+  - id: ac-09
+    ac_type: code
+    description: >
+      Mid-flight parallel→serial conversion. SKILL.md documents that
+      if shared-symbol contention is discovered after parallel launch
+      (e.g. two in-progress sub-agents both modify the same file),
+      the lead can run `bd dep add <later-bead> <earlier-bead>` to
+      serialize. In-progress work continues; queued work waits via
+      bd ready blocker semantics. No rally.yaml edit, no sub-agent
+      restart, no special "convert to serial" mode.
+    verification: >
+      "Mid-flight serial conversion" subsection (or equivalent inside
+      the implementation stage) names the bd dep add invocation and
+      states that no rally.yaml mutation is required.
+
+  - id: ac-10
+    ac_type: code
+    description: >
+      PR strategy preserved (stacked + batched). Stacked PRs (serial)
+      target the previous non-parked card's branch; if a middle card
+      is parked, subsequent PRs target the last non-parked branch.
+      Batched diff review (parallel) presents all PRs together for
+      author review. The PR-strategy section is preserved from the
+      old skill — only the rally.yaml-state references are stripped
+      (replaced with bead metadata reads where applicable).
+    verification: >
+      "Stage 6: Assurance" section retains stacked PR + batched diff
+      strategies, names the parked-skip rule for stacked PRs, and
+      contains zero rally.yaml references.
+
+  - id: ac-11
+    ac_type: code
+    description: >
+      Completion. When all child beads are closed (status closed
+      regardless of reason), the lead writes the completion summary
+      (preserving the existing format with completed PRs, parked
+      cards, implementation order, rationale), updates epic metadata
+      `rally_phase=complete` and `rally_completed=<timestamp>`, then
+      runs `bd close <epic-id> --reason "rally complete: <one-line>"`
+      OR `bd epic close-eligible` (whichever closes the epic). The
+      rally folder stays in place — no archival step.
+    verification: >
+      "Completion" section computes child closures via
+      `bd children <epic-id>`, sets rally_phase=complete, closes the
+      epic, and explicitly states "no archival step".
+
+  - id: ac-12
+    ac_type: code
+    description: >
+      Resumption uses bd list --type epic instead of rally.yaml scan.
+      §pre-flight: when /orb:rally is invoked, lead runs
+      `bd list --type epic --status in_progress --json` filtered to
+      epics with `metadata.rally_phase` set and not equal to
+      `complete`. Single match → resume; zero → proceed to proposal
+      (if goal_string provided) or halt; multiple → halt with
+      candidate list. On resume, lead reads `bd show <epic> --json`
+      for `rally_phase` and `bd children <epic> --json` for each
+      child's status + `rally_card_phase`. Resume at the named phase.
+      No file-presence detection. No drive.yaml resolution rule.
+    verification: >
+      "Resumption" section uses bd list --type epic + metadata
+      filter, names no file-presence rules, names no path-resolution
+      rule for drive.yaml, and emits a structured announcement.
+
+  - id: ac-13
+    ac_type: gate
+    description: >
+      Removal sweep. The new SKILL.md contains zero substantive
+      references to: `rally.yaml` (as durable state), the two-layer
+      state model, `parked_constraint` field, TaskCreate / TaskUpdate,
+      `drive.yaml` (as drive's state file), file-presence stage
+      detection, the §11 worktree path-resolution rule, the §12
+      rally.yaml validation section, or `commit-before-delegation`
+      framed as a drive resumption requirement. Historical migration
+      notes are allowed if explicitly framed as "removed in this
+      version" or "replaced by <X>" within a clearly-labelled
+      Migration Note section.
+    verification: >
+      grep of plugins/orb/skills/rally/SKILL.md for each forbidden
+      string returns either zero matches or matches confined to the
+      Migration Note section.
+
+  - id: ac-14
+    ac_type: code
+    description: >
+      Worked example. SKILL.md ends with a copy-pasteable command
+      trace covering at minimum: scan candidates, thin-card guard,
+      AskUserQuestion proposal, bd create -t epic, promote per card +
+      bd update --parent, sub-agent brief for decisions.md, decision
+      gate, interview production, disjointness wiring (bd dep add or
+      no-op), parallel implementation launch (worktree + Agent
+      run_in_background), single-strike park (bd close --reason
+      "PARKED: ..."), completion (bd close epic). Each step is a
+      literal command, not prose.
+    verification: >
+      "Worked example" section at end of SKILL.md contains a
+      sequential command trace covering at minimum: bd create -t
+      epic, promote.sh, bd update --parent, bd ready --type task
+      --parent, bd dep add (or comment marking the parallel branch),
+      bd close --reason.
+
+metadata:
+  bead: orbit-6da.3
+  rally: orbit-6da
+  decision_ref: orbit/decisions/0011-beads-execution-layer.md
+  predecessor_specs:
+    - orbit/specs/2026-05-01-implement-skill-beads-rewrite/spec.yaml
+    - orbit/specs/2026-05-01-drive-skill-beads-rewrite/spec.yaml
+  interview_ref: orbit/specs/2026-05-01-rally-skill-beads-collapse/interview.md
+
+deliverables:
+  - path: plugins/orb/skills/rally/SKILL.md
+    description: New beads-native /orb:rally skill (replaces in place)
