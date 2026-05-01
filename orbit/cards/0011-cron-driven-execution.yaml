@@ -1,0 +1,51 @@
+feature: Scheduled agent runs between planning sessions
+as_a: author
+i_want: agents to run on cadences between my daily planning sessions, checking state, picking up ready work, and emitting shift reports
+so_that: project progress continues when I am not at the keyboard
+
+scenarios:
+  - name: Agent runs on a cadence
+    given: a project has an objective function and ready work
+    when: the scheduled cadence fires (hourly to six-hourly)
+    then: the agent checks state, picks up the next ready item against the objective function, and executes it
+
+  - name: Cron run emits a shift report
+    given: a cron run completes
+    when: the agent finishes its work window
+    then: a thin shift report is emitted recording what was done, what changed, what's blocked, and objective function movement
+
+  - name: Shift reports are terse
+    given: a shift report is generated
+    when: I read it during daily planning
+    then: the report is structured and scannable — not a narrative, not a wall of text
+
+  - name: Ready-work selection is idempotent
+    given: a cron run is interrupted or the session dies
+    when: the next cron run fires
+    then: the ready-work query returns the correct next item without reconstructing prior session state
+
+  - name: Decision boundaries stop the cron
+    given: the agent encounters a choice whose impact on the objective cannot be predicted
+    when: the cron run is in progress
+    then: the agent records the decision boundary in the shift report and stops, leaving the decision for daily planning
+
+  - name: Shift reports do not bloat
+    given: multiple cron runs fire between planning sessions
+    when: reports accumulate
+    then: reports are individually small and collectively summarisable without losing signal
+
+goal: "work pushes forward between human sessions with structured evidence of what happened"
+
+maturity: planned
+
+relations:
+  - card: 0010-objective-functions
+    type: depends-on
+    reason: ready-work selection and stop conditions require a defined objective function
+  - card: 0012-daily-planning-protocol
+    type: feeds
+    reason: shift reports are the primary input to daily planning
+
+references:
+  - "orbit/discovery/orbit-autonomy.md: §Crons join the model"
+  - "orbit/discovery/orbit-autonomy.md: §shape of a shift report"

@@ -1,15 +1,4 @@
 {
-  "description": "Orbit workflow context — shows in-flight spec status at session start",
-  "hooks": {
-    "SessionStart": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/scripts/session-context.sh\""
-          }
-        ]
-      }
-    ]
-  }
+  "description": "Orbit workflow hooks — session context now provided by beads (bd prime via .beads/PRIME.md)",
+  "hooks": {}
 }
