@@ -38,6 +38,7 @@ Use **AskUserQuestion** to gather:
    - **given**: Precondition
    - **when**: Action or event
    - **then**: Observable outcome (in user language, not engineering language)
+   - **gate** (optional, default false): When `true`, the scenario describes a sequencing checkpoint — the corresponding bead AC blocks all subsequent ACs by declaration order. `promote.sh` propagates this into the bead acceptance field as a `[gate]` marker. Use sparingly — only for scenarios that name a decision or prerequisite that must complete before later scenarios can begin.
 6. **Goal**: What does success look like right now? (optional) — a specific, measurable target at the current maturity. The `so_that` says why the capability matters (timeless); the `goal` says what you're driving toward right now. Goals evolve as the capability matures — git history tracks the progression.
 7. **Maturity**: How mature is this capability? (optional)
    - `established` — built and working
@@ -60,6 +61,7 @@ scenarios:
     given: "<precondition>"
     when: "<action or event>"
     then: "<observable outcome>"
+    # gate: true   # optional — propagates to bead AC as [gate] via promote.sh
 
   - name: "<scenario name>"
     given: "<precondition>"

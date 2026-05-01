@@ -1,7 +1,7 @@
 ---
-status: accepted
+status: superseded by 0013 (review-pr scope only — `test_prefix` remains live in spec/spec-architect/audit/implement)
 date-created: 2026-04-17
-date-modified: 2026-04-17
+date-modified: 2026-05-01
 ---
 # 0002. Spec-Scoped Test Prefix for AC Namespace Disambiguation
 
