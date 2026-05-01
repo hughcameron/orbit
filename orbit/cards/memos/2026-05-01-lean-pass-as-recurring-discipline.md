@@ -22,6 +22,7 @@ Beyond bd memories, the same accretion happens in:
 - **Dead code.** Conditionals that handle removed features, fallback paths for removed substrates, parameters never set by callers. The 0.3.3 → 0.4.0 cutover removed the snapshot bridge but the *concept* of "old vs new substrate" leaves behind dead branches in any project that imports orbit pipeline conventions.
 - **Old beads.** Closed beads accumulate. `bd ready` filters them out, but `bd list` doesn't. Status-based pruning could keep the active set scannable.
 - **Memos.** Memos accumulate in `orbit/cards/memos/`. The 0.4.0 close-out caught one memo (`2026-04-20-specs-array-prose-enforcement-gap.md`) that was already dissolved by 0.4.0 but never deleted. `/orb:distill` runs ad-hoc; nothing forces a memo lifecycle review.
+- **CLAUDE.md files.** Project CLAUDE.md files accrete instructions across sessions and rarely shed them. The FineType repo crossed the threshold — Claude Code now warns at session start: `⚠ Large CLAUDE.md will impact performance (41.5k chars > 40.0k) · /memory to edit`. The harness flags it, but only as a soft nudge at startup. Without a deliberate lean pass, CLAUDE.md drifts past the performance threshold and stays there — every session pays the tax until someone audits.
 
 ## What "lean" might mean
 
