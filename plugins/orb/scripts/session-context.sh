@@ -1,4 +1,12 @@
 #!/usr/bin/env bash
+# DEPRECATED — 2026-05-01 (spec: orbit/specs/2026-05-01-beads-foundation)
+#
+# Session-start context is now provided by beads via .beads/PRIME.md.
+# Run plugins/orb/scripts/bd-init.sh to set up beads integration.
+# This file is retained for reference but is no longer registered as a hook.
+# See orbit/decisions/0011-beads-execution-layer.md (D3).
+#
+# Original description:
 # session-context.sh — SessionStart hook for orbit workflow context
 # Checks for in-flight specs, surfaces hard constraints, and suggests the next workflow step.
 

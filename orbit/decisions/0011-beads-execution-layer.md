@@ -1,0 +1,55 @@
+---
+status: accepted
+date-created: 2026-04-30
+date-modified: 2026-04-30
+---
+# 0011. Beads as orbit's execution substrate
+
+## Context and Problem Statement
+
+Orbit's execution layer (drive.yaml, rally.yaml, progress.md, decisions.md, session-context.sh) has grown into multiple overlapping state mechanisms. The beads trial replay of the UX uplift rally demonstrated that beads' dependency graph, auto-ready query, atomic claim, and memory system are strictly better for orchestration. The question is how orbit's execution discipline (gate ACs, cold-fork review, iteration budgets) layers on top of beads.
+
+## Considered Options
+
+### D1: AC structure within beads
+- **A. Checklist convention in bead description** — freeform, fragile parsing
+- **B. Sub-beads per AC with dependency edges** — native enforcement, graph noise (40+ beads per rally)
+- **C. Companion file lighter than spec.yaml** — structured but two artefacts, sync drift
+- **A+. Beads acceptance field with gate marker convention** — purpose-built field, orbit owns parsing, escalate to sub-beads for gates if convention proves fragile
+
+### D2: Cold-fork review
+- **A. Keep cold-fork, reads from beads** — proven quality mechanism, data source changes
+- **B. Replace with objective-function gate + test coverage** — fastest autonomous path, weaker quality
+- **C. Cold-fork keyed to autonomy level** — trust ladder, but autonomy level controls flow interruption not quality trust
+
+### D3: Context injection
+- **A. bd prime as-is** — ~150 lines, heavy, generic
+- **B. Custom PRIME.md (stripped)** — lighter but still generic
+- **C. session-context.sh reads from beads** — targeted but maintains a separate orbit injection layer
+- **D. Thin bd prime + progressive bd show** — thin startup, agent pulls context on demand
+
+### D4: Epic-in-ready noise
+- **A. Convention** — document "don't claim epics", relies on compliance
+- **B. Filter by type** — bd ready --type task, deterministic but drops planning visibility
+- **C. Pin the epic** — per-bead, easy to forget
+- **B+. Mode-appropriate query** — execution uses bd ready --type task, planning uses bd ready unfiltered
+
+## Decision Outcome
+
+**D1: Option A+ (acceptance field with gate convention).** Acceptance criteria live in the bead's acceptance field with `[gate]` markers for sequential enforcement. Orbit's implement skill parses this convention. If gate parsing proves fragile in practice, escalate gate ACs to sub-beads with blocking dependency edges — non-gates stay as checklist items.
+
+**D2: Option A (cold-fork stays).** Autonomy level controls flow interruption, not quality trust. Hugh uses full autonomy for convenience (agent keeps pushing) and relies on the cold-fork to catch defects. The cold-fork reads from beads (acceptance field) instead of spec.yaml. The nesting problem (rally-cold-fork-degradation memo) is handled by the existing ToolSearch pre-flight + escalation fix.
+
+**D3: Option D (thin bd prime + progressive bd show).** Custom PRIME.md strips the command reference to ~20 lines: ready queue, objective function status, and memories. Agent pulls deeper context on demand via `bd show <id>` when it claims a bead. session-context.sh is deprecated. Orbit encodes its discipline in bead fields (acceptance, description, memories), not in a separate injection layer.
+
+**D4: Option B+ (mode-appropriate query).** Execution contexts (cron runs, mid-implementation) use `bd ready --type task`. Planning contexts (daily sessions, rally formation) use unfiltered `bd ready` so epics are visible for orchestration. No structural exclusion — just the right query for the right mode.
+
+### Consequences
+- Good, because orchestration state (rally.yaml, drive.yaml, progress.md scanning) collapses into beads' dependency graph and auto-ready query
+- Good, because session-context.sh and three separate resumption mechanisms are replaced by a single thin bd prime + progressive bd show pattern
+- Good, because decisions.md files are replaced by bd remember with auto-injection via bd prime
+- Good, because cold-fork review quality mechanism is preserved regardless of autonomy level
+- Good, because parallel-to-serial conversion mid-flight becomes a single bd dep add command
+- Bad, because gate AC parsing is a convention (fragile) until proven — may need escalation to sub-beads
+- Bad, because orbit now depends on beads as external infrastructure — beads availability becomes a hard requirement
+- Bad, because the acceptance field format is an orbit-specific convention not validated by beads itself
