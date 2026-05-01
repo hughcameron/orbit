@@ -1,0 +1,58 @@
+feature: /orb:setup is bead-aware
+as_a: orbit user setting up a new project or migrating an existing one
+i_want: /orb:setup to handle bead initialisation as part of project setup, not as a separate manual step
+so_that: orbit/ layout and beads init are atomic — there is no half-set-up state where the workflow vocabulary exists but beads isn't initialised, and pilot rollouts to FineType / Brightfield / private-project / Arcform can be a single command per project
+
+scenarios:
+  - name: bd precondition check refuses without bd 1.0.3+
+    given: a project where bd is not installed or is older than 1.0.3
+    when: the user runs /orb:setup
+    then: setup refuses with a one-line install instruction and exits without mutating the repo — orbit IS the bead-native workflow under 0.4.0+, there is no useful orbit-without-beads degradation
+    gate: true
+
+  - name: Plugin version sanity requires 0.4.0+
+    given: the orbit plugin cache directory only contains pre-0.4.0 versions
+    when: the user runs /orb:setup
+    then: setup refuses with a message naming the missing minimum version, since the bd-init.sh script writes a PRIME.md that assumes the bead-native skill set
+
+  - name: Greenfield setup creates orbit layout AND .beads in one pass
+    given: a project with no orbit/ directory and no .beads/ directory
+    when: the user runs /orb:setup
+    then: setup creates orbit/cards/, orbit/specs/, orbit/decisions/, orbit/cards/memos/, runs bd-init.sh to create .beads/ + PRIME.md + gitignore entries, and writes the CLAUDE.md vocabulary block — all in a single idempotent pass
+
+  - name: Brownfield with orbit/ but no .beads/ prompts before adding
+    given: a project that already has orbit/ but no .beads/ directory (an orbit project from before 0.4.0)
+    when: the user runs /orb:setup
+    then: setup detects the gap and prompts the user before mutating — the prompt names what will be added (.beads/, PRIME.md, gitignore entries) and the user can decline; on yes, the bd-init.sh invocation runs idempotently
+
+  - name: Brownfield with both orbit/ and .beads/ is a clean no-op
+    given: a project that already has orbit/ and .beads/ initialised
+    when: the user runs /orb:setup
+    then: setup verifies the layout, reports what's already in place, and exits without mutating anything — running setup on a fully-initialised project is safe and emits no warnings
+
+  - name: Drive's input contract surfaces a "run setup first" error when .beads/ is absent
+    given: a project where /orb:setup has not been run (no .beads/ directory)
+    when: the user runs /orb:drive
+    then: drive halts at its input contract with a message naming /orb:setup as the prerequisite, rather than failing downstream when bd commands fail mid-pipeline
+
+  - name: Smoke-test stays out of setup
+    given: setup has just completed successfully
+    when: the user wants to validate the bead-native flow end-to-end
+    then: setup does not auto-run a drive — validation is a separate operator concern (manual /orb:drive on an existing card, or a future /orb:smoke-test skill if it earns its keep)
+
+goal: "/orb:setup is the canonical bead-init gate for orbit 0.4.0+ — running it on any project (greenfield or brownfield) leaves both the orbit/ workflow layout and the .beads/ tracker in a working state, with no manual bd-init.sh step required by the operator"
+
+maturity: planned
+
+specs: []
+
+relations:
+  - card: 0016-bead-native-cold-fork-reviews
+    type: depends-on
+    reason: 0016 made the bead acceptance field the substrate for cold-fork reviews; this card makes /orb:setup the canonical entry point for getting that substrate in place
+
+references:
+  - "plugins/orb/scripts/bd-init.sh: idempotent script that creates .beads/, PRIME.md, and gitignore entries — already exists, /orb:setup just needs to call it"
+  - "plugins/orb/skills/setup/SKILL.md: current setup skill — handles orbit/ layout and CLAUDE.md vocabulary, no beads awareness"
+  - "MIGRATION-0.4.0.md: operator playbook for the manual bead-init pilot rollout — this card replaces those manual steps with /orb:setup"
+  - "orbit/decisions/0011-beads-execution-layer.md: substrate decision that makes setup-without-beads a non-state under 0.4.0+"
