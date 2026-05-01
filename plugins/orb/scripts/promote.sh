@@ -74,6 +74,7 @@ for s in card.get('scenarios', []):
         'given': s.get('given', ''),
         'when': s.get('when', ''),
         'then': s.get('then', ''),
+        'gate': bool(s.get('gate', False)),
     })
 
 json.dump(out, sys.stdout)
@@ -114,7 +115,8 @@ for i, s in enumerate(card['scenarios'], 1):
     ac_id = f'ac-{i:02d}'
     name = s['name']
     then_clause = s['then']
-    lines.append(f'- [ ] {ac_id}: {name} — {then_clause}')
+    gate_marker = ' [gate]' if s.get('gate') else ''
+    lines.append(f'- [ ] {ac_id}{gate_marker}: {name} — {then_clause}')
 print('\n'.join(lines))
 ")
 

@@ -12,47 +12,49 @@ Verify an implementation before merge. This skill runs in a **forked context** �
 ## Usage
 
 ```
-/orb:review-pr [branch_or_pr]
+/orb:review-pr <bead-id> [branch_or_pr]
 ```
+
+The skill takes a beads identifier — the bead's acceptance field is the implementation contract. The branch/PR argument is optional; if omitted the current branch is used.
 
 ## Instructions
 
 ### 1. Identify What to Review
 
-- If a branch name or PR number is provided via $ARGUMENTS: use it
-- If not: check the current branch or most recent PR
-- Locate the associated spec (check PR description, recent `orbit/specs/*/spec.yaml`, or search)
-- Gather the diff: `git diff main...HEAD`
+- The bead-id is required via $ARGUMENTS. If not provided, report `no bead-id provided — review-pr requires a bead-id under the bead-native substrate` and stop.
+- If a branch name or PR number is provided alongside the bead-id: use it.
+- If not: use the current branch or most recent PR.
+- Gather the diff: `git diff main...HEAD`.
 
 ### 2. Phase 1: Read the Diff
 
-1. Run `git diff main...HEAD` to see all changes
-2. Read the spec to understand what was intended
-3. If `progress.md` exists alongside the spec, read it — this is the implementer's self-reported AC tracker from `/orb:implement`. Cross-reference it with your own findings.
-4. Identify which acceptance criteria this implementation claims to satisfy
-5. Run a keyword scan (see `/orb:keyword-scan`) against `orbit/decisions/` using terms from the spec's goal and constraints. If relevant decisions exist, verify the implementation respects them. Flag violations as findings.
+1. Run `git diff main...HEAD` to see all changes.
+2. Read the bead via `bd show <bead-id> --json` to understand what was intended — the description carries the goal and any prose constraints.
+3. Run `plugins/orb/scripts/parse-acceptance.sh acs <bead-id>` to enumerate the AC list with current check status. The bead acceptance field replaces the earlier `progress.md` tracker — `[x]` marks are the implementer's self-reported AC completions, set by `/orb:implement` via `parse-acceptance.sh check`.
+4. Identify which acceptance criteria this implementation claims to satisfy from the parsed `[x]` rows.
+5. Run a keyword scan (see `/orb:keyword-scan`) against `orbit/decisions/` using terms from the bead's description goal and any constraint prose. If relevant decisions exist, verify the implementation respects them. Flag violations as findings.
 
 ### 3. Phase 2: Run Tests + AC Coverage Check
 
 1. Run the project's test suite. Record pass/fail with output.
-2. **AC-to-test coverage check**: Parse the spec for AC IDs (`ac-NN`), their `ac_type` field, and `metadata.test_prefix`. Only `code`-type ACs require tests. ACs typed as `doc`, `gate`, or `config` are exempt. If `ac_type` is missing, treat as `code`.
-
-If `test_prefix` is present (e.g., `remat`), search for prefixed test names (`remat_ac01_*`). If absent, search for bare `ac<NN>` names (backward-compatible).
+2. **AC-to-test coverage check**: For every AC parsed in Phase 1, search the project's test sources for a test bearing the bare AC identifier (`ac<NN>` or `ac-NN`).
 
 ```
-AC Coverage Report (prefix: remat):
-  ac-01 (code):   ✓ remat_ac01_creates_project_structure
-  ac-02 (code):   ✓ remat_ac02_manifest_has_correct_fields
-  ac-03 (doc):    EXEMPT (document deliverable)
-  ac-04 (code):   ✗ NO TEST FOUND
-  Coverage: 2/3 testable ACs have tests (67%), 1 exempt
+AC Coverage Report:
+  ac-01:   ✓ ac01_creates_project_structure
+  ac-02:   ✓ ac02_manifest_has_correct_fields
+  ac-03:   ✗ NO TEST FOUND
+  ac-04:   ✓ ac04_handles_edge_case
+  Coverage: 3/4 ACs have tests (75%)
 ```
 
-Cross-language patterns to search (with prefix `remat`; omit prefix if `test_prefix` absent):
-- Rust: `fn remat_ac<NN>`
-- Python: `def test_remat_ac<NN>` or `def remat_ac<NN>`
-- TypeScript: `test('remat_ac<NN>` or `it('remat_ac<NN>`
-- General: grep for `remat_ac<NN>` prefix in test directories
+Cross-language patterns to search:
+- Rust: `fn ac<NN>` or `fn test_ac<NN>`
+- Python: `def test_ac<NN>` or `def ac<NN>`
+- TypeScript: `test('ac<NN>` or `it('ac<NN>`
+- Bash/general: grep for `ac<NN>` or `ac-<NN>` in test directories
+
+In the honest-assessment paragraph, contextualise which uncovered ACs are doc/gate-style (judged from each AC's description text — e.g. an AC that names a documentation deliverable or a sequencing gate, not a code change) versus genuine test gaps. The bead AC carries description text and a gate flag only; the reviewer reads the description and judges whether a missing test is a real gap or an exempt non-code AC.
 
 ### 4. Phase 3: Environment Simulation
 
@@ -76,7 +78,7 @@ For changes that touch deployment, infrastructure, scripts, or cron:
 **Date:** <today>
 **Reviewer:** Context-separated agent (fresh session)
 **Branch:** <branch>
-**Spec:** <path to spec.yaml>
+**Bead:** <bead-id>
 **Verdict:** APPROVE / REQUEST_CHANGES / BLOCK
 
 ---
@@ -116,7 +118,7 @@ The header line `**Verdict:** APPROVE | REQUEST_CHANGES | BLOCK` is a **contract
 
 ### Output path (invoked inline vs forked)
 
-- **Inline invocation** (a human running `/orb:review-pr` directly): save to the default path `orbit/specs/YYYY-MM-DD-<topic>/review-pr-<date>.md`.
+- **Inline invocation** (a human running `/orb:review-pr <bead-id>` directly): save to the default path `orbit/reviews/<bead-id>/review-pr-<date>.md`.
 - **Forked-Agent invocation** (e.g. launched by `/orb:drive`): the invoking agent's brief will supply an explicit output path — **use the brief's path verbatim**. It takes precedence over the default. Drive uses cycle-ordinal suffixes (`-v2.md`, `-v3.md`) to disambiguate REQUEST_CHANGES cycles; writing to the default path when the brief specified a cycle-specific path will cause drive to report the review as missing and trigger a retry.
 
 ## Critical Rules

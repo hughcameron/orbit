@@ -19,7 +19,7 @@ All notable changes to orbit are documented here. Format follows [Keep a Changel
 
 ### Added
 - `implementation_notes` field in spec YAML format — means-level leads from the design session. Not constraints; starting context the implementing agent can use or override with evidence. Consumed by `/orb:implement`.
-- `orbit/decisions/0011-design-intent-not-means.md`
+- `orbit/decisions/0012-design-intent-not-means.md` (originally numbered 0011 at 0.3.2 release; renumbered in 0.4.0 to resolve a numbering collision with `0011-beads-execution-layer.md`)
 
 ## [0.3.1] - 2026-04-21
 

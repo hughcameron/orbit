@@ -28,7 +28,9 @@ beads:
   the prior version finish there or restart from the card
 
 Cold-fork review architecture (decision 0011 D2) is preserved — the
-fork now reads a bead snapshot rather than `spec.yaml`.
+fork reads the bead directly via `bd show <bead-id> --json` and
+`plugins/orb/scripts/parse-acceptance.sh acs <bead-id>`, with no
+intermediate spec.yaml or rendered snapshot artefact.
 
 ## Usage
 
@@ -177,28 +179,7 @@ any stage.
 Review-spec runs as a **forked Agent** via the Agent tool — fresh
 context, no shared conversation history.
 
-### 1.1 Write the bead snapshot
-
-Drive writes a static markdown render of the bead as the fork's input:
-
-```bash
-SNAPSHOT="orbit/reviews/<bead-id>/bead-snapshot-$(date -I).md"
-mkdir -p "$(dirname "$SNAPSHOT")"
-{
-  echo "# Bead snapshot — <bead-id>"
-  echo
-  echo "## Description"
-  bd show <bead-id> --json | python3 -c "import sys,json; d=json.load(sys.stdin); print((d[0] if isinstance(d,list) else d)['description'])"
-  echo
-  echo "## Acceptance criteria"
-  bd show <bead-id> --json | python3 -c "import sys,json; d=json.load(sys.stdin); print((d[0] if isinstance(d,list) else d)['acceptance_criteria'])"
-} > "$SNAPSHOT"
-```
-
-The snapshot is committed alongside the verdict file as a stable
-record of what the fork reviewed.
-
-### 1.2 Compute the cycle-specific verdict path
+### 1.1 Compute the cycle-specific verdict path
 
 Read `drive_review_spec_cycle` from bead metadata. Let N = that value
 + 1 (the cycle ordinal for this fork — 1-indexed).
@@ -217,15 +198,15 @@ Compute the output path:
 - **Cycle 2:** `orbit/reviews/<bead-id>/review-spec-<date>-v2.md`
 - **Cycle 3:** `orbit/reviews/<bead-id>/review-spec-<date>-v3.md`
 
-### 1.3 Idempotent resumption check
+### 1.2 Idempotent resumption check
 
 Before launching any fork, check whether a valid review already exists
 at the cycle-specific path. If the file exists AND contains a line
-matching the canonical verdict regex (§1.5), parse that verdict and
-proceed to §1.6 verdict handling **without launching any Agent**.
-Otherwise, continue to §1.4.
+matching the canonical verdict regex (§1.4), parse that verdict and
+proceed to §1.5 verdict handling **without launching any Agent**.
+Otherwise, continue to §1.3.
 
-### 1.4 Launch the forked review
+### 1.3 Launch the forked review
 
 **Pre-flight: verify Agent tool availability.** Run `ToolSearch
 select:Agent` to load the Agent schema. If ToolSearch returns no
@@ -239,17 +220,19 @@ Invoke the Agent tool with:
 
 - `subagent_type: general-purpose`
 - A brief containing **only**:
-  - The absolute path to the bead snapshot from §1.1
-  - The absolute path where the review must be written (§1.2)
-  - The instruction to read the snapshot cold, follow the
-    `/orb:review-spec` skill, and write the verdict to the specified
-    path using the canonical verdict line format
+  - The bead-id whose acceptance the reviewer must read
+  - The absolute path where the review must be written (§1.1)
+  - The instruction to read the bead via `bd show <bead-id> --json`,
+    parse ACs via `plugins/orb/scripts/parse-acceptance.sh acs <bead-id>`,
+    follow the `/orb:review-spec` skill, and write the verdict to the
+    specified path using the canonical verdict line format
 
 Example brief:
 
 ```
-Run /orb:review-spec on the spec snapshot at <absolute snapshot path>.
-The snapshot is the authoritative spec for this review. Write the
+Run /orb:review-spec on bead <bead-id>. Read the bead via `bd show <bead-id> --json`
+and parse ACs via `plugins/orb/scripts/parse-acceptance.sh acs <bead-id>` —
+the bead acceptance field is the authoritative spec for this review. Write the
 review to exactly <absolute output path> (this path takes precedence
 over the default path in the skill). Use the canonical verdict line
 format `**Verdict:** APPROVE | REQUEST_CHANGES | BLOCK`.
@@ -258,7 +241,7 @@ format `**Verdict:** APPROVE | REQUEST_CHANGES | BLOCK`.
 The brief must NOT include any conversation context, iteration counter,
 cycle number, or pointers to prior review files.
 
-### 1.5 Parse the verdict from the file
+### 1.4 Parse the verdict from the file
 
 After the fork returns, read the file at the cycle-specific output
 path. Locate the first line matching:
@@ -277,23 +260,23 @@ also produces no parseable verdict, drive escalates with
 `drive_stage=escalated` and the message `review could not be completed
 after 2 forked attempts at review-spec`.
 
-### 1.6 Verdict handling
+### 1.5 Verdict handling
 
 - **APPROVE:** Set `drive_stage=implement` on the bead. Proceed to
   Stage 2.
 
 - **REQUEST_CHANGES:**
   - Increment `drive_review_spec_cycle` on the bead.
-  - Check the budget (§1.7).
+  - Check the budget (§1.6).
   - If the budget allows another cycle: address the findings (edit the
     bead's acceptance field via `bd update --acceptance` or the bead's
     description via `bd update --description`), then return to §1.1
-    to write a fresh snapshot and re-fork.
+    to recompute the cycle-specific output path and re-fork.
 
 - **BLOCK:** Jump to §NO-GO Handling. The block reason becomes the
   NO-GO constraint.
 
-### 1.7 REQUEST_CHANGES budget & synthetic BLOCK
+### 1.6 REQUEST_CHANGES budget & synthetic BLOCK
 
 Each stage (review-spec, review-pr) has an **independent budget of 3
 REQUEST_CHANGES cycles per top-level iteration**. The counters live in
@@ -319,7 +302,7 @@ After incrementing the counter on a REQUEST_CHANGES verdict:
 the counter increment and the NO-GO write), synthesise the BLOCK on
 resume — do not launch a 4th fork.
 
-### 1.8 Supervised mode gate (review-spec)
+### 1.7 Supervised mode gate (review-spec)
 
 If autonomy is `supervised` AND the verdict was APPROVE, pause here.
 **Severity dispatch (see §Four-option verdict prompt):**
@@ -364,16 +347,13 @@ If NO-GO → §NO-GO Handling.
 
 ## Stage 3: Review-PR
 
-Mirrors Stage 1 mechanics with the diff brief.
+Mirrors Stage 1 mechanics with the diff brief. The forked reviewer
+reads the post-implement bead state directly via `bd show <bead-id>
+--json` and `parse-acceptance.sh acs <bead-id>` — the acceptance field
+may have been edited during implement, and the live `bd` query gives
+the reviewer the up-to-date state with no intermediate artefact.
 
-### 3.1 Write a fresh bead snapshot
-
-The acceptance field may have been edited during implement (e.g.
-detour escalation didn't change ACs but commentary may have). Write a
-new snapshot at `orbit/reviews/<bead-id>/bead-snapshot-<date>-pr.md`
-to give the PR reviewer the post-implement state.
-
-### 3.2 Compute the cycle-specific verdict path
+### 3.1 Compute the cycle-specific verdict path
 
 Using `drive_review_pr_cycle` and `drive_review_pr_date`:
 
@@ -381,13 +361,14 @@ Using `drive_review_pr_cycle` and `drive_review_pr_date`:
 - Cycle 2: `orbit/reviews/<bead-id>/review-pr-<date>-v2.md`
 - Cycle 3: `orbit/reviews/<bead-id>/review-pr-<date>-v3.md`
 
-### 3.3 Idempotent resumption check, fork launch, verdict parse
+### 3.2 Idempotent resumption check, fork launch, verdict parse
 
-As §1.3 / §1.4 / §1.5, with these differences:
+As §1.2 / §1.3 / §1.4, with these differences:
 
 - The Agent brief includes the diff reference (`git diff main...HEAD`
-  on the current branch) PLUS the bead-snapshot path for AC
-  cross-reference.
+  on the current branch) PLUS the bead-id for AC cross-reference (the
+  reviewer reads the live acceptance field via `bd show` and
+  `parse-acceptance.sh`).
 - Output path uses `review-pr` in place of `review-spec`.
 - Counter / date metadata uses `drive_review_pr_*`.
 - Retry escalation message: `review could not be completed after 2
@@ -397,17 +378,18 @@ Example brief:
 
 ```
 Run /orb:review-pr against the current branch. Implementation diff is
-`git diff main...HEAD` on <branch_name>. Spec snapshot for AC
-cross-reference is at <absolute snapshot path>. Write the review to
-exactly <absolute output path> (this path takes precedence over the
-default path in the skill). Use the canonical verdict line format
-`**Verdict:** APPROVE | REQUEST_CHANGES | BLOCK`.
+`git diff main...HEAD` on <branch_name>. Bead acceptance field is at
+bead-id <bead-id>; read via `bd show <bead-id> --json` and
+`plugins/orb/scripts/parse-acceptance.sh acs <bead-id>`. Write the
+review to exactly <absolute output path> (this path takes precedence
+over the default path in the skill). Use the canonical verdict line
+format `**Verdict:** APPROVE | REQUEST_CHANGES | BLOCK`.
 ```
 
-### 3.4 Verdict handling
+### 3.3 Verdict handling
 
 - **REQUEST_CHANGES:** Increment `drive_review_pr_cycle`. Check
-  budget (§1.7). If budget remains, address findings (edit the
+  budget (§1.6). If budget remains, address findings (edit the
   implementation), return to §3.1 for the next cycle. If budget
   exhausted, synthesise BLOCK.
 
@@ -468,7 +450,7 @@ read full review first
 - `approve` — terminal verdict. Drive advances to the next stage
   (implement after a spec gate; §Completion after a PR gate).
 - `request changes` — treated as a post-APPROVE REQUEST_CHANGES:
-  drive increments `drive_review_<stage>_cycle`, checks the §1.7
+  drive increments `drive_review_<stage>_cycle`, checks the §1.6
   budget, and re-enters the review cycle.
 - `block` — drive jumps to §NO-GO Handling. The constraint is
   `author blocked post-APPROVE at MEDIUM+ <review-spec | PR> review`.
@@ -481,7 +463,7 @@ read full review first
 On APPROVE at review-pr (interactive gates per autonomy mode passed):
 
 1. **Stage and commit the implementation** (commit 1):
-   - All code changes, the bead snapshots, and the review files
+   - All code changes and the review files
    - Commit message: `feat: <bead title>`
 
 2. **Propose card updates** (commit 2):
@@ -492,7 +474,7 @@ On APPROVE at review-pr (interactive gates per autonomy mode passed):
 
 3. **Create the PR:**
    - Title: `drive: <bead title>`
-   - Body references the bead-id, snapshot path, and review files
+   - Body references the bead-id and review files
 
 4. **Set drive_stage=complete and close the bead:**
    ```bash
@@ -559,7 +541,7 @@ $CONSTRAINTS"
 
 7. **Re-enter at Stage 1** with the new bead. The constraint history
    is now in its description; the cold-fork reviewer reads it as
-   part of the spec snapshot.
+   part of the bead's `bd show <bead-id> --json` description field.
 
 ## Escalation
 
@@ -649,7 +631,7 @@ drive bead per §Input contract):
 
    | drive_stage   | Resume at                                         |
    |---------------|---------------------------------------------------|
-   | `review-spec` | Stage 1 (idempotent §1.3 check skips fork if file already valid) |
+   | `review-spec` | Stage 1 (idempotent §1.2 check skips fork if file already valid) |
    | `implement`   | Stage 2 (delegate to /orb:implement <bead-id>)    |
    | `review-pr`   | Stage 3                                           |
    | `complete`    | Already done — report status                      |
@@ -658,7 +640,7 @@ drive bead per §Input contract):
 3. **Synthetic-BLOCK resumption.** If
    `drive_review_<stage>_cycle == 3` and the bead is still
    in_progress (the synthetic BLOCK was not written before the
-   session died), synthesise the BLOCK on resume per §1.7 — do not
+   session died), synthesise the BLOCK on resume per §1.6 — do not
    launch a 4th fork.
 
 4. **Heartbeat reconciliation (full autonomy only).** Re-run the
@@ -784,12 +766,10 @@ bd update "$BEAD" --claim
 # 4. Schedule heartbeat (full autonomy)
 # CronList → CronCreate iff absent (drive-checkin-<bead-id>, 5 min recurring)
 
-# 5. Stage 1: write snapshot, fork review-spec
-SNAPSHOT="orbit/reviews/$BEAD/bead-snapshot-$(date -I).md"
-mkdir -p "$(dirname "$SNAPSHOT")"
-# (write snapshot per §1.1)
+# 5. Stage 1: fork review-spec (reads bead directly via bd show + parse-acceptance.sh)
+mkdir -p "orbit/reviews/$BEAD"
 bd update "$BEAD" --set-metadata "drive_review_spec_date=$(date -I)"
-# Agent({ subagent_type: 'general-purpose', prompt: <brief pointing fork at $SNAPSHOT> })
+# Agent({ subagent_type: 'general-purpose', prompt: <brief naming $BEAD + output path; reviewer reads bd show + parse-acceptance.sh> })
 # Parse verdict from orbit/reviews/$BEAD/review-spec-$(date -I).md
 # APPROVE → drive_stage=implement
 
@@ -799,13 +779,13 @@ bd update "$BEAD" --set-metadata "drive_stage=implement"
 # When parse-acceptance.sh has-unchecked $BEAD exits 1:
 bd update "$BEAD" --set-metadata "drive_stage=review-pr"
 
-# 7. Stage 3: write fresh snapshot, fork review-pr
-# (mirrors stage 1, brief includes git diff main...HEAD + snapshot path)
+# 7. Stage 3: fork review-pr
+# (mirrors stage 1; brief includes git diff main...HEAD + bead-id for AC cross-reference)
 
 # 8. APPROVE at review-pr → completion
 git add -A
 git commit -m "feat: $(bd show $BEAD --json | python3 -c "import sys,json;d=json.load(sys.stdin);print((d[0] if isinstance(d,list) else d)['title'])")"
-gh pr create --title "drive: <bead title>" --body "<refs $BEAD, snapshot, reviews>"
+gh pr create --title "drive: <bead title>" --body "<refs $BEAD and reviews>"
 bd update "$BEAD" --set-metadata "drive_stage=complete"
 bd close "$BEAD" --reason "drive completed: <one-line summary>"
 

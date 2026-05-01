@@ -14,21 +14,24 @@ This skill runs in a **forked context** — a fresh agent session with zero shar
 ## Usage
 
 ```
-/orb:review-spec [spec_file]
+/orb:review-spec <bead-id>
 ```
+
+The skill takes a beads identifier (e.g. `orbit-6da.4`) — the bead's acceptance field is the spec.
 
 ## Why Context Separation Matters
 
-A reviewer who watched you build something has confirmation bias. A fresh agent reads the spec cold. Context-separated review catches problems that same-session review misses.
+A reviewer who watched you build something has confirmation bias. A fresh agent reads the bead cold via `bd show`. Context-separated review catches problems that same-session review misses.
 
 ## Instructions
 
-### 1. Gather the Spec
+### 1. Gather the Bead
 
-- If a spec file path is provided via $ARGUMENTS: read it
-- If not: look for the most recent `orbit/specs/*/spec.yaml` file
-- Also read the associated interview file (from `metadata.interview_ref`)
-- If neither exists, report that no spec was found
+- If a bead-id is provided via $ARGUMENTS: use it.
+- If not: report `no bead-id provided — review-spec requires a bead-id under the bead-native substrate` and stop. There is no auto-discovery branch — orbit is bead-native and the caller knows which bead to review.
+- Run `bd show <bead-id> --json` to read the bead's description (the prose goal and constraints) and metadata.
+- Run `plugins/orb/scripts/parse-acceptance.sh acs <bead-id>` to enumerate the AC list. The parser emits one tab-separated tuple per AC: `<ac-id>\t<status>\t<description>\t<is_gate>` where `<status>` is `[ ]` or `[x]` and `<is_gate>` is `1` if the AC line carries a `[gate]` marker, `0` otherwise.
+- The bead's description and parsed AC list together are the authoritative source for this review. Design intent lives in the bead description; supporting context (constraint history, parent-bead provenance, prior memories) is reachable via `bd show` metadata and `bd memories <keyword>`.
 
 ### 2. Progressive Review
 
@@ -42,12 +45,14 @@ Quick check of spec integrity:
 2. **Constraint conflicts**: Do any constraints contradict each other or make ACs unreachable?
 3. **Scope vs goal**: Does the scope match the goal? Over-specified (ACs beyond what the goal needs)? Under-specified (goal claims more than ACs deliver)?
 4. **Obvious gaps**: Error handling mentioned? Rollback plan? Monitoring? Edge cases?
-5. **Gate-AC verification check (deterministic — no LLM judgement).** For every AC whose `ac_type: gate`, the `verification` field must pass **all three** of the following deterministic rules. Flag a MEDIUM finding naming the gate's id and the specific rule violated if any fail:
-   - **Non-empty**: the field is present and contains at least one non-whitespace character.
+5. **Gate-AC description check (deterministic — no LLM judgement).** For every AC where `parse-acceptance.sh acs` reports `is_gate=1` (column 4 of the tab-separated output — the AC line carried a `[gate]` marker), the AC's description text (column 3 of the parser output — the text after `ac-NN [gate]:`) must pass **all three** of the following deterministic rules. Flag a MEDIUM finding naming the gate's id and the specific rule violated if any fail:
+   - **Non-empty**: the description text is present and contains at least one non-whitespace character.
    - **Not a placeholder token**: the trimmed value is not (case-insensitive) in the set `{TBD, TODO, FIXME, PLACEHOLDER, XXX, ???}`. Match the trimmed value against the literal token — a sentence that happens to contain `TBD` as a word is not a failure of this rule.
    - **Minimum length**: the trimmed value is at least 20 characters long.
 
-   A vague-but-long verification ("it works correctly when the feature is done", 49 chars) does **not** trip this check. That is accepted as a deliberate limitation of the deterministic rule — richer semantic detection is out of scope for Pass 1. The implement skill remains the runtime gate enforcer; Pass 1 adds a structural check only.
+   A vague-but-long description ("it works correctly when the feature is done", 49 chars) does **not** trip this check. That is accepted as a deliberate limitation of the deterministic rule — richer semantic detection is out of scope for Pass 1. The implement skill remains the runtime gate enforcer; Pass 1 adds a structural check only.
+
+   **Substrate note.** Gate detection comes from the parser-emitted `is_gate=1` flag (sourced from the `[gate]` marker in the AC line, propagated from the card scenario's `gate: true` field via `promote.sh`). The text-under-test is the AC description column — under bead conventions each AC is a single line, so the description text carries the verification statement.
 6. **Content signal scan**: Check whether the spec touches any deepening triggers:
    - Training data, ground truth, model inputs, eval datasets
    - Deployment, infrastructure, cron, production services
@@ -97,7 +102,7 @@ Produce a structured review:
 
 **Date:** <today>
 **Reviewer:** Context-separated agent (fresh session)
-**Spec:** <path to spec.yaml>
+**Bead:** <bead-id>
 **Verdict:** APPROVE / REQUEST_CHANGES / BLOCK
 
 ---
@@ -132,7 +137,7 @@ The header line `**Verdict:** APPROVE | REQUEST_CHANGES | BLOCK` is a **contract
 
 ### Output path (invoked inline vs forked)
 
-- **Inline invocation** (a human running `/orb:review-spec` directly): save to the default path `orbit/specs/YYYY-MM-DD-<topic>/review-spec-<date>.md`.
+- **Inline invocation** (a human running `/orb:review-spec <bead-id>` directly): save to the default path `orbit/reviews/<bead-id>/review-spec-<date>.md`.
 - **Forked-Agent invocation** (e.g. launched by `/orb:drive`): the invoking agent's brief will supply an explicit output path — **use the brief's path verbatim**. It takes precedence over the default. Drive uses cycle-ordinal suffixes (`-v2.md`, `-v3.md`) to disambiguate REQUEST_CHANGES cycles; writing to the default path when the brief specified a cycle-specific path will cause drive to report the review as missing and trigger a retry.
 
 ## Verdicts
