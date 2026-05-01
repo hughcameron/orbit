@@ -1,0 +1,271 @@
+goal: >
+  Rewrite /orb:drive so that bead state replaces drive.yaml. promote.sh
+  collapses design + spec into a single card→bead step. Cold-fork reviews
+  read a bead snapshot instead of spec.yaml. Iterations become a chain of
+  beads linked by discovered-from edges. The four-option verdict prompt,
+  severity dispatch, REQUEST_CHANGES budget (3 per stage with synthetic
+  BLOCK on overrun), iteration budget (3 with escalation), and the live-
+  visibility heartbeat (full autonomy only) are preserved — but read
+  state from beads, not from drive.yaml or progress.md.
+
+constraints:
+  - drive.yaml is removed; orchestration state lives in bead metadata via bd update --set-metadata "drive_<key>=<value>"
+  - interview.md and spec.yaml are no longer drive outputs; promote.sh card→bead is the entire design+spec phase
+  - Per-iteration spec dirs (drive-v2, drive-v3) are removed; each iteration is a new bead with --deps "discovered-from:<predecessor>"
+  - File-presence stage detection is removed; bead.status + drive_stage metadata is the only resumption surface
+  - Cold-fork architecture is preserved — reviews still launch via the Agent tool with subagent_type general-purpose
+  - The cold-fork brief points the reviewer at a bead-snapshot.md file written by drive (a markdown render of the bead's description + acceptance), not at spec.yaml
+  - /orb:review-spec and /orb:review-pr SKILL.md files are NOT modified by this rewrite (they accept whatever spec-shaped input they receive)
+  - The canonical synthetic-BLOCK constraint string from §5a is preserved byte-for-byte
+  - The four-option verdict labels (approve / request changes / block / read full review first) are preserved verbatim
+  - The thin-card refusal in full mode (≥3 scenarios) is preserved with no silent downgrade
+  - The heartbeat ID format becomes drive-checkin-<bead-id> (replacing drive-checkin-<spec-slug>)
+  - The heartbeat reads bead state via `bd show <bead-id> --json` and parse-acceptance.sh next-ac; it never reads drive.yaml or progress.md
+  - The CronList-first idempotent reconciliation pattern is preserved — no delete-then-recreate
+  - There is no migration path for in-flight drive.yaml drives — they finish under the prior version or restart
+  - Card and memo formats are unchanged
+
+acceptance_criteria:
+  - id: ac-01
+    ac_type: gate
+    description: >
+      Lock the input contract. /orb:drive accepts either:
+      (a) `<card_path> [full|guided|supervised]` — promote a fresh bead
+          and start at iteration 1; or
+      (b) `<bead-id>` — resume an existing drive bead from its
+          drive_stage metadata.
+      With no argument, drive resolves an in-progress drive bead via
+      `bd list --status in_progress --json` filtered to beads carrying a
+      `drive_stage` metadata key. Single match → resume; zero matches →
+      halt with usage; multiple matches → halt and ask the agent to pass
+      the bead id explicitly. Document the three branches in SKILL.md.
+    verification: >
+      "Input contract" section in SKILL.md names the three branches with
+      concrete bd / parse-acceptance.sh commands.
+
+  - id: ac-02
+    ac_type: gate
+    description: >
+      Thin-card refusal preserved verbatim. When invoked with a card
+      path under `full` autonomy, drive counts the card's `scenarios`
+      list. If fewer than 3, drive REFUSES (no silent downgrade) with
+      the existing message format that names the gap. `guided` and
+      `supervised` proceed regardless of scenario count.
+    verification: >
+      SKILL.md "Pre-flight" section contains the BLOCKED message
+      template, the ≥3-scenario rule for full mode, and the explicit
+      "do not silently downgrade" rule.
+
+  - id: ac-03
+    ac_type: code
+    description: >
+      Promote stage replaces design+spec. SKILL.md instructs drive to
+      call `plugins/orb/scripts/promote.sh <card_path>` (capturing the
+      created bead-id), then write orchestration metadata via
+      `bd update <bead-id> --set-metadata "drive_card=<path>"
+      --set-metadata "drive_autonomy=<level>"
+      --set-metadata "drive_iteration=1"
+      --set-metadata "drive_stage=review-spec"`. No interview.md, no
+      spec.yaml, no drive.yaml, no spec dir. Drive then claims the bead
+      via `bd update <bead-id> --claim`.
+    verification: >
+      "Promote stage" section in SKILL.md uses promote.sh and the four
+      named --set-metadata fields. There are no instructions to write
+      interview.md, spec.yaml, or drive.yaml.
+
+  - id: ac-04
+    ac_type: code
+    description: >
+      Heartbeat (full autonomy only) — Idempotent CronList-first
+      reconciliation. Heartbeat task ID is `drive-checkin-<bead-id>`
+      (replacing the old `drive-checkin-<spec-slug>`). The heartbeat
+      prompt body reads bead state via `bd show <bead-id> --json` and
+      `parse-acceptance.sh next-ac <bead-id>`; it never reads drive.yaml
+      or progress.md. Self-termination triggers when `bead.status ==
+      closed`. Format: `drive: bead=<id> stage=<drive_stage>
+      ac=<next-ac|-> elapsed=<mm:ss>`. CronCreate failure logs
+      `heartbeat unavailable: <reason>` and is non-fatal. Skipped
+      entirely when autonomy != full.
+    verification: >
+      "Heartbeat" section uses the new task ID format, references
+      bd show + parse-acceptance.sh in the prompt body, names the
+      self-termination condition (bead.status closed), preserves the
+      non-fatal CronCreate failure rule, and gates on autonomy == full.
+
+  - id: ac-05
+    ac_type: code
+    description: >
+      Stage 1 review-spec — cold-fork mechanics preserved with bead
+      snapshot input. Drive writes
+      `orbit/reviews/<bead-id>/bead-snapshot-<date>.md` containing the
+      bead's description + acceptance field as readable markdown.
+      Cycle-specific verdict path:
+      `orbit/reviews/<bead-id>/review-spec-<date>[-vN].md` per the
+      existing convention (cycle 1 has no suffix, cycle 2 → -v2, etc.).
+      Cycle counter and date persist in bead metadata
+      (`drive_review_spec_cycle`, `drive_review_spec_date`). The Agent
+      brief instructs the fork to read the snapshot, apply
+      /orb:review-spec, and write the verdict to the cycle-specific
+      path with the canonical regex
+      `^\\*\\*Verdict:\\*\\* (APPROVE|REQUEST_CHANGES|BLOCK)\\s*$`.
+      Retry budget 1 for missing verdict. Pre-flight ToolSearch for
+      Agent availability preserved. REQUEST_CHANGES budget 3 per
+      iteration with synthetic BLOCK on overrun. The synthetic-BLOCK
+      constraint string is preserved byte-for-byte:
+      "review converged on REQUEST_CHANGES after 3 iterations; findings
+      have not been addressable within budget".
+    verification: >
+      Review-spec section uses the new bead-snapshot path, cycle-specific
+      verdict path under orbit/reviews/<bead-id>/, the canonical regex
+      matches verbatim, the synthetic-BLOCK constraint string matches
+      byte-for-byte, the ToolSearch pre-flight is present, and the
+      REQUEST_CHANGES budget gating logic is intact.
+
+  - id: ac-06
+    ac_type: code
+    description: >
+      Stage 2 implement — drive sets `drive_stage=implement` on the bead
+      and invokes /orb:implement <bead-id>. Drive does NOT inline the
+      implement loop — it delegates entirely to the new beads-native
+      /orb:implement (orbit-6da.1). When implement returns (the bead's
+      acceptance field has no unchecked ACs), drive sets
+      `drive_stage=review-pr` and proceeds to stage 3.
+    verification: >
+      Implement section delegates via /orb:implement <bead-id>, sets
+      drive_stage on entry and exit, and contains no AC tracking,
+      detour, or task-emission logic of its own.
+
+  - id: ac-07
+    ac_type: code
+    description: >
+      Stage 3 review-pr — mirrors stage 1 mechanics with the diff brief.
+      Cycle counter and date in bead metadata
+      (`drive_review_pr_cycle`, `drive_review_pr_date`). Verdict path:
+      `orbit/reviews/<bead-id>/review-pr-<date>[-vN].md`. The Agent brief
+      includes the diff reference (`git diff main...HEAD` on the current
+      branch) plus the bead-snapshot path for AC cross-reference.
+      Severity dispatch and the four-option verdict prompt
+      (`approve / request changes / block / read full review first`) are
+      preserved byte-for-byte from the old SKILL.md. The REQUEST_CHANGES
+      budget and synthetic-BLOCK rule mirror stage 1.
+    verification: >
+      Review-pr section names the new metadata fields, cycle-specific
+      verdict path, contains the four exact verdict labels verbatim, and
+      preserves severity dispatch. The synthetic-BLOCK constraint string
+      and canonical verdict regex match stage 1.
+
+  - id: ac-08
+    ac_type: code
+    description: >
+      Completion — on APPROVE at review-pr (interactive gates per
+      autonomy mode preserved), drive (a) commits the implementation
+      and any card updates, (b) creates the PR, (c) calls `bd close
+      <bead-id> --reason "drive completed: <one-line summary>"`,
+      (d) sets `drive_stage=complete` before close (the close itself
+      transitions bead.status to closed, which the heartbeat detects).
+      Heartbeat cleanup via CronDelete is non-fatal — failure logs
+      `heartbeat cleanup skipped: <reason>` and continues.
+    verification: >
+      Completion section calls bd close with --reason, sets
+      drive_stage=complete, creates PR, and contains the non-fatal
+      heartbeat cleanup rule.
+
+  - id: ac-09
+    ac_type: code
+    description: >
+      NO-GO — when a stage produces BLOCK (real or synthetic) or a
+      supervised gate returns NO-GO, drive: (a) closes the current bead
+      with `bd close <bead-id> --reason "NO-GO: <constraint>"`;
+      (b) records the constraint via `bd remember "drive-<card-slug>-
+      iter<N>: <constraint>"` so it survives bead closure;
+      (c) if drive_iteration < 3, calls promote.sh again on the same
+      card, captures the new bead-id, adds the discovered-from edge via
+      `bd dep add <new-bead> <closed-bead>` with edge type
+      `discovered-from`, appends the cumulative constraint history
+      (read from bd memories matching `drive-<card-slug>-*`) into the
+      new bead's description via `bd update <new-bead> --description
+      "$(...)"`, and seeds the new bead's metadata with
+      `drive_iteration=<N+1>` and reset cycle counters; (d) if
+      drive_iteration == 3, jumps to escalation (ac-10).
+    verification: >
+      NO-GO section uses bd close, bd remember, promote.sh re-promote,
+      bd dep add discovered-from, and bd update --description for
+      constraint injection. The N==3 branch routes to escalation.
+
+  - id: ac-10
+    ac_type: code
+    description: >
+      Escalation — triggered by iteration budget exhaustion OR the
+      semantic triggers (recurring failure mode, contradicted
+      hypothesis, diminishing signal) preserved from the Disposition
+      section. Drive: (a) sets `drive_stage=escalated` and closes the
+      current bead with --reason "ESCALATED: <reason>"; (b) emits the
+      structured escalation summary (card, goal, iteration history
+      computed from `bd dep tree <iter-1-bead>`, accumulated
+      constraints from bd memories, "what would have to be true",
+      recommendation); (c) cleans up the heartbeat (non-fatal); (d) in
+      full autonomy, fires a one-shot escalation ping via CronCreate
+      with task ID `drive-escalation-<bead-id>` ~30 seconds out,
+      preserving the verbatim ping body from the old SKILL.md.
+    verification: >
+      Escalation section sets drive_stage=escalated, computes history
+      from bd dep tree, emits the same summary structure as the old
+      skill, fires the one-shot ping with the new bead-id-based task
+      ID, and preserves the verbatim ping body.
+
+  - id: ac-11
+    ac_type: code
+    description: >
+      Resumption — when /orb:drive is invoked with a bead-id (or detects
+      an in-progress drive bead per ac-01), drive reads `drive_stage`
+      from bead metadata and resumes at the named stage. No drive.yaml
+      read. No file-presence detection. The bead is the source of truth.
+      The §2a heartbeat reconciliation (CronList-first) re-runs on
+      resume so a surviving heartbeat is preserved and an absent one
+      re-created. Drive announces the resumption with iteration,
+      cycle counts, and heartbeat status.
+    verification: >
+      Resumption section reads drive_stage from bd show metadata, names
+      no file-presence rules, re-runs heartbeat reconciliation, and
+      emits a structured announcement.
+
+  - id: ac-12
+    ac_type: gate
+    description: >
+      Removal sweep. The new SKILL.md contains zero substantive
+      references to: drive.yaml, interview.md (as drive output),
+      spec.yaml (as drive output), per-iteration spec directories
+      (drive-v2 / -v3 / -vN), file-presence stage detection,
+      pre-change drive.yaml refusal, current_spec, drive-checkin-<spec-slug>
+      (old heartbeat ID format), or progress.md (as drive's read source).
+      Historical migration notes are allowed if explicitly framed as
+      "removed in this version" or "replaced by <X>".
+    verification: >
+      grep of plugins/orb/skills/drive/SKILL.md for each forbidden
+      string returns either zero matches or matches confined to a
+      labelled migration note section.
+
+  - id: ac-13
+    ac_type: code
+    description: >
+      Worked example. SKILL.md ends with a copy-pasteable command trace
+      for a card→bead→close happy path: validate card, promote, set
+      metadata, write snapshot, fork review-spec, parse verdict, invoke
+      /orb:implement, fork review-pr, commit, PR, bd close. Each step
+      is a literal bd / parse-acceptance.sh / Agent / promote.sh
+      command, not prose.
+    verification: >
+      "Worked example" section at the end of SKILL.md contains a
+      sequential command trace covering at minimum: validate, promote,
+      set-metadata, snapshot, fork (Agent), bd close.
+
+metadata:
+  bead: orbit-6da.2
+  rally: orbit-6da
+  decision_ref: orbit/decisions/0011-beads-execution-layer.md
+  predecessor_spec: orbit/specs/2026-05-01-implement-skill-beads-rewrite/spec.yaml
+  interview_ref: orbit/specs/2026-05-01-drive-skill-beads-rewrite/interview.md
+
+deliverables:
+  - path: plugins/orb/skills/drive/SKILL.md
+    description: New beads-native /orb:drive skill (replaces in place)
