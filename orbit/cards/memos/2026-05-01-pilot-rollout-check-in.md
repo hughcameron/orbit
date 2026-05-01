@@ -9,12 +9,12 @@ Hold space for findings from the bead-native pilot rollout to downstream project
 
 ## Rollout shape
 
-Per `MIGRATION-0.4.0.md` and the `next-session-pilot-rollout` bd memory:
+Per the `next-session-pilot-rollout` bd memory and the operator migration playbook (held in the private ops repo):
 
 - **Arcform first** (smallest blast radius)
-- After Arcform validates: **FineType / Brightfield / private-project** in parallel
+- After Arcform validates: the remaining downstream projects in parallel
 
-The migration steps are documented in `MIGRATION-0.4.0.md`. Card 0017 (`/orb:setup` is bead-aware) folds those steps into a single `/orb:setup` invocation; until 0017 ships, the manual playbook is the canonical path.
+The migration steps are documented in the operator playbook. Card 0017 (`/orb:setup` is bead-aware) folds those steps into a single `/orb:setup` invocation; until 0017 ships, the manual playbook is the canonical path.
 
 ## What to look for during the pilots
 

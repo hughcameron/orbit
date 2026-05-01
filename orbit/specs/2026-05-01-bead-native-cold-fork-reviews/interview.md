@@ -12,7 +12,7 @@ Card: *Bead-native cold-fork reviews* — 9 scenarios, goal: "review-spec and re
 
 **Prior specs:** 0 (this is the first iteration).
 
-**Position in 0.4.0 rollout:** orbit-6da.1 rewrote `/orb:implement` to read from the bead acceptance field. orbit-6da.2 collapsed `/orb:drive` to four bead-native stages with a snapshot-bridge between drive and the unchanged review skills. orbit-6da.3 collapsed `/orb:rally` onto the bead graph. **This card removes the snapshot bridge** so review-spec/review-pr read the bead directly, restoring full review depth before 0.4.0 ships to production projects (private-project, FineType, Brightfield, Arcform).
+**Position in 0.4.0 rollout:** orbit-6da.1 rewrote `/orb:implement` to read from the bead acceptance field. orbit-6da.2 collapsed `/orb:drive` to four bead-native stages with a snapshot-bridge between drive and the unchanged review skills. orbit-6da.3 collapsed `/orb:rally` onto the bead graph. **This card removes the snapshot bridge** so review-spec/review-pr read the bead directly, restoring full review depth before 0.4.0 ships to production projects (FineType, Brightfield, Arcform, and other downstream consumers).
 
 **Gap:** the snapshot bridge is a static markdown render of `bd show <bead-id> --json`. It works as a stop-gap — reviewers see the bead's description and acceptance field — but it loses the structural distinction between gate ACs and non-gate ACs (the `[gate]` marker survives as text but the parser running in the reviewer is the markdown reader, not `parse-acceptance.sh`). That makes review-spec's Pass-1 gate-AC verification check silently no-op: the rules are calibrated for `spec.yaml`'s structured `ac_type: gate` + `verification: <text>` shape, and the markdown snapshot doesn't expose that structure to a reviewer that knows how to consume it.
 
@@ -86,7 +86,7 @@ The verdict logic stays the same: AC coverage findings are reported in the stand
 - Decision 0011 D2 commits to the cold-fork reading from beads, not from a translated artefact. Dual-mode preserves the bridge as a maintained code path indefinitely.
 - The orbit-6da.2 bridge was explicitly a stop-gap shipped to keep the cold-fork working through the substrate migration. The card scenarios make removal of the bridge an explicit acceptance criterion (scenario 7).
 - In-flight drives during the upgrade window finish under the version of the skill they started with — same migration discipline as the forked-reviews migration shipped earlier (drives initialised before forked reviews refuse to resume under the new code).
-- Hugh's projects (private-project, FineType, Brightfield, Arcform) have not yet migrated to bead-native orbit, so there's no in-flight bridge-mode drive to protect at the production sites — only orbit's own self-development drives.
+- Hugh's downstream projects (FineType, Brightfield, Arcform, and others) have not yet migrated to bead-native orbit, so there's no in-flight bridge-mode drive to protect at the production sites — only orbit's own self-development drives.
 
 **Operational note:** the next drive launched against any card after this ships uses the direct-read path. orbit's own in-flight drives (this very drive included, if it were started under the bridge — but it wasn't, this card hasn't shipped yet) finish under their start-time skill version.
 

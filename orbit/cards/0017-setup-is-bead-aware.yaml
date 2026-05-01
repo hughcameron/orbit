@@ -1,7 +1,7 @@
 feature: /orb:setup is bead-aware
 as_a: orbit user setting up a new project or migrating an existing one
 i_want: /orb:setup to handle bead initialisation as part of project setup, not as a separate manual step
-so_that: orbit/ layout and beads init are atomic — there is no half-set-up state where the workflow vocabulary exists but beads isn't initialised, and pilot rollouts to FineType / Brightfield / private-project / Arcform can be a single command per project
+so_that: orbit/ layout and beads init are atomic — there is no half-set-up state where the workflow vocabulary exists but beads isn't initialised, and pilot rollouts to downstream projects can be a single command per project
 
 scenarios:
   - name: bd precondition check refuses without bd 1.0.3+
@@ -54,5 +54,4 @@ relations:
 references:
   - "plugins/orb/scripts/bd-init.sh: idempotent script that creates .beads/, PRIME.md, and gitignore entries — already exists, /orb:setup just needs to call it"
   - "plugins/orb/skills/setup/SKILL.md: current setup skill — handles orbit/ layout and CLAUDE.md vocabulary, no beads awareness"
-  - "MIGRATION-0.4.0.md: operator playbook for the manual bead-init pilot rollout — this card replaces those manual steps with /orb:setup"
   - "orbit/decisions/0011-beads-execution-layer.md: substrate decision that makes setup-without-beads a non-state under 0.4.0+"

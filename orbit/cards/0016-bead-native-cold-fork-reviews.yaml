@@ -46,7 +46,7 @@ scenarios:
     then: every rule that fired under 0.3.3's spec.yaml flow (constraint conflicts, gate-AC verification, AC testability, content signal scan) fires against the bead substrate with equivalent or better coverage
 
   - name: Production rollout is unblocked by this card
-    given: the spec-heavy projects (private-project, FineType, Brightfield, Arcform) have not yet migrated to bead-native orbit
+    given: the spec-heavy downstream projects (FineType, Brightfield, Arcform, and others) have not yet migrated to bead-native orbit
     when: this card ships
     then: review-gate quality regression is removed and the 0.4.0 release can be cut without exporting a degraded review depth to production projects
 

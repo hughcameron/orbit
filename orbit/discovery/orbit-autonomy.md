@@ -20,7 +20,7 @@ Both halves matter. Cutting management time at the cost of quality fails. Holdin
 
 ## What changes
 
-**Project objective functions become first-class.** Every active project gets a measurable, agent-checkable objective (e.g. private-project PL positive, FineType validation >= 95%) plus at least one paired guardrail to prevent Goodharting. The objective function is the agent's primary self-test for whether work is on-track and the primary stop condition when it cannot be predicted.
+**Project objective functions become first-class.** Every active project gets a measurable, agent-checkable objective (e.g. FineType validation >= 95%, or for a trading project, PL positive over a rolling window) plus at least one paired guardrail to prevent Goodharting. The objective function is the agent's primary self-test for whether work is on-track and the primary stop condition when it cannot be predicted.
 
 **Specs get rationalised.** I'm not reading them. Either they shrink to terse acceptance criteria and rationale moves into memos, or they're replaced. Worth studying [beads](https://gastownhall.github.io/beads/) for the queryable-state pattern even if we don't adopt the tool. `bd ready` is the kind of primitive crons can hit cleanly.
 
