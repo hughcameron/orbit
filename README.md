@@ -258,10 +258,19 @@ orbit builds on well-established ideas from the agile and software engineering c
 
 ## Install
 
+Install the plugin:
+
 ```
 /plugin marketplace add hughcameron/orbit
 /plugin install orb@orbit
 ```
+
+Install [`bd`](https://github.com/gastownhall/beads) (≥ 1.0.3) — the issue tracker orbit uses as its execution substrate:
+
+- **macOS**: `brew install beads`
+- **Linux / other**: download a release binary from [github.com/gastownhall/beads/releases](https://github.com/gastownhall/beads/releases) and place it on PATH
+
+Verify with `bd --version`. On Apple Silicon, note that `/opt/homebrew/bin` isn't on the default cron PATH — if you plan to run orbit's autonomous workflows from cron, export PATH explicitly in the cron job.
 
 Then in any project:
 
