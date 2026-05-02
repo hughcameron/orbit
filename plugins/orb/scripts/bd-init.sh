@@ -30,7 +30,7 @@ done
 
 # Check bd is available
 if ! command -v bd &>/dev/null; then
-  echo "bd-init.sh: bd not found. Install from ~/github/gastownhall/beads" >&2
+  echo "bd-init.sh: bd not found on PATH. Install: 'brew install beads' (macOS) or download a release binary from https://github.com/gastownhall/beads/releases." >&2
   exit 2
 fi
 
