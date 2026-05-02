@@ -101,7 +101,7 @@ Sources cited:
 
 ## Open questions
 
-- **Where does the contract live?** Per-card metadata? A new `orbit/contracts/<card-id>.yaml` artefact? Embedded in card scenarios via the existing `gate: true` mechanism?
+- **Where does the contract live?** ~~Per-card metadata? A new `orbit/contracts/<card-id>.yaml` artefact? Embedded in card scenarios via the existing `gate: true` mechanism?~~ **Resolved (first instance, 2026-05-02):** `<project>/orbit/contracts/<date>-<scope>.yaml` — sibling to `cards/`, `decisions/`, `reviews/`, `specs/`. Contracts are durable structured artefacts, not memos; YAML over markdown so the agent can parse the contract data fields (objective, halts, branches, escalation triggers) directly, with narrative sections (rationale, hot-wash, provenance) embedded as YAML multi-line strings. Single file, dual purpose: machine-read at cycle start, human-read at next tabletop. Mis-filing the first draft into `cards/memos/` exposed why a separate top-level category matters: `memos/` is rough-idea territory and category drift is a real failure mode.
 - **Cadence.** Per sprint? Per major capability? On a trigger ("cron is about to turn on for X — tabletop first")? Plus a staleness-expiry rule — when does a contract need re-tabletop-ing? Cycle count? Calendar? Drift in objective-function reality vs. target?
 - **Coverage threshold.** The HAZOP matrix gives a coverage metric (% of cells filled with branch-or-N/A vs. left blank). What threshold ships? 100% is probably wrong (forces N/A justifications for genuinely irrelevant cells); 80% may be right; the empirical first instance will tell us.
 - **Severity / likelihood scoring on halt conditions** (FMEA gap from prior art). When two halt conditions fire simultaneously, which wins? Adopt FMEA's S × O × D scoring? Or simpler ordinal priority?
@@ -110,9 +110,21 @@ Sources cited:
 - **Interaction with `/orb:distill`.** Tabletop output flags gaps in the card register; distill runs to fill them; cards refined; next tabletop benefits. The two skills are complementary — distill creates capabilities from source material, tabletop creates contracts from goals + cards.
 - **Versioning.** A contract is a living document — branches added as cycles surface gaps. Versioning convention? Diff review per amendment?
 
+## First instance findings (2026-05-02)
+
+The methodology ran for the first time on 2026-05-02 against an active sprint. Three findings worth promoting from session-specific to general methodology, before distillation into a skill:
+
+**1. The load-bearing test for cutting halts.** *"What failure mode does this halt catch that the branch table cannot?"* Halts earn their place when they protect against state the branches structurally cannot handle: long-tail breakages the table doesn't enumerate, faster-than-cycle-cadence transitions, or states implying the branch table itself is wrong (e.g. the assumptions every branch sits on are violated). Any halt that fails this test is ceremony — the branch table at cycle cadence already covers it. Surfaced when a candidate "absolute equity floor" halt was rejected on first principles: equity-trajectory observation belongs at branch cadence, not as a separate kill switch. Promoted to the session protocol — Step 4 (premortem block) now applies this test to each candidate before accepting it.
+
+**2. Halts that name engine-layer fields require schema back-pressure.** When a halt's tripwire references a field in an engine event payload, audit the actual schema before accepting the halt. A first-pass halt named a field whose semantics didn't apply to half the configuration space the contract had to govern; only a rename pass exposed it. Add as a session-protocol checkpoint at Step 5 (escalation enumeration): for each halt and escalation, name the schema field it depends on and verify it exists across all live and proposed configs. If a needed field doesn't exist, the contract surfaces a follow-up engineering bead — the halt either ships with a documented agent-side fallback computation or waits for the field.
+
+**3. Catalysing-scenario priority.** When a scenario walk surfaces a question about the methodology itself rather than producing a branch, abandon the scenario queue and walk the spine question to completion. The displaced scenarios downgrade to matrix-audit fodder for the scribe pass rather than discussion-protocol fodder. The first instance ran Brief → Scenario 1 → halt-condition deep dive → wrap-up rather than the prescribed Brief → all scenarios → premortem → wrap-up; the catalysing scenario produced more leverage than the five queued scenarios it displaced. Adopt as a session-protocol amendment: Step 2 (scenario injection) explicitly permits the facilitator to pivot to spine-question mode mid-walk, with the remaining queue surfacing in scribe-pass output rather than the live session.
+
+**4. Posture observation.** The "single recommendation" posture (lead with `recommend X because Y` rather than offer a 2–3 option menu) produced higher-quality reframes than option-menus in the first instance. The format invites pushback in a way option-menus don't — the facilitator corrects the recommendation rather than picking among options. Compatible with the recommendation-discipline rule emerging in user-level CLAUDE.md.
+
 ## Status
 
-Held as a memo. Once the methodology has run at least once and we know the artefact's empirical shape, distill into:
+Held as a memo. First instance complete; findings above promoted to methodology. Continue toward:
 
 - An **orbit card** describing the capability (orbit provides tabletop methodology + autonomy contract pattern).
 - A **decision** in the consuming project (or in a cross-project ops repo) recording the methodology with prior-art citations.
