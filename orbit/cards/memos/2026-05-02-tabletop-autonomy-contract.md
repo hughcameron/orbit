@@ -122,6 +122,32 @@ The methodology ran for the first time on 2026-05-02 against an active sprint. T
 
 **4. Posture observation.** The "single recommendation" posture (lead with `recommend X because Y` rather than offer a 2–3 option menu) produced higher-quality reframes than option-menus in the first instance. The format invites pushback in a way option-menus don't — the facilitator corrects the recommendation rather than picking among options. Compatible with the recommendation-discipline rule emerging in user-level CLAUDE.md.
 
+## Second instance findings (2026-05-03)
+
+The methodology ran for the second time on 2026-05-03 against the FineType project (facilitator: Hugh; scribe: Nightingale). Pass-1 produced the contract `orbit/contracts/2026-05-03-gittables-90-percent-roundtrip.yaml` and the seven hot-wash observations below. None contradict the methodology as written; all are pass-2 fodder for evolving it.
+
+**1. Probe "what do you want the cron to OWN" early.** The original session brief proposed scoping the contract to `validate-corpus iter-5+`. The facilitator's reframe — full GitTables, no PR merges, retrain authority — was an order-of-magnitude larger than the bottom-up brief assumed. Bottom-up briefs assembled from recent spec dirs systematically miss this scope question. Methodology amendment: facilitator should explicitly probe ownership scope ("what do you want the cron to OWN?") before scenario walks begin, not let the brief default to the most recent spec context.
+
+**2. Step-1 metric-gameability check before any scenario walks.** The non-trivial-prediction floor only got pinned because the scribe challenged "validation rate >90%" as undefined. A cron agent optimising raw rejects has a trivial winning move (push every prediction to `plain_text`). Promote to a methodology Step 0 / Step 1 checkpoint: *"Is the proposed metric game-able by the contracted agent?"* Run before scenario injection. The contracted agent will optimise whatever you measure — verify that the optimisation aligns with intent.
+
+**3. Explicitly ask "what value comes from data the gate doesn't see?"** The dual-metric framing (gate metric on frozen 2k-file holdout + corpus value metric on the remaining ~1.016M files) emerged only from facilitator pushback that a frozen holdout left the bulk of the corpus invisible to the contract. The answer surfaced three additional uses of the broader corpus: failure-mechanism discovery, training-data harvest, taxonomy coverage map. Methodology amendment: when the gate is a sampled subset, ask explicitly what value comes from data the gate doesn't see — prevents subset-only contracts that under-use available signal.
+
+**4. Cross-cycle invariants always become halts.** Three halts in this contract share a structural shape — branches structurally cannot bridge cycles, so cross-cycle observations must materialise as halt invariants:
+
+- `H13 holdout_stagnation` (gate Δ < 0.1% over 8 cycles)
+- `H08 failure_log REVERSE` (append-only count drops)
+- `H09 coverage_log REVERSE` (visited count drops)
+
+The cron has no inter-cycle memory mechanism other than halts that read prior-cycle log state. Promote to a methodology pattern: *"cross-cycle invariants always become halts; branches cannot bridge cycles."* Pair with the §3 branch-table walk so candidate branches that depend on cross-cycle observation get re-routed to §4 by construction.
+
+**5. Contract write step files auxiliary artefacts AND engineering beads, not just the contract YAML.** The FineType contract surfaced a sibling load-bearing-paths registry, plus engineering work (gate harness build-out, content-hash dedup, lockfile mechanism, append-only log integrity tooling, eval report header schema with model SHA + tag + filename). All filed as beads alongside the contract. Methodology amendment: the contract write step explicitly enumerates *"what auxiliary artefacts and engineering work does this contract require to operate?"* and files them — auxiliary YAML/registry files in the contracts dir, engineering deltas in the project's bead tracker.
+
+**6. The orbit `schedule` skill is online-only — wrong tool for local-machine cron contracts.** The scribe reflexively reached for `/schedule` when scoping the pass-2 tabletop trigger and had to be redirected. `schedule` provisions remote cloud agents in Anthropic's infrastructure; it does not wire local cron jobs. For tabletop-derived contracts whose cron-firing agent must run on the user's machine (data locality, GPU access, local repo state), local equivalents are the right tool: `CronCreate` (in-session, REPL-bound) for low-stakes reminders; `launchd` / system cron for unattended autonomous firing — the latter is infrastructure-team work. Methodology amendment: when authoring a contract, state explicitly whether the cron-firing agent runs local or remote, and route to the appropriate scheduling tool from the start. Add a §2 standing-orders entry naming the scheduling mechanism so future tabletops can audit it.
+
+**7. `CronCreate`'s `durable: true` was silently ignored on this harness.** Both attempts produced session-only crons (no `.claude/scheduled_tasks.json` file created). For multi-day reminders, never trust a session-bound mechanism. The fallback that worked: write the next-tabletop prompt to a discoverable file at a sibling path (e.g. `orbit/contracts/<date>-pass2-prep-prompt.md`) and let the human invoke it manually OR have infrastructure (launchd) wire it in. Methodology amendment: the contract write step always files the next-tabletop prompt as a sibling artefact, even if a cron tool also schedules it. The artefact is the single source of truth; the cron is the convenience layer.
+
+Lessons 6 and 7 are particularly load-bearing for any future tabletop in this ops setup — they prevent the same scribe error recurring in subsequent instances.
+
 ## Status
 
 Held as a memo. First instance complete; findings above promoted to methodology. Continue toward:
