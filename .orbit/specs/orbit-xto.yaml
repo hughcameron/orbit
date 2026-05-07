@@ -24,31 +24,31 @@ acceptance_criteria:
 - id: ac-05
   description: 'MCP server and CLI both call same Rust core — state-mutation parity (canonical files + state.db byte-identical), error format `<verb>: <category>: <sentence>`'
   gate: true
-  checked: false
+  checked: true
 - id: ac-06
   description: Spec verbs — create/show/list/update/close/note; transactional spec.close updates linked cards' specs_array atomically; rejects if child tasks unfinished
   gate: false
-  checked: false
+  checked: true
 - id: ac-07
   description: Task verbs — ready/show/list/claim/update/done; append-only JSONL event stream; state reconstructs from last event; survives session reset
   gate: false
-  checked: false
+  checked: true
 - id: ac-08
   description: Memory verbs — remember/list/search; cross-session, cross-machine via git
   gate: false
-  checked: false
+  checked: true
 - id: ac-09
   description: Card verbs — show/list/search read-only; specs_array side-effect from spec.close is the only substrate-driven write
   gate: false
-  checked: false
+  checked: true
 - id: ac-10
   description: Choice verbs — show/list/search read-only
   gate: false
-  checked: false
+  checked: true
 - id: ac-11
   description: Session verb — prime; bounded output formula `f(N specs, M memories) ≤ 40 + 2*open_specs + min(M,10)`; K=10 memory cap
   gate: false
-  checked: false
+  checked: true
 - id: ac-12
   description: Migration A (layout) — orbit/ → .orbit/, decisions/ → choices/, MD → YAML; worktree-validated; verbatim grep returns no matches; idempotent
   gate: true
@@ -60,7 +60,7 @@ acceptance_criteria:
 - id: ac-14
   description: 'Six substantive skill rewrites — drive/implement/rally/review-spec/review-pr/audit; differentiated parity bar (state-mutating: byte-identical state; judgement-emitting: verdict + HIGH-finding equality); ALL six ship before dogfood opens'
   gate: false
-  checked: false
+  checked: true
 - id: ac-15
   description: Path-only skill updates (8 skills) + CLAUDE.md bd→orbit replacement (deterministic grep) + README early-release notice verbatim
   gate: false
@@ -92,4 +92,4 @@ acceptance_criteria:
 - id: ac-22
   description: Pre-dogfood atomic main-branch cutover — Migration A + B in single commit; .beads/ deletion + .gitignore for .beads-archive/ in same commit; no orbit-version skill runs against main pre-cutover; dogfood window timer starts at cutover commit
   gate: true
-  checked: false
+  checked: true

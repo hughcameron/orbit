@@ -1,0 +1,6 @@
+key: ac-22-cutover-shipped-2026-05-07
+body: 'orbit-state v0.1 atomic main-branch cutover landed in commit 838f160. Squash-merged worktree-orbit-state-ac15 onto main as a single 247-file commit. .beads/ removed from tracking; data preserved as .beads-archive/ (gitignored, 2-week return path per ac-13). Dogfood window timer (ac-18) starts at this commit. 21 of 23 ACs done (ac-22 closed by cutover). Remaining: ac-18 (≥1 week dogfood — wall clock), ac-19 (v0.1.0 tag — post-dogfood), ac-21 (mac cross-compile — hardware-blocked, Linux passes). On main: orbit verify clean, spec list works, session prime works, memories migrated. Next session uses orbit verbs (orbit spec/task/memory/card/choice/session) — no more bd. parse-acceptance.sh deprecated; orbit-acceptance.sh is the active parser.'
+timestamp: 2026-05-07T11:03:45.846618291Z
+labels:
+- cutover
+- v0.1
