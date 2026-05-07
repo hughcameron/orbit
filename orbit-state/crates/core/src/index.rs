@@ -19,7 +19,7 @@
 //! later if query needs justify it.
 
 use crate::canonical::parse_yaml;
-use crate::error::{Category, Error, Result};
+use crate::error::{Error, Result};
 use crate::layout::OrbitLayout;
 use crate::schema::{Card, Choice, Memory, SchemaVersion, Spec};
 use rusqlite::{params, Connection};
@@ -508,6 +508,7 @@ fn map_json(verb: &'static str) -> impl Fn(serde_json::Error) -> Error {
 mod tests {
     use super::*;
     use crate::canonical::serialise_yaml;
+    use crate::error::Category;
     use crate::schema::{
         AcceptanceCriterion, Card, CardMaturity, Choice, ChoiceStatus, Memory, SchemaVersion,
         Spec, SpecStatus,

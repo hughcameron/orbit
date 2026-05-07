@@ -17,6 +17,11 @@ pub mod locks;
 pub mod migrations;
 pub mod schema;
 pub mod sqlite_link;
+pub mod verbs;
 
 pub use error::{Category, Error, Result};
 pub use sqlite_link::{link_sanity_check, sqlite_version};
+pub use verbs::{
+    envelope_err, envelope_err_string, envelope_ok, envelope_ok_string, execute, SpecListArgs,
+    SpecListResult, SpecSummary, VerbRequest, VerbResponse,
+};
