@@ -1,0 +1,17 @@
+[package]
+name = "orbit-state-cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "orbit CLI — files-canonical agent substrate"
+
+[[bin]]
+name = "orbit"
+path = "src/main.rs"
+
+[dependencies]
+orbit-state-core.workspace = true
+clap.workspace = true
+anyhow.workspace = true
+serde_json.workspace = true
