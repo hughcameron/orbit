@@ -130,9 +130,9 @@ count on every candidate card. If any candidate has fewer than
 ```
 Rally cannot proceed — the following candidate card is too thin:
 
-  orbit/cards/0017-<slug>.yaml — 2 scenarios
+  .orbit/cards/0017-<slug>.yaml — 2 scenarios
 
-Thicken this card via `/orb:card orbit/cards/0017-<slug>.yaml` or remove it from
+Thicken this card via `/orb:card .orbit/cards/0017-<slug>.yaml` or remove it from
 the rally list before continuing.
 ```
 
@@ -154,9 +154,9 @@ downgrade.**
 Parse the goal string from `$ARGUMENTS[0]` and autonomy from
 `$ARGUMENTS[1]` (default `guided`).
 
-**Scan `orbit/cards/` for candidate cards:**
+**Scan `.orbit/cards/` for candidate cards:**
 
-1. Read every `orbit/cards/*.yaml` (ignore `orbit/cards/memos/`)
+1. Read every `.orbit/cards/*.yaml` (ignore `.orbit/cards/memos/`)
 2. For each card, score relevance to the goal string using the card's
    `feature`, `goal`, `scenarios`, and `references`
 3. Surface the top candidates (usually 3–6) with a one-line rationale
@@ -180,9 +180,9 @@ rationale:**
 ## Rally Proposal — <goal string>
 
 Candidate cards:
-  1. orbit/cards/<id>-<slug>.yaml — <feature line>
+  1. .orbit/cards/<id>-<slug>.yaml — <feature line>
      Rationale: <why this card fits the goal>
-  2. orbit/cards/<id>-<slug>.yaml — <feature line>
+  2. .orbit/cards/<id>-<slug>.yaml — <feature line>
      Rationale: <why this card fits the goal>
   ...
 
@@ -208,7 +208,7 @@ invocations as the alternative.
 AskUserQuestion with **no pre-populated options** (free-form only).
 The prompt text reads:
 
-> *Name cards to add (by path, e.g. `orbit/cards/0019-foo.yaml`) or
+> *Name cards to add (by path, e.g. `.orbit/cards/0019-foo.yaml`) or
 > remove (by number, e.g. `2`). Empty response cancels the modification
 > and returns to the approval prompt.*
 
@@ -252,7 +252,7 @@ On `approve-all`:
 SLUG=$(echo "<goal string>" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]\+/-/g; s/^-//; s/-$//' | cut -c1-40)
 
 # 2. Create the rally folder for design artefacts (decisions.md, interview.md)
-RALLY_DIR="orbit/specs/$(date -I)-${SLUG}-rally"
+RALLY_DIR=".orbit/specs/$(date -I)-${SLUG}-rally"
 mkdir -p "$RALLY_DIR"
 
 # 3. Create the epic bead
@@ -275,7 +275,7 @@ bd update "$EPIC" \
 # 5. Promote each card and link as child
 for CARD in "${APPROVED_CARDS[@]}"; do
   CARD_SLUG=$(basename "$CARD" .yaml)
-  SPEC_DIR="orbit/specs/$(date -I)-${CARD_SLUG#*-}"
+  SPEC_DIR=".orbit/specs/$(date -I)-${CARD_SLUG#*-}"
   mkdir -p "$SPEC_DIR"
   CHILD=$(plugins/orb/scripts/promote.sh "$CARD")
   bd update "$CHILD" \
@@ -499,7 +499,7 @@ to implementation ordering — **it gates, not advises.**
 ```
 Shared symbols detected:
   - Engine trait — referenced by <card A> and <card C>
-  - orbit/specs/.../hook.sh — both <card B> and <card C> modify it
+  - .orbit/specs/.../hook.sh — both <card B> and <card C> modify it
 
 Proposed implementation order: <card A> → <card C> → <card B>
 Rationale: Card A establishes the Engine trait; card C extends it; card B depends on the hook update card C ships.
@@ -906,8 +906,8 @@ parallel and partly serial. Each step is a literal command.
 
 ```bash
 # 1. Validate candidates (thin-card guard) — refuse if any has <3 scenarios
-for CARD in orbit/cards/0021-foo.yaml orbit/cards/0022-bar.yaml \
-            orbit/cards/0023-baz.yaml orbit/cards/0024-quux.yaml; do
+for CARD in .orbit/cards/0021-foo.yaml .orbit/cards/0022-bar.yaml \
+            .orbit/cards/0023-baz.yaml .orbit/cards/0024-quux.yaml; do
   python3 -c "
 import yaml
 with open('$CARD') as f:
@@ -917,7 +917,7 @@ assert n >= 3, f'BLOCKED: $CARD has {n} scenarios; rally requires ≥3'
 done
 
 # 2. Create rally folder
-RALLY_DIR="orbit/specs/$(date -I)-pipeline-readiness-rally"
+RALLY_DIR=".orbit/specs/$(date -I)-pipeline-readiness-rally"
 mkdir -p "$RALLY_DIR"
 
 # 3. Create the epic + seed metadata (after AskUserQuestion approve-all)
@@ -933,10 +933,10 @@ bd update "$EPIC" \
   --set-metadata "rally_folder=$RALLY_DIR"
 
 # 4. Promote cards + link as children
-for CARD in orbit/cards/0021-foo.yaml orbit/cards/0022-bar.yaml \
-            orbit/cards/0023-baz.yaml orbit/cards/0024-quux.yaml; do
+for CARD in .orbit/cards/0021-foo.yaml .orbit/cards/0022-bar.yaml \
+            .orbit/cards/0023-baz.yaml .orbit/cards/0024-quux.yaml; do
   CARD_SLUG=$(basename "$CARD" .yaml)
-  SPEC_DIR="orbit/specs/$(date -I)-${CARD_SLUG#*-}"
+  SPEC_DIR=".orbit/specs/$(date -I)-${CARD_SLUG#*-}"
   mkdir -p "$SPEC_DIR"
   CHILD=$(plugins/orb/scripts/promote.sh "$CARD")
   bd update "$CHILD" \

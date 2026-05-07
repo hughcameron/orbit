@@ -26,12 +26,12 @@ If a well-formed card exists (≥ 3 scenarios), use `/orb:design` instead.
 ### 1. Setup
 
 - Determine the topic from the author's input
-- Check `orbit/cards/` for any related feature cards. If a thin card exists, read it as starting context.
-- Identify the output directory: `orbit/specs/YYYY-MM-DD-<topic-slug>/` (create if needed)
+- Check `.orbit/cards/` for any related feature cards. If a thin card exists, read it as starting context.
+- Identify the output directory: `.orbit/specs/YYYY-MM-DD-<topic-slug>/` (create if needed)
 
 ### 2. Search for Prior Art
 
-Before asking questions, run a keyword scan (see `/orb:keyword-scan`) against `orbit/specs/` and `orbit/decisions/` using terms from the topic. If prior specs or decisions already explored this area, front-load what they found — the discovery session should build on existing knowledge, not rediscover it.
+Before asking questions, run a keyword scan (see `/orb:keyword-scan`) against `.orbit/specs/` and `.orbit/choices/` using terms from the topic. If prior specs or decisions already explored this area, front-load what they found — the discovery session should build on existing knowledge, not rediscover it.
 
 ### 3. Conduct the Discovery
 
@@ -88,14 +88,14 @@ During discovery, choices between approaches will surface. When a clear choice i
 
 ### 7. Save the Record
 
-Save the Q&A as: `orbit/specs/YYYY-MM-DD-<topic-slug>/interview.md`
+Save the Q&A as: `.orbit/specs/YYYY-MM-DD-<topic-slug>/interview.md`
 
 ```markdown
 # Discovery: <Topic>
 
 **Date:** YYYY-MM-DD
 **Interviewer:** <agent name>
-**Card:** orbit/cards/NNNN-slug.yaml (if applicable)
+**Card:** .orbit/cards/NNNN-slug.yaml (if applicable)
 **Mode:** discovery
 
 ---
@@ -126,7 +126,7 @@ Save the Q&A as: `orbit/specs/YYYY-MM-DD-<topic-slug>/interview.md`
 - <criterion 1>
 
 ### Decisions Surfaced
-- <choice made>: chose X over Y because Z (→ orbit/decisions/NNNN if recorded)
+- <choice made>: chose X over Y because Z (→ .orbit/choices/NNNN if recorded)
 
 ### Implementation Notes
 - <means-level observations from exploration — starting context for the implementing agent>

@@ -4,7 +4,7 @@
 # Reads a bead's acceptance_criteria field (via bd show --json) and parses
 # the orbit AC convention: `- [ ] ac-NN [gate]: description`
 #
-# See orbit/conventions/acceptance-field.md for format specification.
+# See .orbit/conventions/acceptance-field.md for format specification.
 #
 # ## Contract
 #

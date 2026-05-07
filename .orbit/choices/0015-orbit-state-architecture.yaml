@@ -1,0 +1,37 @@
+id: '0015'
+title: orbit-state — files-canonical, Rust + SQLite + MCP
+status: accepted
+date_created: 2026-05-07
+date_modified: 2026-05-07
+body: |
+  # 0015. orbit-state — files-canonical, Rust + SQLite + MCP
+
+  ## Context and Problem Statement
+
+  Agent state (specs, memories, tasks, skill iteration) needs a substrate that is queryable, atomic, and persistent. Decision 0011 (beads as orbit's execution substrate) chose bd; subsequent thinking on git-friendliness, format integrity, and human buy-in surfaced a sharper architecture: text files canonical, SQLite as a rebuildable index, MCP server as the operator. This is the dbt / Hugo / Org-mode pattern applied to agent state.
+
+  ## Considered Options
+
+  - **A. Stay with bd as-is.** Database-canonical (Dolt-backed); the JSONL view is a debug export. Vocabulary already learned across repos. Shell-out cost compounds; no schema control; binary database opaque to git tracking.
+  - **B. bd plus an MCP wrapper.** Adds an MCP adapter so agents call bd semantically instead of through bash. Removes shell-out cost; keeps database-canonical, inheriting Dolt's git opaqueness and the schema-control gap.
+  - **C. Custom Rust + SQLite + MCP, files canonical, database derived.** A new orbit-state binary; YAML / JSONL / Markdown by content shape; SQLite index rebuilt from files; MCP server reads/writes via serde so agents never edit raw YAML. Schema control plus git-trackable state plus human buy-in; maintenance burden forever.
+
+  ## Decision Outcome
+
+  Chosen option: **C — custom Rust + SQLite + MCP, files canonical, database derived.** Files-canonical is strictly better than database-canonical on six axes: git diffs show semantic state changes; cloning the repo is sufficient for full recovery; branches naturally carry their own state; cross-repo queries work by path scan rather than separate global database; format integrity is parser-enforced via serde; and human inspection works through `cat` and `grep` without learning new tools. The maintenance burden is real but bounded by deliberate scope discipline: MVP is bd verb parity, single-repo first, no cross-repo until v0.2.
+
+  ### Consequences
+
+  - Good, because git diffs show semantic state changes; PR review covers state alongside code.
+  - Good, because a future collaborator (or future-Hugh six months from now) can inspect state via `cat` and `grep` — no new tools to learn.
+  - Good, because schema is parser-enforced via serde; format integrity is structural, not by trust.
+  - Good, because clone alone reconstructs full state — no Dolt sync, no `.beads/` reinit dance.
+  - Good, because the MCP server is the operator; agents never edit raw YAML; the format-anxiety failure mode (agents drifting on quoting / indentation) is dissolved structurally rather than by training.
+  - Bad, because we own a state manager forever; bug fixes, schema migrations, and edge cases are on us.
+  - Bad, because we walk away from Dolt's branching/merging story (unused in practice, but a real loss).
+  - Neutral, because bd's vocabulary survives intact (claim/close/note/show/list/ready/remember/recall/prime/gate); ops decision 0032 still reads cleanly with orbit-state as the implementation.
+
+  This decision supersedes:
+  - decision 0011 (beads as orbit's execution substrate) — orbit-state replaces bd as the execution substrate.
+  - decision 0013 (bead acceptance field as cold-fork substrate) — cold-fork reviews now read from spec YAML directly, not the bead acceptance field.
+references: []

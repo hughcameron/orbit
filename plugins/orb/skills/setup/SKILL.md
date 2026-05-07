@@ -7,7 +7,7 @@ description: Set up a project for the orbit workflow — creates orbit/ director
 
 Set up a project for the orbit specification-driven workflow.
 
-Workflow artefacts live under a single top-level `orbit/` folder — `orbit/cards/`, `orbit/specs/`, `orbit/decisions/`, and (when created ad-hoc) `orbit/discovery/`. This keeps workflow state separated from source code and standard repo metadata.
+Workflow artefacts live under a single top-level `orbit/` folder — `.orbit/cards/`, `.orbit/specs/`, `.orbit/choices/`, and (when created ad-hoc) `.orbit/discovery/`. This keeps workflow state separated from source code and standard repo metadata.
 
 ## Usage
 
@@ -41,7 +41,7 @@ orbit/
   decisions/  # MADR decision records
 ```
 
-Do **not** create `orbit/discovery/` at setup time. It is created ad-hoc the first time `/orb:discovery` runs. Setup detects it during brownfield migration but never creates it eagerly.
+Do **not** create `.orbit/discovery/` at setup time. It is created ad-hoc the first time `/orb:discovery` runs. Setup detects it during brownfield migration but never creates it eagerly.
 
 Then proceed to §6 (CLAUDE.md snippet) and §7 (first card tutorial).
 
@@ -57,10 +57,10 @@ The repo has one or more bare artefact directories at the root from a pre-`orbit
 
 ```
 orbit: detected legacy layout. Ready to migrate:
-  cards/       → orbit/cards/
-  specs/       → orbit/specs/
-  decisions/   → orbit/decisions/
-  discovery/   → orbit/discovery/
+  cards/       → .orbit/cards/
+  specs/       → .orbit/specs/
+  decisions/   → .orbit/choices/
+  discovery/   → .orbit/discovery/
 
 Untracked files inside these dirs (will remain at the old path after git mv):
   cards/scratch.md
@@ -76,10 +76,10 @@ If no untracked files are present, omit that section. One prompt covers all dete
 
 ```bash
 mkdir -p orbit
-git mv cards orbit/cards
-git mv specs orbit/specs
-git mv decisions orbit/decisions
-git mv discovery orbit/discovery
+git mv cards .orbit/cards
+git mv specs .orbit/specs
+git mv decisions .orbit/choices
+git mv discovery .orbit/discovery
 ```
 
 Run only the `git mv` lines for directories that were actually detected in 3a. If any `git mv` fails (e.g. a target already exists from a half-completed prior migration), abort and surface the error. This state should have been caught as "mixed" in §1, but defence-in-depth applies.
@@ -92,7 +92,7 @@ Run only the `git mv` lines for directories that were actually detected in 3a. I
 orbit: migration complete.
   Moved: 4 directories under orbit/
   Untracked residue: cards/scratch.md (file remains at old path)
-    Consider: git add orbit/cards/ or move manually
+    Consider: git add .orbit/cards/ or move manually
 ```
 
 When no residue exists, the completion message is quiet about it.
@@ -107,8 +107,8 @@ Refuse with a message naming each collision:
 
 ```
 orbit: cannot migrate — inconsistent layout detected.
-  orbit/cards/ exists AND bare cards/ also exists at root
-  orbit/specs/ exists AND bare specs/ also exists at root
+  .orbit/cards/ exists AND bare cards/ also exists at root
+  .orbit/specs/ exists AND bare specs/ also exists at root
 
 Resolve manually before re-running /orb:setup. Typical causes: an aborted prior migration,
 a manually-created orbit/ directory, or a partial downstream pull.
@@ -133,7 +133,7 @@ Check for the marker `## Workflow (orbit)` in `CLAUDE.md`.
 
 **Case B — marker present, vocabulary missing:** the CLAUDE.md has a pre-vocabulary snippet. Detect this by both conditions holding:
 
-- The line `Artefacts live in \`orbit/cards/\`, \`orbit/specs/\`, and \`orbit/decisions/\`.` is present under the marker
+- The line `Artefacts live in \`.orbit/cards/\`, \`.orbit/specs/\`, and \`.orbit/choices/\`.` is present under the marker
 - No `## Orbit vocabulary` heading exists between `## Workflow (orbit)` and the next top-level section
 
 Offer a single migration prompt:
@@ -166,12 +166,12 @@ This project uses the orbit workflow: Card → Design → Spec → Implement →
 
 ## Orbit vocabulary
 
-- **Card** (`orbit/cards/*.yaml`) — a capability the product provides. User language. Never closed.
-- **Memo** (`orbit/cards/memos/*.md`) — raw idea awaiting distillation.
-- **Interview** (`orbit/specs/<slug>/interview.md`) — Q&A record from `/design` or `/discovery`.
-- **Spec** (`orbit/specs/<slug>/spec.yaml`) — a discrete unit of work with numbered ACs.
-- **Progress** (`orbit/specs/<slug>/progress.md`) — AC tracker during implementation.
-- **Decision** (`orbit/decisions/*.md`) — MADR record of an architectural choice.
+- **Card** (`.orbit/cards/*.yaml`) — a capability the product provides. User language. Never closed.
+- **Memo** (`.orbit/cards/memos/*.md`) — raw idea awaiting distillation.
+- **Interview** (`.orbit/specs/<slug>/interview.md`) — Q&A record from `/design` or `/discovery`.
+- **Spec** (`.orbit/specs/<slug>/spec.yaml`) — a discrete unit of work with numbered ACs.
+- **Progress** (`.orbit/specs/<slug>/progress.md`) — AC tracker during implementation.
+- **Decision** (`.orbit/choices/*.md`) — MADR record of an architectural choice.
 
 Cards describe *what*, specs describe *work*. Follow-up work is a new spec against an existing card — not a new card. New cards are for new capabilities.
 
@@ -203,7 +203,7 @@ This skill is idempotent. Running it again on an already-initialised project:
 
 ## Why `orbit/`?
 
-One folder name, one convention, not configurable. See spec `orbit/specs/2026-04-20-orbit-artefact-folder/spec.yaml` (constraint #4) and card `orbit/cards/0008-consolidated-orbit-artefact-folder.yaml` for the decision record.
+One folder name, one convention, not configurable. See spec `.orbit/specs/2026-04-20-orbit-artefact-folder/spec.yaml` (constraint #4) and card `.orbit/cards/0008-consolidated-orbit-artefact-folder.yaml` for the decision record.
 
 ---
 

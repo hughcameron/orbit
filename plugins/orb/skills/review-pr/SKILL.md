@@ -32,7 +32,7 @@ The skill takes a beads identifier — the bead's acceptance field is the implem
 2. Read the bead via `bd show <bead-id> --json` to understand what was intended — the description carries the goal and any prose constraints.
 3. Run `plugins/orb/scripts/parse-acceptance.sh acs <bead-id>` to enumerate the AC list with current check status. The bead acceptance field replaces the earlier `progress.md` tracker — `[x]` marks are the implementer's self-reported AC completions, set by `/orb:implement` via `parse-acceptance.sh check`.
 4. Identify which acceptance criteria this implementation claims to satisfy from the parsed `[x]` rows.
-5. Run a keyword scan (see `/orb:keyword-scan`) against `orbit/decisions/` using terms from the bead's description goal and any constraint prose. If relevant decisions exist, verify the implementation respects them. Flag violations as findings.
+5. Run a keyword scan (see `/orb:keyword-scan`) against `.orbit/choices/` using terms from the bead's description goal and any constraint prose. If relevant decisions exist, verify the implementation respects them. Flag violations as findings.
 
 ### 3. Phase 2: Run Tests + AC Coverage Check
 

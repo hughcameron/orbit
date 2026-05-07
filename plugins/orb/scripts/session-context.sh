@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# DEPRECATED — 2026-05-01 (spec: orbit/specs/2026-05-01-beads-foundation)
+# DEPRECATED — 2026-05-01 (spec: .orbit/specs/2026-05-01-beads-foundation)
 #
 # Session-start context is now provided by beads via .beads/PRIME.md.
 # Run plugins/orb/scripts/bd-init.sh to set up beads integration.
 # This file is retained for reference but is no longer registered as a hook.
-# See orbit/decisions/0011-beads-execution-layer.md (D3).
+# See .orbit/choices/0011-beads-execution-layer.md (D3).
 #
 # Original description:
 # session-context.sh — SessionStart hook for orbit workflow context
@@ -39,11 +39,11 @@ if [[ "$legacy_bare_present" -eq 1 ]]; then
 fi
 
 # Surface outstanding memos (not yet referenced by any card)
-if [[ -d "orbit/cards/memos" ]]; then
-  memo_files=$(find orbit/cards/memos -maxdepth 1 -name '*.md' 2>/dev/null | sort)
+if [[ -d ".orbit/cards/memos" ]]; then
+  memo_files=$(find .orbit/cards/memos -maxdepth 1 -name '*.md' 2>/dev/null | sort)
   if [[ -n "$memo_files" ]]; then
     # Collect all references from card YAML files
-    all_refs=$(grep -h '^\s*- ' orbit/cards/*.yaml 2>/dev/null | grep 'orbit/cards/memos/' | sed 's/^[[:space:]]*- //' | sed 's/^"//' | sed 's/"$//' || true)
+    all_refs=$(grep -h '^\s*- ' .orbit/cards/*.yaml 2>/dev/null | grep '.orbit/cards/memos/' | sed 's/^[[:space:]]*- //' | sed 's/^"//' | sed 's/"$//' || true)
 
     outstanding=()
     while IFS= read -r memo; do
@@ -54,7 +54,7 @@ if [[ -d "orbit/cards/memos" ]]; then
     done <<< "$memo_files"
 
     if [[ ${#outstanding[@]} -gt 0 ]]; then
-      echo "orbit: ${#outstanding[@]} outstanding memo(s) in orbit/cards/memos/:"
+      echo "orbit: ${#outstanding[@]} outstanding memo(s) in .orbit/cards/memos/:"
       for name in "${outstanding[@]}"; do
         echo "  - $name"
       done
@@ -62,17 +62,17 @@ if [[ -d "orbit/cards/memos" ]]; then
   fi
 fi
 
-# Detect active rally — scan orbit/specs/*/rally.yaml.
-# Rally state lives inside a spec-shaped folder (orbit/specs/<date>-<slug>-rally/rally.yaml).
+# Detect active rally — scan .orbit/specs/*/rally.yaml.
+# Rally state lives inside a spec-shaped folder (.orbit/specs/<date>-<slug>-rally/rally.yaml).
 # Active rally = the one with phase != "complete". Completed rallies stay in place as history.
 # When a rally is active, it becomes the primary orchestration context
 # and individual drive states are subordinated (shown as sub-items, not independent status lines).
 active_rally=""
 rally_file=""
 latest_complete_rally_file=""
-if [[ -d "orbit/specs" ]]; then
+if [[ -d ".orbit/specs" ]]; then
   # Collect candidate rally.yaml paths. find exits 0 on no matches with `|| true` safeguard.
-  rally_candidates=$(find orbit/specs -maxdepth 2 -name 'rally.yaml' -type f 2>/dev/null | sort || true)
+  rally_candidates=$(find .orbit/specs -maxdepth 2 -name 'rally.yaml' -type f 2>/dev/null | sort || true)
   if [[ -n "$rally_candidates" ]]; then
     # First pass: pick the first active rally (phase != complete).
     # Second pass (if no active): remember the most recent completed rally for the summary line.
@@ -176,11 +176,11 @@ fi
 active_drive=""
 if [[ -n "$active_rally" ]]; then
   drive_file=""
-elif [[ -d "orbit/specs" ]]; then
-  # Guard on dir existence: under `set -euo pipefail`, a missing orbit/specs
+elif [[ -d ".orbit/specs" ]]; then
+  # Guard on dir existence: under `set -euo pipefail`, a missing .orbit/specs
   # would cause `find` to exit 1 and abort the hook. The hook must survive
   # partial orbit/ layouts (e.g. a manually-created orbit/ without subdirs).
-  drive_file=$(find orbit/specs -maxdepth 2 -name 'drive.yaml' 2>/dev/null | head -1 || true)
+  drive_file=$(find .orbit/specs -maxdepth 2 -name 'drive.yaml' 2>/dev/null | head -1 || true)
 else
   drive_file=""
 fi
@@ -220,18 +220,18 @@ fi
 # Guard on dir existence so pipefail doesn't kill the hook when orbit/ was
 # created manually without its standard subdirs.
 latest_spec=""
-if [[ -d "orbit/specs" ]]; then
-  latest_spec=$(find orbit/specs -maxdepth 1 -type d -name '20*' \! -name '*-rally' 2>/dev/null | sort -r | head -1 || true)
+if [[ -d ".orbit/specs" ]]; then
+  latest_spec=$(find .orbit/specs -maxdepth 1 -type d -name '20*' \! -name '*-rally' 2>/dev/null | sort -r | head -1 || true)
 fi
 
 if [[ -z "$latest_spec" ]]; then
   # No specs yet — check for cards
   card_count=0
-  if [[ -d "orbit/cards" ]]; then
-    card_count=$(find orbit/cards -maxdepth 1 -name '*.yaml' 2>/dev/null | wc -l | tr -d ' ')
+  if [[ -d ".orbit/cards" ]]; then
+    card_count=$(find .orbit/cards -maxdepth 1 -name '*.yaml' 2>/dev/null | wc -l | tr -d ' ')
   fi
   if [[ "$card_count" -gt 0 ]]; then
-    echo "orbit: $card_count card(s) in orbit/cards/. Next step: /orb:design to refine one into a spec."
+    echo "orbit: $card_count card(s) in .orbit/cards/. Next step: /orb:design to refine one into a spec."
   fi
   exit 0
 fi

@@ -9,8 +9,8 @@ orbit is a Claude Code plugin that provides specification-driven workflow skills
 ## Working in This Repo
 
 - **Skills live in** `plugins/orb/skills/<name>/SKILL.md`
-- **Cards describe orbit's own capabilities** in `orbit/cards/`
-- **Specs for orbit changes** live in `orbit/specs/`
+- **Cards describe orbit's own capabilities** in `.orbit/cards/`
+- **Specs for orbit changes** live in `.orbit/specs/`
 - orbit uses itself — cards, specs, and decisions apply to orbit's own development
 
 ## Key Concepts
@@ -25,19 +25,19 @@ Each artefact has one job. Don't invent new names — if something doesn't fit, 
 
 | Artefact    | Where                                                       | What it is                                                                                                                   |
 |-------------|-------------------------------------------------------------|------------------------------------------------------------------------------------------------------------------------------|
-| Card        | `orbit/cards/NNNN-<slug>.yaml`                              | A capability the product provides. Written in user language. Never closed — updated in place as the capability evolves.       |
-| Memo        | `orbit/cards/memos/<date>-<slug>.md`                        | Raw idea awaiting distillation. Freeform markdown. Turned into cards via `/distill`. Deleted after promotion.                |
-| Interview   | `orbit/specs/<date>-<slug>/interview.md`                    | Q&A record from a `/design` or `/discovery` session. Feeds the spec.                                                          |
-| Spec        | `orbit/specs/<date>-<slug>/spec.yaml`                       | A discrete unit of work with numbered acceptance criteria. One card may spawn many specs over time.                          |
-| Progress    | `orbit/specs/<date>-<slug>/progress.md`                     | AC tracker maintained during implementation. The implementation diary.                                                       |
-| Review      | `orbit/specs/<date>-<slug>/review-{spec,pr}-<date>.md`      | Verdict artefact from `/review-spec` or `/review-pr`.                                                                         |
-| Decision    | `orbit/decisions/NNNN-<slug>.md`                            | MADR record of an architectural choice. Referenced by specs that respect it.                                                 |
-| Rally state | `orbit/specs/<date>-<slug>-rally/rally.yaml`                | Durable state for a multi-card rally. Owned by the rally lead. Rally folders live alongside card spec folders — no separate archive.|
-| Drive state | `orbit/specs/<date>-<slug>/drive.yaml`                      | Durable state for a single-card drive. Owned by the drive agent.                                                             |
+| Card        | `.orbit/cards/NNNN-<slug>.yaml`                              | A capability the product provides. Written in user language. Never closed — updated in place as the capability evolves.       |
+| Memo        | `.orbit/cards/memos/<date>-<slug>.md`                        | Raw idea awaiting distillation. Freeform markdown. Turned into cards via `/distill`. Deleted after promotion.                |
+| Interview   | `.orbit/specs/<date>-<slug>/interview.md`                    | Q&A record from a `/design` or `/discovery` session. Feeds the spec.                                                          |
+| Spec        | `.orbit/specs/<date>-<slug>/spec.yaml`                       | A discrete unit of work with numbered acceptance criteria. One card may spawn many specs over time.                          |
+| Progress    | `.orbit/specs/<date>-<slug>/progress.md`                     | AC tracker maintained during implementation. The implementation diary.                                                       |
+| Review      | `.orbit/specs/<date>-<slug>/review-{spec,pr}-<date>.md`      | Verdict artefact from `/review-spec` or `/review-pr`.                                                                         |
+| Decision    | `.orbit/choices/NNNN-<slug>.md`                            | MADR record of an architectural choice. Referenced by specs that respect it.                                                 |
+| Rally state | `.orbit/specs/<date>-<slug>-rally/rally.yaml`                | Durable state for a multi-card rally. Owned by the rally lead. Rally folders live alongside card spec folders — no separate archive.|
+| Drive state | `.orbit/specs/<date>-<slug>/drive.yaml`                      | Durable state for a single-card drive. Owned by the drive agent.                                                             |
 
 **Cards describe *what*, specs describe *work*.** When someone asks to "make a card for X":
 
-- Is X a capability the product provides? → card in `orbit/cards/`.
+- Is X a capability the product provides? → card in `.orbit/cards/`.
 - Is X a discrete piece of work with acceptance criteria? → spec via `/design` + `/spec`.
 - Is X a rough idea you don't want to lose? → memo via `/memo`.
 - Is X a retrospective, options memo, or investigation plan? → none of the above. Retrospectives update the card they're about; options memos become `/discovery` sessions; investigation plans become specs.

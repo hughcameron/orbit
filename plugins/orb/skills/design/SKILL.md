@@ -24,9 +24,9 @@ If no card exists or the card is thin, use `/orb:discovery` first.
 
 ### 1. Setup
 
-- Find the matching card in `orbit/cards/`. Read it — including scenarios and references.
+- Find the matching card in `.orbit/cards/`. Read it — including scenarios and references.
 - If no matching card exists, tell the author and suggest `/orb:discovery` or `/orb:card` instead.
-- Identify the output directory: `orbit/specs/YYYY-MM-DD-<topic-slug>/` (create if needed)
+- Identify the output directory: `.orbit/specs/YYYY-MM-DD-<topic-slug>/` (create if needed)
 
 ### 2. Load the Evidence Base
 
@@ -46,17 +46,17 @@ Before asking any questions, build a picture of where this capability stands:
 
 Before trusting the card's `specs` array as complete, verify it with a keyword scan (see `/orb:keyword-scan` for the full technique). This catches specs that address the card's topic but were never linked back.
 
-1. Extract keywords from the card and search `orbit/specs/` using the keyword scan technique
+1. Extract keywords from the card and search `.orbit/specs/` using the keyword scan technique
 2. Compare hits against the card's `specs` array — any spec directory found by keyword but not in the array is a potential orphan
 3. Surface orphans to the author — do not auto-link:
-   > "Found orbit/specs/2026-04-10-exit-classifier/ discussing [matched terms] — not in card's specs array. Include?"
+   > "Found .orbit/specs/2026-04-10-exit-classifier/ discussing [matched terms] — not in card's specs array. Include?"
 4. If the author confirms, append the spec path to the card's `specs` array and write the updated card to disk
 
 If no orphans are found, move on silently.
 
 **Then load broader evidence:**
 
-1. Check `orbit/cards/memos/` for related memos
+1. Check `.orbit/cards/memos/` for related memos
 2. If the card has `references`, read them — these may contain empirical results
 3. Search the codebase for experiments, sweeps, or benchmarks related to the card's topic
 
@@ -121,14 +121,14 @@ Design sessions are where most decisions live. When probing references and appro
 
 ### 7. Save the Record
 
-Save the Q&A as: `orbit/specs/YYYY-MM-DD-<topic-slug>/interview.md`
+Save the Q&A as: `.orbit/specs/YYYY-MM-DD-<topic-slug>/interview.md`
 
 ```markdown
 # Design: <Topic>
 
 **Date:** YYYY-MM-DD
 **Interviewer:** <agent name>
-**Card:** orbit/cards/NNNN-slug.yaml
+**Card:** .orbit/cards/NNNN-slug.yaml
 
 ---
 
@@ -160,7 +160,7 @@ Gap: <what remains between current state and goal>
 - <criterion 1>
 
 ### Decisions Surfaced
-- <choice made>: chose X over Y because Z (→ orbit/decisions/NNNN if recorded)
+- <choice made>: chose X over Y because Z (→ .orbit/choices/NNNN if recorded)
 
 ### Implementation Notes
 - <means-level observations from codebase exploration — starting context for the implementing agent>

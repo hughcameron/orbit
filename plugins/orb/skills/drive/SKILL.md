@@ -742,7 +742,7 @@ step is a literal command.
 # 1. Validate the card (full autonomy requires ≥3 scenarios)
 python3 -c "
 import yaml
-with open('orbit/cards/0005-drive.yaml') as f:
+with open('.orbit/cards/0005-drive.yaml') as f:
     card = yaml.safe_load(f)
 n = len(card.get('scenarios', []))
 assert n >= 3, f'BLOCKED: full autonomy requires ≥3 scenarios; have {n}'
@@ -750,12 +750,12 @@ print(f'OK: {n} scenarios')
 "
 
 # 2. Promote card → bead
-BEAD=$(plugins/orb/scripts/promote.sh orbit/cards/0005-drive.yaml)
+BEAD=$(plugins/orb/scripts/promote.sh .orbit/cards/0005-drive.yaml)
 echo "Promoted: $BEAD"
 
 # 3. Seed orchestration metadata + claim
 bd update "$BEAD" \
-  --set-metadata "drive_card=orbit/cards/0005-drive.yaml" \
+  --set-metadata "drive_card=.orbit/cards/0005-drive.yaml" \
   --set-metadata "drive_autonomy=full" \
   --set-metadata "drive_iteration=1" \
   --set-metadata "drive_stage=review-spec" \

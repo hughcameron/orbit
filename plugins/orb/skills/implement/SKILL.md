@@ -143,7 +143,7 @@ For each AC, in `next-ac` order:
 ### Gate enforcement
 
 Gate enforcement is delegated entirely to `parse-acceptance.sh next-ac`.
-By convention (see `orbit/conventions/acceptance-field.md`), an unchecked
+By convention (see `.orbit/conventions/acceptance-field.md`), an unchecked
 `[gate]` AC blocks all subsequent ACs by declaration order. The parser
 implements this — the agent does not re-check gates inline.
 
@@ -220,7 +220,7 @@ channels:
 |-----------------------------------------------|----------------------------------------------------------------------------|
 | Blocking detour (must resolve before this AC) | sub-bead via `bd create --parent <current> --deps "discovered-from:<current>"` (above) |
 | Follow-up work that does NOT block this AC    | top-level bead via `bd create -t task` (no `--parent`)                     |
-| Product-direction question (capability-level) | memo at `orbit/cards/memos/YYYY-MM-DD-<slug>.md` for `/orb:distill` later |
+| Product-direction question (capability-level) | memo at `.orbit/cards/memos/YYYY-MM-DD-<slug>.md` for `/orb:distill` later |
 
 **Never suggest "open a follow-up card."** Cards describe capabilities,
 not work items. The agent doesn't know whether a finding warrants a new

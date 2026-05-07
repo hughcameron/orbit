@@ -23,7 +23,7 @@ Cards are NOT specs. They don't prescribe solutions. "The step name is visible i
 
 ### 1. Determine the Next Card Number
 
-Read the `orbit/cards/` directory. Find the highest existing `NNNN-*.yaml` number and increment by 1. If no cards exist, start at `0001`.
+Read the `.orbit/cards/` directory. Find the highest existing `NNNN-*.yaml` number and increment by 1. If no cards exist, start at `0001`.
 
 ### 2. Interview for Card Content
 
@@ -48,7 +48,7 @@ Use **AskUserQuestion** to gather:
 
 ### 3. Write the Card
 
-Save as `orbit/cards/NNNN-<slug>.yaml`:
+Save as `.orbit/cards/NNNN-<slug>.yaml`:
 
 ```yaml
 feature: "<short feature name>"
@@ -80,7 +80,7 @@ references:                          # optional — prior art and inspiration
 
 ### 4. Check for Overlap
 
-Before finalising, run a keyword scan (see `/orb:keyword-scan`) against `orbit/cards/` and `orbit/specs/` using terms from the feature name and scenarios. If an existing card already describes this capability, surface it — the author may want to update the existing card rather than create a new one.
+Before finalising, run a keyword scan (see `/orb:keyword-scan`) against `.orbit/cards/` and `.orbit/specs/` using terms from the feature name and scenarios. If an existing card already describes this capability, surface it — the author may want to update the existing card rather than create a new one.
 
 ### 5. Quality Check
 
