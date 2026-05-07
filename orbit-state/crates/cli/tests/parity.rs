@@ -219,6 +219,86 @@ fn spec_note_cli_appends_in_order_for_two_calls() {
     assert!(lines[1].contains(r#""body":"second""#));
 }
 
+// ---------------------------------------------------------------------------
+// End-to-end lifecycle — create → note → update → close
+// ---------------------------------------------------------------------------
+
+#[test]
+fn cli_full_spec_lifecycle() {
+    let dir = tempfile::tempdir().unwrap();
+
+    // Pre-stage a card so spec.close has something to update.
+    let cards_dir = dir.path().join(".orbit/cards");
+    std::fs::create_dir_all(&cards_dir).unwrap();
+    std::fs::write(
+        cards_dir.join("0020-orbit-state.yaml"),
+        "feature: orbit-state\ngoal: substrate\nmaturity: planned\n",
+    )
+    .unwrap();
+
+    let cli_bin = env!("CARGO_BIN_EXE_orbit");
+    let root = dir.path().to_str().unwrap();
+
+    // 1. Create
+    let out = Command::new(cli_bin)
+        .args([
+            "--root", root, "spec", "create", "0001", "the goal",
+            "--card", "0020-orbit-state",
+        ])
+        .stdin(Stdio::null())
+        .output()
+        .unwrap();
+    assert!(out.status.success(), "create failed: {}", String::from_utf8_lossy(&out.stderr));
+
+    // 2. Note
+    let out = Command::new(cli_bin)
+        .args([
+            "--root", root, "spec", "note", "0001", "kicked off",
+            "--timestamp", "2026-05-07T12:00:00Z",
+        ])
+        .stdin(Stdio::null())
+        .output()
+        .unwrap();
+    assert!(out.status.success(), "note failed: {}", String::from_utf8_lossy(&out.stderr));
+
+    // 3. Update goal
+    let out = Command::new(cli_bin)
+        .args([
+            "--root", root, "spec", "update", "0001",
+            "--goal", "the revised goal",
+        ])
+        .stdin(Stdio::null())
+        .output()
+        .unwrap();
+    assert!(out.status.success(), "update failed: {}", String::from_utf8_lossy(&out.stderr));
+
+    // 4. Close — triggers transactional card update
+    let out = Command::new(cli_bin)
+        .args(["--root", root, "spec", "close", "0001"])
+        .stdin(Stdio::null())
+        .output()
+        .unwrap();
+    assert!(out.status.success(), "close failed: {}", String::from_utf8_lossy(&out.stderr));
+
+    // 5. Verify final state
+    //    spec is closed with revised goal
+    let spec_text = std::fs::read_to_string(dir.path().join(".orbit/specs/0001.yaml")).unwrap();
+    assert!(spec_text.contains("status: closed"), "spec not closed: {spec_text}");
+    assert!(spec_text.contains("the revised goal"), "goal not updated: {spec_text}");
+
+    //    note stream has one entry
+    let notes = std::fs::read_to_string(dir.path().join(".orbit/specs/0001.notes.jsonl")).unwrap();
+    assert_eq!(notes.lines().count(), 1);
+    assert!(notes.contains(r#""body":"kicked off""#));
+
+    //    linked card's specs array now contains the spec ref
+    let card_text = std::fs::read_to_string(cards_dir.join("0020-orbit-state.yaml")).unwrap();
+    assert!(
+        card_text.contains(".orbit/specs/0001.yaml"),
+        "card not updated: {card_text}"
+    );
+}
+
 // Helper visible to ensure the test binary depends on the CLI binary.
 #[allow(dead_code)]
 fn _binary_dep_anchor(_p: &Path) {}

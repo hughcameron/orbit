@@ -164,6 +164,148 @@ fn tool_descriptors() -> Vec<Value> {
                 "additionalProperties": false
             }
         }),
+        json!({
+            "name": "spec.create",
+            "description": "Create a new spec at .orbit/specs/<id>.yaml.",
+            "inputSchema": {
+                "type": "object",
+                "required": ["id", "goal"],
+                "properties": {
+                    "id":   { "type": "string" },
+                    "goal": { "type": "string" },
+                    "cards": { "type": "array", "items": { "type": "string" } },
+                    "labels": { "type": "array", "items": { "type": "string" } },
+                    "acceptance_criteria": { "type": "array" }
+                },
+                "additionalProperties": false
+            }
+        }),
+        json!({
+            "name": "spec.update",
+            "description": "Update fields on an existing spec. Status changes go via spec.close.",
+            "inputSchema": {
+                "type": "object",
+                "required": ["id"],
+                "properties": {
+                    "id":   { "type": "string" },
+                    "goal": { "type": "string" },
+                    "cards": { "type": "array", "items": { "type": "string" } },
+                    "labels": { "type": "array", "items": { "type": "string" } },
+                    "acceptance_criteria": { "type": "array" }
+                },
+                "additionalProperties": false
+            }
+        }),
+        json!({
+            "name": "spec.close",
+            "description": "Close a spec; transactionally appends to linked cards' specs arrays.",
+            "inputSchema": {
+                "type": "object",
+                "required": ["id"],
+                "properties": {
+                    "id": { "type": "string" }
+                },
+                "additionalProperties": false
+            }
+        }),
+        json!({
+            "name": "task.open",
+            "description": "Open a new task under a spec.",
+            "inputSchema": {
+                "type": "object",
+                "required": ["spec_id", "body"],
+                "properties": {
+                    "spec_id": { "type": "string" },
+                    "body":    { "type": "string" },
+                    "labels":  { "type": "array", "items": { "type": "string" } },
+                    "task_id": { "type": "string" },
+                    "timestamp": { "type": "string" }
+                },
+                "additionalProperties": false
+            }
+        }),
+        json!({
+            "name": "task.list",
+            "description": "List tasks (current state per task_id).",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "spec_id": { "type": "string" },
+                    "state": { "type": "string", "enum": ["open", "claim", "update", "done"] }
+                },
+                "additionalProperties": false
+            }
+        }),
+        json!({
+            "name": "task.show",
+            "description": "Show one task with its full event history.",
+            "inputSchema": {
+                "type": "object",
+                "required": ["spec_id", "task_id"],
+                "properties": {
+                    "spec_id": { "type": "string" },
+                    "task_id": { "type": "string" }
+                },
+                "additionalProperties": false
+            }
+        }),
+        json!({
+            "name": "task.ready",
+            "description": "List claimable (open, no claim) tasks.",
+            "inputSchema": {
+                "type": "object",
+                "properties": { "spec_id": { "type": "string" } },
+                "additionalProperties": false
+            }
+        }),
+        json!({
+            "name": "task.claim",
+            "description": "Claim an open task.",
+            "inputSchema": {
+                "type": "object",
+                "required": ["spec_id", "task_id"],
+                "properties": {
+                    "spec_id": { "type": "string" },
+                    "task_id": { "type": "string" },
+                    "body": { "type": "string" },
+                    "labels": { "type": "array", "items": { "type": "string" } },
+                    "timestamp": { "type": "string" }
+                },
+                "additionalProperties": false
+            }
+        }),
+        json!({
+            "name": "task.update",
+            "description": "Append an update note to a task.",
+            "inputSchema": {
+                "type": "object",
+                "required": ["spec_id", "task_id", "body"],
+                "properties": {
+                    "spec_id": { "type": "string" },
+                    "task_id": { "type": "string" },
+                    "body": { "type": "string" },
+                    "labels": { "type": "array", "items": { "type": "string" } },
+                    "timestamp": { "type": "string" }
+                },
+                "additionalProperties": false
+            }
+        }),
+        json!({
+            "name": "task.done",
+            "description": "Mark a task done.",
+            "inputSchema": {
+                "type": "object",
+                "required": ["spec_id", "task_id"],
+                "properties": {
+                    "spec_id": { "type": "string" },
+                    "task_id": { "type": "string" },
+                    "body": { "type": "string" },
+                    "labels": { "type": "array", "items": { "type": "string" } },
+                    "timestamp": { "type": "string" }
+                },
+                "additionalProperties": false
+            }
+        }),
     ]
 }
 

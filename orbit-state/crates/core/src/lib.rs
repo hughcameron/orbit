@@ -22,7 +22,10 @@ pub mod verbs;
 pub use error::{Category, Error, Result};
 pub use sqlite_link::{link_sanity_check, sqlite_version};
 pub use verbs::{
-    envelope_err, envelope_err_string, envelope_ok, envelope_ok_string, execute, SpecListArgs,
-    SpecListResult, SpecNoteArgs, SpecNoteResult, SpecShowArgs, SpecShowResult, SpecSummary,
+    envelope_err, envelope_err_string, envelope_ok, envelope_ok_string, execute, SpecCloseArgs,
+    SpecCloseResult, SpecCreateArgs, SpecCreateResult, SpecListArgs, SpecListResult, SpecNoteArgs,
+    SpecNoteResult, SpecShowArgs, SpecShowResult, SpecSummary, SpecUpdateArgs, SpecUpdateResult,
+    TaskClaimArgs, TaskDoneArgs, TaskEventResult, TaskListArgs, TaskListResult, TaskOpenArgs,
+    TaskOpenResult, TaskReadyArgs, TaskShowArgs, TaskShowResult, TaskState, TaskUpdateArgs,
     VerbRequest, VerbResponse,
 };

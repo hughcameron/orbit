@@ -20,14 +20,15 @@
 //!
 //! v0.1 surface: `spec.list` only. Subsequent ACs (ac-06..11) add the rest.
 
-use crate::atomic::append_jsonl_line;
-use crate::canonical::{parse_yaml, serialise_json_line};
+use crate::atomic::{append_jsonl_line, write_atomic};
+use crate::canonical::{parse_json_line, parse_yaml, serialise_json_line, serialise_yaml};
 use crate::error::{Error, Result};
 use crate::layout::OrbitLayout;
 use crate::locks;
-use crate::schema::{NoteEvent, Spec, SpecStatus};
+use crate::schema::{AcceptanceCriterion, NoteEvent, Spec, SpecStatus, TaskEvent, TaskEventKind};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+use std::collections::BTreeMap;
 use time::format_description::well_known::Rfc3339;
 use time::OffsetDateTime;
 
@@ -60,6 +61,26 @@ pub enum VerbRequest {
     SpecShow(SpecShowArgs),
     #[serde(rename = "spec.note")]
     SpecNote(SpecNoteArgs),
+    #[serde(rename = "spec.create")]
+    SpecCreate(SpecCreateArgs),
+    #[serde(rename = "spec.update")]
+    SpecUpdate(SpecUpdateArgs),
+    #[serde(rename = "spec.close")]
+    SpecClose(SpecCloseArgs),
+    #[serde(rename = "task.open")]
+    TaskOpen(TaskOpenArgs),
+    #[serde(rename = "task.list")]
+    TaskList(TaskListArgs),
+    #[serde(rename = "task.show")]
+    TaskShow(TaskShowArgs),
+    #[serde(rename = "task.ready")]
+    TaskReady(TaskReadyArgs),
+    #[serde(rename = "task.claim")]
+    TaskClaim(TaskClaimArgs),
+    #[serde(rename = "task.update")]
+    TaskUpdate(TaskUpdateArgs),
+    #[serde(rename = "task.done")]
+    TaskDone(TaskDoneArgs),
 }
 
 /// Args for `spec.list`. Optional `status` filter; further filters land later.
@@ -77,6 +98,139 @@ pub struct SpecListArgs {
 #[serde(deny_unknown_fields)]
 pub struct SpecShowArgs {
     pub id: String,
+}
+
+/// Args for `spec.create` — write a new spec file.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct SpecCreateArgs {
+    pub id: String,
+    pub goal: String,
+    /// Cards this spec advances. Empty list is legal but unusual.
+    #[serde(default)]
+    pub cards: Vec<String>,
+    /// Free-text labels (e.g. `spec`, `experimental`).
+    #[serde(default)]
+    pub labels: Vec<String>,
+    /// Initial acceptance criteria — usually empty at creation; populated
+    /// via spec.update once the spec is designed.
+    #[serde(default)]
+    pub acceptance_criteria: Vec<AcceptanceCriterion>,
+}
+
+/// Args for `spec.update` — modify fields on an existing spec. Only the
+/// fields included in the args are applied; omitted fields keep prior
+/// values. Status changes go through `spec.close` (which has transactional
+/// card-linkage logic), not here.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct SpecUpdateArgs {
+    pub id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub goal: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cards: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub labels: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub acceptance_criteria: Option<Vec<AcceptanceCriterion>>,
+}
+
+/// Args for `spec.close` — transition status to `closed` and append the
+/// spec's path to every linked card's `specs` array atomically.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct SpecCloseArgs {
+    pub id: String,
+}
+
+// ----------------------------------------------------------------------------
+// Task verb args (ac-07)
+// ----------------------------------------------------------------------------
+
+/// Args for `task.open` — append an Open event creating a new task under
+/// `<spec_id>.tasks.jsonl`. Substrate generates `task_id` if not supplied;
+/// callers supply one for migrations or tests.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct TaskOpenArgs {
+    pub spec_id: String,
+    pub body: String,
+    #[serde(default)]
+    pub labels: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub task_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub timestamp: Option<String>,
+}
+
+/// Args for `task.list` — list tasks (current state per task_id) for one
+/// spec, or all specs if `spec_id` is None.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct TaskListArgs {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub spec_id: Option<String>,
+    /// Filter by current state (`open`, `claim`, `update`, `done`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub state: Option<String>,
+}
+
+/// Args for `task.show` — show one task with its full event history.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct TaskShowArgs {
+    pub spec_id: String,
+    pub task_id: String,
+}
+
+/// Args for `task.ready` — list tasks whose last event is Open (claimable).
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct TaskReadyArgs {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub spec_id: Option<String>,
+}
+
+/// Args for `task.claim` — append a Claim event.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct TaskClaimArgs {
+    pub spec_id: String,
+    pub task_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub body: Option<String>,
+    #[serde(default)]
+    pub labels: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub timestamp: Option<String>,
+}
+
+/// Args for `task.update` — append an Update event.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct TaskUpdateArgs {
+    pub spec_id: String,
+    pub task_id: String,
+    pub body: String,
+    #[serde(default)]
+    pub labels: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub timestamp: Option<String>,
+}
+
+/// Args for `task.done` — append a Done event.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct TaskDoneArgs {
+    pub spec_id: String,
+    pub task_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub body: Option<String>,
+    #[serde(default)]
+    pub labels: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub timestamp: Option<String>,
 }
 
 /// Args for `spec.note` — append a timestamped note to a spec.
@@ -107,6 +261,26 @@ pub enum VerbResponse {
     SpecShow(SpecShowResult),
     #[serde(rename = "spec.note")]
     SpecNote(SpecNoteResult),
+    #[serde(rename = "spec.create")]
+    SpecCreate(SpecCreateResult),
+    #[serde(rename = "spec.update")]
+    SpecUpdate(SpecUpdateResult),
+    #[serde(rename = "spec.close")]
+    SpecClose(SpecCloseResult),
+    #[serde(rename = "task.open")]
+    TaskOpen(TaskOpenResult),
+    #[serde(rename = "task.list")]
+    TaskList(TaskListResult),
+    #[serde(rename = "task.show")]
+    TaskShow(TaskShowResult),
+    #[serde(rename = "task.ready")]
+    TaskReady(TaskListResult),
+    #[serde(rename = "task.claim")]
+    TaskClaim(TaskEventResult),
+    #[serde(rename = "task.update")]
+    TaskUpdate(TaskEventResult),
+    #[serde(rename = "task.done")]
+    TaskDone(TaskEventResult),
 }
 
 /// Result for `spec.list`.
@@ -128,6 +302,70 @@ pub struct SpecShowResult {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct SpecNoteResult {
     pub note: NoteEvent,
+}
+
+/// Result for `spec.create` — echoes the on-disk spec.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct SpecCreateResult {
+    pub spec: Spec,
+}
+
+/// Result for `spec.update` — returns the post-update spec.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct SpecUpdateResult {
+    pub spec: Spec,
+}
+
+/// Result for `spec.close` — returns the closed spec plus a list of cards
+/// whose `specs` array was extended.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct SpecCloseResult {
+    pub spec: Spec,
+    pub cards_updated: Vec<String>,
+}
+
+/// Reduced view of a task — its current state derived from the last event
+/// for its task_id, plus the event history count.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct TaskState {
+    pub task_id: String,
+    pub spec_id: String,
+    /// Current state — `open`, `claim`, `update`, or `done`.
+    pub state: String,
+    /// Body from the last event that carried one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub body: Option<String>,
+    /// Labels carried on the last event (not aggregated).
+    #[serde(default)]
+    pub labels: Vec<String>,
+    /// Timestamp of the last event.
+    pub timestamp: String,
+    /// Number of events in this task's history.
+    pub event_count: usize,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct TaskOpenResult {
+    pub event: TaskEvent,
+    pub task_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct TaskListResult {
+    pub tasks: Vec<TaskState>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct TaskShowResult {
+    pub state: TaskState,
+    pub events: Vec<TaskEvent>,
+}
+
+/// Result for the three Claim/Update/Done verbs — each appends one event
+/// and echoes it for confirmation.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct TaskEventResult {
+    pub event: TaskEvent,
 }
 
 /// Projection of a spec for list views — id, goal, status, plus the cards it
@@ -154,6 +392,16 @@ pub fn execute(layout: &OrbitLayout, request: &VerbRequest) -> Result<VerbRespon
         VerbRequest::SpecList(args) => spec_list(layout, args).map(VerbResponse::SpecList),
         VerbRequest::SpecShow(args) => spec_show(layout, args).map(VerbResponse::SpecShow),
         VerbRequest::SpecNote(args) => spec_note(layout, args).map(VerbResponse::SpecNote),
+        VerbRequest::SpecCreate(args) => spec_create(layout, args).map(VerbResponse::SpecCreate),
+        VerbRequest::SpecUpdate(args) => spec_update(layout, args).map(VerbResponse::SpecUpdate),
+        VerbRequest::SpecClose(args) => spec_close(layout, args).map(VerbResponse::SpecClose),
+        VerbRequest::TaskOpen(args) => task_open(layout, args).map(VerbResponse::TaskOpen),
+        VerbRequest::TaskList(args) => task_list(layout, args).map(VerbResponse::TaskList),
+        VerbRequest::TaskShow(args) => task_show(layout, args).map(VerbResponse::TaskShow),
+        VerbRequest::TaskReady(args) => task_ready(layout, args).map(VerbResponse::TaskReady),
+        VerbRequest::TaskClaim(args) => task_claim(layout, args).map(VerbResponse::TaskClaim),
+        VerbRequest::TaskUpdate(args) => task_update(layout, args).map(VerbResponse::TaskUpdate),
+        VerbRequest::TaskDone(args) => task_done(layout, args).map(VerbResponse::TaskDone),
     }
 }
 
@@ -280,6 +528,730 @@ fn spec_note(layout: &OrbitLayout, args: &SpecNoteArgs) -> Result<SpecNoteResult
     })?;
 
     Ok(SpecNoteResult { note: event })
+}
+
+/// `spec.create` — write a new spec.yaml file.
+///
+/// Conflict if a spec with that id already exists. Lock is acquired so two
+/// concurrent creates can't race.
+fn spec_create(layout: &OrbitLayout, args: &SpecCreateArgs) -> Result<SpecCreateResult> {
+    const VERB: &str = "spec.create";
+
+    validate_spec_id(VERB, &args.id)?;
+    if args.goal.is_empty() {
+        return Err(Error::malformed(VERB, "goal must not be empty"));
+    }
+
+    let lock_key = format!("spec-{}", args.id);
+    let _guard = locks::acquire_default(layout, &lock_key).map_err(|mut e| {
+        e.verb = VERB.into();
+        e
+    })?;
+
+    let path = layout.spec_file(&args.id);
+    if path.exists() {
+        return Err(Error::conflict(
+            VERB,
+            format!("spec already exists at {}", path.display()),
+        ));
+    }
+    layout
+        .ensure_dirs()
+        .map_err(|e| Error::unavailable(VERB, format!("ensure dirs: {e}")))?;
+
+    let spec = Spec {
+        id: args.id.clone(),
+        goal: args.goal.clone(),
+        cards: args.cards.clone(),
+        status: SpecStatus::Open,
+        labels: args.labels.clone(),
+        acceptance_criteria: args.acceptance_criteria.clone(),
+    };
+    let yaml = serialise_yaml(&spec).map_err(|mut e| {
+        e.verb = VERB.into();
+        e
+    })?;
+    write_atomic(&path, yaml.as_bytes()).map_err(|mut e| {
+        e.verb = VERB.into();
+        e
+    })?;
+
+    Ok(SpecCreateResult { spec })
+}
+
+/// `spec.update` — modify fields on an existing spec. Status changes are
+/// not allowed here; `spec.close` owns that transition.
+fn spec_update(layout: &OrbitLayout, args: &SpecUpdateArgs) -> Result<SpecUpdateResult> {
+    const VERB: &str = "spec.update";
+
+    validate_spec_id(VERB, &args.id)?;
+
+    let lock_key = format!("spec-{}", args.id);
+    let _guard = locks::acquire_default(layout, &lock_key).map_err(|mut e| {
+        e.verb = VERB.into();
+        e
+    })?;
+
+    let path = layout.spec_file(&args.id);
+    if !path.exists() {
+        return Err(Error::not_found(
+            VERB,
+            format!("no spec at {}", path.display()),
+        ));
+    }
+    let text = std::fs::read_to_string(&path)
+        .map_err(|e| Error::unavailable(VERB, format!("read {}: {e}", path.display())))?;
+    let mut spec: Spec = parse_yaml(&text).map_err(|mut e| {
+        e.verb = VERB.into();
+        e
+    })?;
+
+    // Apply field-by-field. Empty-goal still rejected (validation, not
+    // omission).
+    if let Some(goal) = &args.goal {
+        if goal.is_empty() {
+            return Err(Error::malformed(VERB, "goal must not be empty"));
+        }
+        spec.goal = goal.clone();
+    }
+    if let Some(cards) = &args.cards {
+        spec.cards = cards.clone();
+    }
+    if let Some(labels) = &args.labels {
+        spec.labels = labels.clone();
+    }
+    if let Some(acs) = &args.acceptance_criteria {
+        spec.acceptance_criteria = acs.clone();
+    }
+
+    let yaml = serialise_yaml(&spec).map_err(|mut e| {
+        e.verb = VERB.into();
+        e
+    })?;
+    write_atomic(&path, yaml.as_bytes()).map_err(|mut e| {
+        e.verb = VERB.into();
+        e
+    })?;
+
+    Ok(SpecUpdateResult { spec })
+}
+
+/// `spec.close` — flip status to `closed` and transactionally append the
+/// spec's path to every linked card's `specs` array.
+///
+/// Per ac-06: "transactional: either all linked cards update or none do,
+/// with the spec remaining open if any update fails." Implementation:
+///
+/// 1. Acquire spec lock.
+/// 2. Read spec; verify status == open.
+/// 3. Read each linked card; build the proposed updated card.
+///    Validate each (parse round-trip) BEFORE writing anything.
+/// 4. Write each updated card atomically. On any failure mid-batch, roll
+///    back the cards already written (using the pre-image we cached).
+/// 5. If all card writes succeeded, write the closed spec.
+/// 6. If the spec write fails after card writes succeeded, roll back cards
+///    too — the spec remaining "open" with cards updated is an inconsistent
+///    state and we'd rather pay the rollback cost than leave drift.
+///
+/// `cards_updated` in the result names the cards whose `specs` array now
+/// contains this spec's relative path.
+fn spec_close(layout: &OrbitLayout, args: &SpecCloseArgs) -> Result<SpecCloseResult> {
+    const VERB: &str = "spec.close";
+
+    validate_spec_id(VERB, &args.id)?;
+
+    let lock_key = format!("spec-{}", args.id);
+    let _guard = locks::acquire_default(layout, &lock_key).map_err(|mut e| {
+        e.verb = VERB.into();
+        e
+    })?;
+
+    let spec_path = layout.spec_file(&args.id);
+    if !spec_path.exists() {
+        return Err(Error::not_found(
+            VERB,
+            format!("no spec at {}", spec_path.display()),
+        ));
+    }
+    let spec_text = std::fs::read_to_string(&spec_path)
+        .map_err(|e| Error::unavailable(VERB, format!("read spec: {e}")))?;
+    let mut spec: Spec = parse_yaml(&spec_text).map_err(|mut e| {
+        e.verb = VERB.into();
+        e
+    })?;
+    if spec.status == SpecStatus::Closed {
+        return Err(Error::conflict(VERB, format!("spec '{}' already closed", spec.id)));
+    }
+
+    // Per ac-06: spec.close requires every child task to be in state `done`.
+    // Read the task stream once; reduce per task; reject if any non-done.
+    let task_events = read_task_events(layout, &spec.id).map_err(|mut e| {
+        e.verb = VERB.into();
+        e
+    })?;
+    let mut by_id: BTreeMap<String, Vec<TaskEvent>> = BTreeMap::new();
+    for ev in task_events {
+        by_id.entry(ev.task_id.clone()).or_default().push(ev);
+    }
+    let unfinished: Vec<String> = by_id
+        .iter()
+        .filter_map(|(id, evs)| {
+            evs.last().and_then(|last| {
+                if matches!(last.event, TaskEventKind::Done) {
+                    None
+                } else {
+                    Some(id.clone())
+                }
+            })
+        })
+        .collect();
+    if !unfinished.is_empty() {
+        return Err(Error::conflict(
+            VERB,
+            format!(
+                "{} unfinished task(s) under spec '{}': {}",
+                unfinished.len(),
+                spec.id,
+                unfinished.join(", ")
+            ),
+        ));
+    }
+
+    // Reference inserted into each linked card's `specs` array. We use the
+    // spec id with the `.orbit/specs/` prefix so the reference stays
+    // stable regardless of where the workspace is rooted.
+    let spec_ref = format!(".orbit/specs/{}.yaml", spec.id);
+
+    // Phase 1: read every linked card and compute the proposed update.
+    // We deliberately collect everything into memory before writing
+    // ANYTHING, so a malformed card surfaces before any side effects.
+    let mut card_updates: Vec<CardUpdate> = Vec::with_capacity(spec.cards.len());
+    for card_slug in &spec.cards {
+        validate_card_slug(VERB, card_slug)?;
+        let card_path = layout.card_file(card_slug);
+        if !card_path.exists() {
+            return Err(Error::not_found(
+                VERB,
+                format!("linked card not found: {} ({})", card_slug, card_path.display()),
+            ));
+        }
+        let pre_image = std::fs::read_to_string(&card_path)
+            .map_err(|e| Error::unavailable(VERB, format!("read card {card_slug}: {e}")))?;
+        let mut card: crate::schema::Card = parse_yaml(&pre_image).map_err(|mut e| {
+            e.verb = VERB.into();
+            e
+        })?;
+        // Idempotent: if the spec ref is already present, do nothing for
+        // this card (helps if a previous spec.close partially completed).
+        let needs_write = !card.specs.contains(&spec_ref);
+        if needs_write {
+            card.specs.push(spec_ref.clone());
+        }
+        let post_image = serialise_yaml(&card).map_err(|mut e| {
+            e.verb = VERB.into();
+            e
+        })?;
+        card_updates.push(CardUpdate {
+            slug: card_slug.clone(),
+            path: card_path,
+            pre_image,
+            post_image,
+            written: false,
+            needs_write,
+        });
+    }
+
+    // Phase 2: write every card. On any failure, roll back the ones we
+    // already wrote.
+    for upd in card_updates.iter_mut() {
+        if !upd.needs_write {
+            continue;
+        }
+        if let Err(e) = write_atomic(&upd.path, upd.post_image.as_bytes()) {
+            rollback_cards(&card_updates);
+            let mut tagged = e;
+            tagged.verb = VERB.into();
+            return Err(tagged);
+        }
+        upd.written = true;
+    }
+
+    // Phase 3: write the closed spec. If this fails, roll back cards.
+    spec.status = SpecStatus::Closed;
+    let new_yaml = match serialise_yaml(&spec) {
+        Ok(y) => y,
+        Err(mut e) => {
+            rollback_cards(&card_updates);
+            e.verb = VERB.into();
+            return Err(e);
+        }
+    };
+    if let Err(e) = write_atomic(&spec_path, new_yaml.as_bytes()) {
+        rollback_cards(&card_updates);
+        let mut tagged = e;
+        tagged.verb = VERB.into();
+        return Err(tagged);
+    }
+
+    let cards_updated: Vec<String> = card_updates
+        .iter()
+        .filter(|u| u.needs_write)
+        .map(|u| u.slug.clone())
+        .collect();
+
+    Ok(SpecCloseResult { spec, cards_updated })
+}
+
+/// In-memory record of one card's pre/post image during spec.close.
+struct CardUpdate {
+    slug: String,
+    path: std::path::PathBuf,
+    pre_image: String,
+    post_image: String,
+    written: bool,
+    needs_write: bool,
+}
+
+/// Restore every card we'd already written back to its pre-image. Best-
+/// effort — failures here are logged via the surface error but don't change
+/// the outer return value.
+fn rollback_cards(updates: &[CardUpdate]) {
+    for upd in updates {
+        if upd.written {
+            // Best-effort restore. Failures here are logged via stderr
+            // because they imply a partially-corrupted state we couldn't
+            // fully clean up; the caller's error already names the
+            // original failure.
+            if let Err(e) = write_atomic(&upd.path, upd.pre_image.as_bytes()) {
+                eprintln!(
+                    "spec.close: rollback failed for card {}: {e} — manual recovery required",
+                    upd.slug
+                );
+            }
+        }
+    }
+}
+
+/// Reject empty IDs, path traversal, and separators. Used by every verb
+/// that takes a spec id.
+fn validate_spec_id(verb: &str, id: &str) -> Result<()> {
+    if id.is_empty() {
+        return Err(Error::malformed(verb, "id must not be empty"));
+    }
+    if id.contains('/') || id.contains('\\') || id.contains("..") {
+        return Err(Error::malformed(
+            verb,
+            format!("id must not contain path separators or '..': '{}'", id),
+        ));
+    }
+    Ok(())
+}
+
+/// Same protections for card slugs (cards live in `.orbit/cards/<slug>.yaml`).
+fn validate_card_slug(verb: &str, slug: &str) -> Result<()> {
+    if slug.is_empty() {
+        return Err(Error::malformed(verb, "card slug must not be empty"));
+    }
+    if slug.contains('/') || slug.contains('\\') || slug.contains("..") {
+        return Err(Error::malformed(
+            verb,
+            format!("card slug must not contain path separators or '..': '{slug}'"),
+        ));
+    }
+    Ok(())
+}
+
+// ============================================================================
+// Task verbs (ac-07) — append-only JSONL events with last-event-wins state
+// reduction. Per ac-07: "Tasks are append-only JSONL events. State =
+// last event for that task_id."
+// ============================================================================
+
+/// `task.open` — append an Open event creating a new task. Generates a
+/// task_id if the caller doesn't supply one.
+fn task_open(layout: &OrbitLayout, args: &TaskOpenArgs) -> Result<TaskOpenResult> {
+    const VERB: &str = "task.open";
+    validate_spec_id(VERB, &args.spec_id)?;
+    if args.body.is_empty() {
+        return Err(Error::malformed(VERB, "body must not be empty"));
+    }
+
+    let spec_path = layout.spec_file(&args.spec_id);
+    if !spec_path.exists() {
+        return Err(Error::not_found(
+            VERB,
+            format!("no spec at {}", spec_path.display()),
+        ));
+    }
+
+    let task_id = match &args.task_id {
+        Some(id) => {
+            validate_task_id(VERB, id)?;
+            id.clone()
+        }
+        None => generate_task_id().map_err(|e| {
+            Error::unavailable(VERB, format!("generate task_id: {e}"))
+        })?,
+    };
+    let timestamp = stamp_or(VERB, &args.timestamp)?;
+
+    // Conflict if a task with this id already has events. Reading events for
+    // the spec is cheap; the JSONL file is small in v0.1.
+    let existing = read_task_events(layout, &args.spec_id)?;
+    if existing.iter().any(|e| e.task_id == task_id) {
+        return Err(Error::conflict(
+            VERB,
+            format!("task '{task_id}' already exists in spec '{}'", args.spec_id),
+        ));
+    }
+
+    let event = TaskEvent {
+        task_id: task_id.clone(),
+        spec_id: args.spec_id.clone(),
+        event: TaskEventKind::Open,
+        body: Some(args.body.clone()),
+        labels: args.labels.clone(),
+        timestamp,
+    };
+    append_task_event(VERB, layout, &args.spec_id, &event)?;
+    Ok(TaskOpenResult { event, task_id })
+}
+
+/// `task.list` — current state per task, optionally filtered by state.
+fn task_list(layout: &OrbitLayout, args: &TaskListArgs) -> Result<TaskListResult> {
+    const VERB: &str = "task.list";
+    if let Some(s) = args.state.as_deref() {
+        if !matches!(s, "open" | "claim" | "update" | "done") {
+            return Err(Error::malformed(
+                VERB,
+                format!("state must be one of open|claim|update|done, got '{s}'"),
+            ));
+        }
+    }
+
+    let states = collect_task_states(layout, args.spec_id.as_deref(), VERB)?;
+    let filtered: Vec<TaskState> = states
+        .into_iter()
+        .filter(|s| match args.state.as_deref() {
+            Some(want) => s.state == want,
+            None => true,
+        })
+        .collect();
+    Ok(TaskListResult { tasks: filtered })
+}
+
+/// `task.ready` — equivalent to `task.list --state open`.
+fn task_ready(layout: &OrbitLayout, args: &TaskReadyArgs) -> Result<TaskListResult> {
+    const VERB: &str = "task.ready";
+    let states = collect_task_states(layout, args.spec_id.as_deref(), VERB)?;
+    Ok(TaskListResult {
+        tasks: states.into_iter().filter(|s| s.state == "open").collect(),
+    })
+}
+
+/// `task.show` — full event history + reduced state for one task.
+fn task_show(layout: &OrbitLayout, args: &TaskShowArgs) -> Result<TaskShowResult> {
+    const VERB: &str = "task.show";
+    validate_spec_id(VERB, &args.spec_id)?;
+    validate_task_id(VERB, &args.task_id)?;
+
+    let events = read_task_events(layout, &args.spec_id).map_err(|mut e| {
+        e.verb = VERB.into();
+        e
+    })?;
+    let task_events: Vec<TaskEvent> = events
+        .into_iter()
+        .filter(|e| e.task_id == args.task_id)
+        .collect();
+    if task_events.is_empty() {
+        return Err(Error::not_found(
+            VERB,
+            format!("no task '{}' in spec '{}'", args.task_id, args.spec_id),
+        ));
+    }
+    let state = reduce_task_events(&task_events).expect("non-empty events have a last");
+    Ok(TaskShowResult {
+        state,
+        events: task_events,
+    })
+}
+
+fn task_claim(layout: &OrbitLayout, args: &TaskClaimArgs) -> Result<TaskEventResult> {
+    append_task_lifecycle_event(
+        "task.claim",
+        layout,
+        &args.spec_id,
+        &args.task_id,
+        TaskEventKind::Claim,
+        args.body.clone(),
+        args.labels.clone(),
+        args.timestamp.clone(),
+        |prev_state| {
+            // Claim only legal from Open.
+            if prev_state != "open" {
+                return Err(Error::conflict(
+                    "task.claim",
+                    format!("task in state '{prev_state}' cannot be claimed; only 'open' tasks are claimable"),
+                ));
+            }
+            Ok(())
+        },
+    )
+}
+
+fn task_update(layout: &OrbitLayout, args: &TaskUpdateArgs) -> Result<TaskEventResult> {
+    if args.body.is_empty() {
+        return Err(Error::malformed("task.update", "body must not be empty"));
+    }
+    append_task_lifecycle_event(
+        "task.update",
+        layout,
+        &args.spec_id,
+        &args.task_id,
+        TaskEventKind::Update,
+        Some(args.body.clone()),
+        args.labels.clone(),
+        args.timestamp.clone(),
+        |prev_state| {
+            if prev_state == "done" {
+                return Err(Error::conflict(
+                    "task.update",
+                    "task already done; updates are not appended after done",
+                ));
+            }
+            Ok(())
+        },
+    )
+}
+
+fn task_done(layout: &OrbitLayout, args: &TaskDoneArgs) -> Result<TaskEventResult> {
+    append_task_lifecycle_event(
+        "task.done",
+        layout,
+        &args.spec_id,
+        &args.task_id,
+        TaskEventKind::Done,
+        args.body.clone(),
+        args.labels.clone(),
+        args.timestamp.clone(),
+        |prev_state| {
+            if prev_state == "done" {
+                return Err(Error::conflict(
+                    "task.done",
+                    "task already done",
+                ));
+            }
+            Ok(())
+        },
+    )
+}
+
+/// Shared lifecycle-event append for claim / update / done. Validates the
+/// task exists, the prior state allows the transition (via `validate`), then
+/// appends the event under the spec lock.
+#[allow(clippy::too_many_arguments)]
+fn append_task_lifecycle_event(
+    verb: &'static str,
+    layout: &OrbitLayout,
+    spec_id: &str,
+    task_id: &str,
+    kind: TaskEventKind,
+    body: Option<String>,
+    labels: Vec<String>,
+    timestamp_arg: Option<String>,
+    validate: impl FnOnce(&str) -> Result<()>,
+) -> Result<TaskEventResult> {
+    validate_spec_id(verb, spec_id)?;
+    validate_task_id(verb, task_id)?;
+
+    let lock_key = format!("spec-{spec_id}");
+    let _guard = locks::acquire_default(layout, &lock_key).map_err(|mut e| {
+        e.verb = verb.into();
+        e
+    })?;
+
+    let events = read_task_events(layout, spec_id).map_err(|mut e| {
+        e.verb = verb.into();
+        e
+    })?;
+    let task_events: Vec<&TaskEvent> = events.iter().filter(|e| e.task_id == task_id).collect();
+    if task_events.is_empty() {
+        return Err(Error::not_found(
+            verb,
+            format!("no task '{task_id}' in spec '{spec_id}'"),
+        ));
+    }
+    let prev_state = task_event_kind_str(task_events.last().unwrap().event);
+    validate(prev_state)?;
+
+    let timestamp = stamp_or(verb, &timestamp_arg)?;
+    let event = TaskEvent {
+        task_id: task_id.into(),
+        spec_id: spec_id.into(),
+        event: kind,
+        body,
+        labels,
+        timestamp,
+    };
+    append_task_event(verb, layout, spec_id, &event)?;
+    Ok(TaskEventResult { event })
+}
+
+// --- Task helpers ----------------------------------------------------------
+
+/// Read every event in `<spec_id>.tasks.jsonl` in order.
+fn read_task_events(layout: &OrbitLayout, spec_id: &str) -> Result<Vec<TaskEvent>> {
+    let path = layout.task_stream(spec_id);
+    if !path.exists() {
+        return Ok(vec![]);
+    }
+    let text = std::fs::read_to_string(&path).map_err(|e| {
+        Error::unavailable("task.read", format!("read {}: {e}", path.display()))
+    })?;
+    let mut out = Vec::new();
+    for (i, line) in text.lines().enumerate() {
+        if line.trim().is_empty() {
+            continue;
+        }
+        let event: TaskEvent = parse_json_line(line).map_err(|mut e| {
+            e.verb = "task.read".into();
+            e.message = format!("{} (line {})", e.message, i + 1);
+            e
+        })?;
+        out.push(event);
+    }
+    Ok(out)
+}
+
+/// Append a TaskEvent to `<spec_id>.tasks.jsonl`. Caller must hold the spec
+/// lock for logical consistency; `append_jsonl_line` provides the byte-level
+/// append atomicity.
+fn append_task_event(
+    verb: &'static str,
+    layout: &OrbitLayout,
+    spec_id: &str,
+    event: &TaskEvent,
+) -> Result<()> {
+    let line = serialise_json_line(event).map_err(|mut e| {
+        e.verb = verb.into();
+        e
+    })?;
+    let path = layout.task_stream(spec_id);
+    append_jsonl_line(&path, &line).map_err(|mut e| {
+        e.verb = verb.into();
+        e
+    })
+}
+
+/// Reduce an ordered list of events for ONE task to its current state.
+fn reduce_task_events(events: &[TaskEvent]) -> Option<TaskState> {
+    let last = events.last()?;
+    Some(TaskState {
+        task_id: last.task_id.clone(),
+        spec_id: last.spec_id.clone(),
+        state: task_event_kind_str(last.event).into(),
+        body: last.body.clone(),
+        labels: last.labels.clone(),
+        timestamp: last.timestamp.clone(),
+        event_count: events.len(),
+    })
+}
+
+/// Walk every (or one) spec's task stream and reduce each task to its
+/// current state. Used by task.list and task.ready.
+fn collect_task_states(
+    layout: &OrbitLayout,
+    spec_id: Option<&str>,
+    verb: &'static str,
+) -> Result<Vec<TaskState>> {
+    let spec_files = match spec_id {
+        Some(id) => {
+            validate_spec_id(verb, id)?;
+            let p = layout.spec_file(id);
+            if !p.exists() {
+                return Err(Error::not_found(
+                    verb,
+                    format!("no spec at {}", p.display()),
+                ));
+            }
+            vec![id.to_string()]
+        }
+        None => {
+            // List all spec files; derive ids from their filenames.
+            let files = layout
+                .list_spec_files()
+                .map_err(|e| Error::unavailable(verb, format!("list specs: {e}")))?;
+            files
+                .iter()
+                .filter_map(|p| p.file_stem().and_then(|s| s.to_str()).map(String::from))
+                .collect()
+        }
+    };
+
+    let mut all_states = Vec::new();
+    for spec_id in spec_files {
+        let events = read_task_events(layout, &spec_id).map_err(|mut e| {
+            e.verb = verb.into();
+            e
+        })?;
+        // Group events by task_id, preserving order via BTreeMap (deterministic).
+        let mut by_id: BTreeMap<String, Vec<TaskEvent>> = BTreeMap::new();
+        for ev in events {
+            by_id.entry(ev.task_id.clone()).or_default().push(ev);
+        }
+        for (_, evs) in by_id {
+            if let Some(s) = reduce_task_events(&evs) {
+                all_states.push(s);
+            }
+        }
+    }
+
+    // Sort for deterministic output.
+    all_states.sort_by(|a, b| a.spec_id.cmp(&b.spec_id).then(a.task_id.cmp(&b.task_id)));
+    Ok(all_states)
+}
+
+fn task_event_kind_str(kind: TaskEventKind) -> &'static str {
+    match kind {
+        TaskEventKind::Open => "open",
+        TaskEventKind::Claim => "claim",
+        TaskEventKind::Update => "update",
+        TaskEventKind::Done => "done",
+    }
+}
+
+fn validate_task_id(verb: &str, id: &str) -> Result<()> {
+    if id.is_empty() {
+        return Err(Error::malformed(verb, "task_id must not be empty"));
+    }
+    if id.contains('/') || id.contains('\\') || id.contains("..") {
+        return Err(Error::malformed(
+            verb,
+            format!("task_id must not contain path separators or '..': '{id}'"),
+        ));
+    }
+    Ok(())
+}
+
+/// Generate a task_id of the shape `t-<8hex><8hex>` using process pid + nanos.
+/// Deterministic per process+time, human-readable, no new deps. Collision
+/// risk within a single process is bounded by clock resolution; v0.1's
+/// single-machine constraint makes this safe.
+fn generate_task_id() -> std::result::Result<String, std::time::SystemTimeError> {
+    let pid = std::process::id();
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)?
+        .as_nanos();
+    Ok(format!("t-{pid:08x}{nanos:016x}"))
+}
+
+/// Use the supplied timestamp if any; otherwise stamp with substrate clock.
+fn stamp_or(verb: &str, supplied: &Option<String>) -> Result<String> {
+    match supplied {
+        Some(t) => Ok(t.clone()),
+        None => current_rfc3339_utc()
+            .map_err(|e| Error::unavailable(verb, format!("substrate timestamp: {e}"))),
+    }
 }
 
 /// Generate an RFC 3339 UTC timestamp. The substrate's default clock for
@@ -745,6 +1717,772 @@ mod tests {
         };
         let err = execute(&layout, &VerbRequest::SpecNote(args)).unwrap_err();
         assert!(err.to_string().starts_with("spec.note: malformed: "));
+    }
+
+    // ------------------------------------------------------------------------
+    // spec.create / spec.update / spec.close tests
+    // ------------------------------------------------------------------------
+
+    use crate::schema::{Card, CardMaturity};
+
+    fn write_card(layout: &OrbitLayout, slug: &str) {
+        let card = Card {
+            feature: format!("feature-{slug}"),
+            as_a: None,
+            i_want: None,
+            so_that: None,
+            goal: "g".into(),
+            maturity: CardMaturity::Planned,
+            scenarios: vec![],
+            specs: vec![],
+            relations: vec![],
+            references: vec![],
+            notes: vec![],
+        };
+        let yaml = crate::canonical::serialise_yaml(&card).unwrap();
+        std::fs::write(layout.card_file(slug), yaml).unwrap();
+    }
+
+    fn read_card(layout: &OrbitLayout, slug: &str) -> Card {
+        let text = std::fs::read_to_string(layout.card_file(slug)).unwrap();
+        parse_yaml(&text).unwrap()
+    }
+
+    #[test]
+    fn spec_create_writes_yaml_and_returns_spec() {
+        let dir = tempdir().unwrap();
+        let layout = OrbitLayout::at(dir.path());
+
+        let args = SpecCreateArgs {
+            id: "0001".into(),
+            goal: "ship it".into(),
+            cards: vec!["0020-orbit-state".into()],
+            labels: vec!["spec".into()],
+            acceptance_criteria: vec![],
+        };
+        let resp = execute(&layout, &VerbRequest::SpecCreate(args)).unwrap();
+        let VerbResponse::SpecCreate(r) = resp else {
+            panic!("wrong variant")
+        };
+        assert_eq!(r.spec.id, "0001");
+        assert_eq!(r.spec.status, SpecStatus::Open);
+
+        // File on disk parses back identically.
+        let text = std::fs::read_to_string(layout.spec_file("0001")).unwrap();
+        let parsed: Spec = parse_yaml(&text).unwrap();
+        assert_eq!(parsed, r.spec);
+    }
+
+    #[test]
+    fn spec_create_conflict_when_already_exists() {
+        let dir = tempdir().unwrap();
+        let layout = OrbitLayout::at(dir.path());
+        layout.ensure_dirs().unwrap();
+        write_spec(&layout, "0001", "g", SpecStatus::Open);
+
+        let args = SpecCreateArgs {
+            id: "0001".into(),
+            goal: "ship".into(),
+            cards: vec![],
+            labels: vec![],
+            acceptance_criteria: vec![],
+        };
+        let err = execute(&layout, &VerbRequest::SpecCreate(args)).unwrap_err();
+        assert!(
+            err.to_string().starts_with("spec.create: conflict: "),
+            "got {err}"
+        );
+    }
+
+    #[test]
+    fn spec_create_empty_goal_is_malformed() {
+        let dir = tempdir().unwrap();
+        let layout = OrbitLayout::at(dir.path());
+
+        let args = SpecCreateArgs {
+            id: "0001".into(),
+            goal: String::new(),
+            cards: vec![],
+            labels: vec![],
+            acceptance_criteria: vec![],
+        };
+        let err = execute(&layout, &VerbRequest::SpecCreate(args)).unwrap_err();
+        assert_eq!(err.to_string(), "spec.create: malformed: goal must not be empty");
+    }
+
+    #[test]
+    fn spec_update_replaces_specified_fields_only() {
+        let dir = tempdir().unwrap();
+        let layout = OrbitLayout::at(dir.path());
+        layout.ensure_dirs().unwrap();
+        let original = Spec {
+            id: "0001".into(),
+            goal: "original".into(),
+            cards: vec!["c1".into()],
+            status: SpecStatus::Open,
+            labels: vec!["spec".into()],
+            acceptance_criteria: vec![AcceptanceCriterion {
+                id: "ac-01".into(),
+                description: "first".into(),
+                gate: false,
+                checked: false,
+                verification: None,
+            }],
+        };
+        std::fs::write(
+            layout.spec_file("0001"),
+            crate::canonical::serialise_yaml(&original).unwrap(),
+        )
+        .unwrap();
+
+        // Update only goal and labels — cards and ACs must stay.
+        let args = SpecUpdateArgs {
+            id: "0001".into(),
+            goal: Some("revised".into()),
+            cards: None,
+            labels: Some(vec!["spec".into(), "experimental".into()]),
+            acceptance_criteria: None,
+        };
+        let resp = execute(&layout, &VerbRequest::SpecUpdate(args)).unwrap();
+        let VerbResponse::SpecUpdate(r) = resp else {
+            panic!("wrong variant")
+        };
+        assert_eq!(r.spec.goal, "revised");
+        assert_eq!(r.spec.cards, vec!["c1".to_string()]);
+        assert_eq!(r.spec.labels, vec!["spec".to_string(), "experimental".to_string()]);
+        assert_eq!(r.spec.acceptance_criteria.len(), 1);
+        // Status must not have changed via update.
+        assert_eq!(r.spec.status, SpecStatus::Open);
+    }
+
+    #[test]
+    fn spec_update_rejects_empty_goal() {
+        let dir = tempdir().unwrap();
+        let layout = OrbitLayout::at(dir.path());
+        layout.ensure_dirs().unwrap();
+        write_spec(&layout, "0001", "g", SpecStatus::Open);
+
+        let args = SpecUpdateArgs {
+            id: "0001".into(),
+            goal: Some(String::new()),
+            ..Default::default()
+        };
+        let err = execute(&layout, &VerbRequest::SpecUpdate(args)).unwrap_err();
+        assert_eq!(err.to_string(), "spec.update: malformed: goal must not be empty");
+    }
+
+    #[test]
+    fn spec_update_missing_spec_is_not_found() {
+        let dir = tempdir().unwrap();
+        let layout = OrbitLayout::at(dir.path());
+        layout.ensure_dirs().unwrap();
+
+        let args = SpecUpdateArgs {
+            id: "0099".into(),
+            goal: Some("x".into()),
+            ..Default::default()
+        };
+        let err = execute(&layout, &VerbRequest::SpecUpdate(args)).unwrap_err();
+        assert!(err.to_string().starts_with("spec.update: not-found: "));
+    }
+
+    #[test]
+    fn spec_close_flips_status_and_appends_to_linked_cards() {
+        let dir = tempdir().unwrap();
+        let layout = OrbitLayout::at(dir.path());
+        layout.ensure_dirs().unwrap();
+        write_card(&layout, "0020-orbit-state");
+        write_card(&layout, "0021-tasks");
+
+        // Spec linked to two cards.
+        let spec = Spec {
+            id: "0001".into(),
+            goal: "g".into(),
+            cards: vec!["0020-orbit-state".into(), "0021-tasks".into()],
+            status: SpecStatus::Open,
+            labels: vec![],
+            acceptance_criteria: vec![],
+        };
+        std::fs::write(
+            layout.spec_file("0001"),
+            crate::canonical::serialise_yaml(&spec).unwrap(),
+        )
+        .unwrap();
+
+        let resp = execute(
+            &layout,
+            &VerbRequest::SpecClose(SpecCloseArgs { id: "0001".into() }),
+        )
+        .unwrap();
+        let VerbResponse::SpecClose(r) = resp else {
+            panic!()
+        };
+        assert_eq!(r.spec.status, SpecStatus::Closed);
+        assert_eq!(r.cards_updated.len(), 2);
+
+        // Both cards now have the spec ref.
+        let expected_ref = ".orbit/specs/0001.yaml";
+        for slug in ["0020-orbit-state", "0021-tasks"] {
+            let card = read_card(&layout, slug);
+            assert!(
+                card.specs.iter().any(|s| s == expected_ref),
+                "card {slug} missing spec ref: {:?}",
+                card.specs
+            );
+        }
+
+        // Spec on disk reflects the closed status.
+        let text = std::fs::read_to_string(layout.spec_file("0001")).unwrap();
+        let reread: Spec = parse_yaml(&text).unwrap();
+        assert_eq!(reread.status, SpecStatus::Closed);
+    }
+
+    #[test]
+    fn spec_close_idempotent_when_card_already_has_ref() {
+        let dir = tempdir().unwrap();
+        let layout = OrbitLayout::at(dir.path());
+        layout.ensure_dirs().unwrap();
+
+        // Pre-stage card already containing the spec ref (simulates a
+        // previous partial close).
+        let card = Card {
+            feature: "f".into(),
+            as_a: None,
+            i_want: None,
+            so_that: None,
+            goal: "g".into(),
+            maturity: CardMaturity::Planned,
+            scenarios: vec![],
+            specs: vec![".orbit/specs/0001.yaml".into()],
+            relations: vec![],
+            references: vec![],
+            notes: vec![],
+        };
+        std::fs::write(
+            layout.card_file("0020-x"),
+            crate::canonical::serialise_yaml(&card).unwrap(),
+        )
+        .unwrap();
+
+        let spec = Spec {
+            id: "0001".into(),
+            goal: "g".into(),
+            cards: vec!["0020-x".into()],
+            status: SpecStatus::Open,
+            labels: vec![],
+            acceptance_criteria: vec![],
+        };
+        std::fs::write(
+            layout.spec_file("0001"),
+            crate::canonical::serialise_yaml(&spec).unwrap(),
+        )
+        .unwrap();
+
+        let resp = execute(
+            &layout,
+            &VerbRequest::SpecClose(SpecCloseArgs { id: "0001".into() }),
+        )
+        .unwrap();
+        let VerbResponse::SpecClose(r) = resp else {
+            panic!()
+        };
+        // Card was a no-op, so cards_updated is empty.
+        assert!(r.cards_updated.is_empty());
+        // Card still has exactly one ref (no duplicate).
+        let post = read_card(&layout, "0020-x");
+        assert_eq!(post.specs, vec![".orbit/specs/0001.yaml".to_string()]);
+    }
+
+    #[test]
+    fn spec_close_already_closed_is_conflict() {
+        let dir = tempdir().unwrap();
+        let layout = OrbitLayout::at(dir.path());
+        layout.ensure_dirs().unwrap();
+        write_spec(&layout, "0001", "g", SpecStatus::Closed);
+
+        let err = execute(
+            &layout,
+            &VerbRequest::SpecClose(SpecCloseArgs { id: "0001".into() }),
+        )
+        .unwrap_err();
+        assert!(err.to_string().starts_with("spec.close: conflict: "));
+    }
+
+    #[test]
+    fn spec_close_missing_linked_card_rolls_back_no_writes() {
+        // Validate the "all linked cards update or none do" contract: if a
+        // card is missing, no card writes happen and the spec stays open.
+        let dir = tempdir().unwrap();
+        let layout = OrbitLayout::at(dir.path());
+        layout.ensure_dirs().unwrap();
+        write_card(&layout, "0020-present");
+        // 0021-missing is intentionally absent.
+
+        let spec = Spec {
+            id: "0001".into(),
+            goal: "g".into(),
+            cards: vec!["0020-present".into(), "0021-missing".into()],
+            status: SpecStatus::Open,
+            labels: vec![],
+            acceptance_criteria: vec![],
+        };
+        std::fs::write(
+            layout.spec_file("0001"),
+            crate::canonical::serialise_yaml(&spec).unwrap(),
+        )
+        .unwrap();
+
+        let err = execute(
+            &layout,
+            &VerbRequest::SpecClose(SpecCloseArgs { id: "0001".into() }),
+        )
+        .unwrap_err();
+        assert!(err.to_string().starts_with("spec.close: not-found: "));
+
+        // Present card was NOT written — phase 1 collected before phase 2.
+        let present = read_card(&layout, "0020-present");
+        assert!(present.specs.is_empty(), "card was modified despite atomicity contract: {:?}", present.specs);
+
+        // Spec still open.
+        let reread: Spec =
+            parse_yaml(&std::fs::read_to_string(layout.spec_file("0001")).unwrap()).unwrap();
+        assert_eq!(reread.status, SpecStatus::Open);
+    }
+
+    // ------------------------------------------------------------------------
+    // Task verb tests (ac-07)
+    // ------------------------------------------------------------------------
+
+    fn open_task(layout: &OrbitLayout, spec_id: &str, task_id: &str, body: &str) {
+        let args = TaskOpenArgs {
+            spec_id: spec_id.into(),
+            body: body.into(),
+            labels: vec![],
+            task_id: Some(task_id.into()),
+            timestamp: Some("2026-05-07T12:00:00Z".into()),
+        };
+        execute(layout, &VerbRequest::TaskOpen(args)).unwrap();
+    }
+
+    #[test]
+    fn task_open_appends_event_with_substrate_or_supplied_timestamp() {
+        let dir = tempdir().unwrap();
+        let layout = OrbitLayout::at(dir.path());
+        layout.ensure_dirs().unwrap();
+        write_spec(&layout, "0001", "g", SpecStatus::Open);
+
+        let args = TaskOpenArgs {
+            spec_id: "0001".into(),
+            body: "investigate flake".into(),
+            labels: vec!["bug".into()],
+            task_id: Some("t-001".into()),
+            timestamp: Some("2026-05-07T12:00:00Z".into()),
+        };
+        let resp = execute(&layout, &VerbRequest::TaskOpen(args)).unwrap();
+        let VerbResponse::TaskOpen(r) = resp else {
+            panic!()
+        };
+        assert_eq!(r.task_id, "t-001");
+        assert_eq!(r.event.event, TaskEventKind::Open);
+
+        // JSONL stream contains exactly one event.
+        let text = std::fs::read_to_string(layout.task_stream("0001")).unwrap();
+        assert_eq!(text.lines().count(), 1);
+        assert!(text.contains(r#""event":"open""#));
+    }
+
+    #[test]
+    fn task_open_generates_unique_task_id_when_none_supplied() {
+        let dir = tempdir().unwrap();
+        let layout = OrbitLayout::at(dir.path());
+        layout.ensure_dirs().unwrap();
+        write_spec(&layout, "0001", "g", SpecStatus::Open);
+
+        let mk = || TaskOpenArgs {
+            spec_id: "0001".into(),
+            body: "x".into(),
+            labels: vec![],
+            task_id: None,
+            timestamp: None,
+        };
+        let r1 = execute(&layout, &VerbRequest::TaskOpen(mk())).unwrap();
+        let r2 = execute(&layout, &VerbRequest::TaskOpen(mk())).unwrap();
+        let (VerbResponse::TaskOpen(a), VerbResponse::TaskOpen(b)) = (r1, r2) else {
+            panic!()
+        };
+        assert_ne!(a.task_id, b.task_id, "task ids must be unique within a process");
+        assert!(a.task_id.starts_with("t-"));
+    }
+
+    #[test]
+    fn task_open_duplicate_id_is_conflict() {
+        let dir = tempdir().unwrap();
+        let layout = OrbitLayout::at(dir.path());
+        layout.ensure_dirs().unwrap();
+        write_spec(&layout, "0001", "g", SpecStatus::Open);
+        open_task(&layout, "0001", "t1", "first");
+
+        let dup = TaskOpenArgs {
+            spec_id: "0001".into(),
+            body: "again".into(),
+            labels: vec![],
+            task_id: Some("t1".into()),
+            timestamp: Some("2026-05-07T12:00:00Z".into()),
+        };
+        let err = execute(&layout, &VerbRequest::TaskOpen(dup)).unwrap_err();
+        assert!(
+            err.to_string().starts_with("task.open: conflict: "),
+            "got {err}"
+        );
+    }
+
+    #[test]
+    fn task_list_reduces_to_current_state() {
+        let dir = tempdir().unwrap();
+        let layout = OrbitLayout::at(dir.path());
+        layout.ensure_dirs().unwrap();
+        write_spec(&layout, "0001", "g", SpecStatus::Open);
+        open_task(&layout, "0001", "t1", "first");
+        open_task(&layout, "0001", "t2", "second");
+
+        // Claim t1.
+        execute(
+            &layout,
+            &VerbRequest::TaskClaim(TaskClaimArgs {
+                spec_id: "0001".into(),
+                task_id: "t1".into(),
+                body: None,
+                labels: vec![],
+                timestamp: Some("2026-05-07T12:00:01Z".into()),
+            }),
+        )
+        .unwrap();
+
+        let resp = execute(&layout, &VerbRequest::TaskList(TaskListArgs::default())).unwrap();
+        let VerbResponse::TaskList(r) = resp else {
+            panic!()
+        };
+        assert_eq!(r.tasks.len(), 2);
+        let by_id: std::collections::HashMap<_, _> =
+            r.tasks.iter().map(|t| (t.task_id.as_str(), t.state.as_str())).collect();
+        assert_eq!(by_id["t1"], "claim");
+        assert_eq!(by_id["t2"], "open");
+    }
+
+    #[test]
+    fn task_ready_excludes_claimed_and_done() {
+        let dir = tempdir().unwrap();
+        let layout = OrbitLayout::at(dir.path());
+        layout.ensure_dirs().unwrap();
+        write_spec(&layout, "0001", "g", SpecStatus::Open);
+        open_task(&layout, "0001", "t1", "ready1");
+        open_task(&layout, "0001", "t2", "claimed");
+        open_task(&layout, "0001", "t3", "done");
+
+        execute(
+            &layout,
+            &VerbRequest::TaskClaim(TaskClaimArgs {
+                spec_id: "0001".into(),
+                task_id: "t2".into(),
+                body: None,
+                labels: vec![],
+                timestamp: Some("2026-05-07T12:00:01Z".into()),
+            }),
+        )
+        .unwrap();
+        execute(
+            &layout,
+            &VerbRequest::TaskClaim(TaskClaimArgs {
+                spec_id: "0001".into(),
+                task_id: "t3".into(),
+                body: None,
+                labels: vec![],
+                timestamp: Some("2026-05-07T12:00:01Z".into()),
+            }),
+        )
+        .unwrap();
+        execute(
+            &layout,
+            &VerbRequest::TaskDone(TaskDoneArgs {
+                spec_id: "0001".into(),
+                task_id: "t3".into(),
+                body: None,
+                labels: vec![],
+                timestamp: Some("2026-05-07T12:00:02Z".into()),
+            }),
+        )
+        .unwrap();
+
+        let resp = execute(&layout, &VerbRequest::TaskReady(TaskReadyArgs::default())).unwrap();
+        let VerbResponse::TaskReady(r) = resp else {
+            panic!()
+        };
+        assert_eq!(r.tasks.len(), 1);
+        assert_eq!(r.tasks[0].task_id, "t1");
+    }
+
+    #[test]
+    fn task_claim_rejects_non_open_state() {
+        let dir = tempdir().unwrap();
+        let layout = OrbitLayout::at(dir.path());
+        layout.ensure_dirs().unwrap();
+        write_spec(&layout, "0001", "g", SpecStatus::Open);
+        open_task(&layout, "0001", "t1", "x");
+
+        execute(
+            &layout,
+            &VerbRequest::TaskClaim(TaskClaimArgs {
+                spec_id: "0001".into(),
+                task_id: "t1".into(),
+                body: None,
+                labels: vec![],
+                timestamp: Some("2026-05-07T12:00:01Z".into()),
+            }),
+        )
+        .unwrap();
+
+        // Second claim — current state is "claim", not "open".
+        let err = execute(
+            &layout,
+            &VerbRequest::TaskClaim(TaskClaimArgs {
+                spec_id: "0001".into(),
+                task_id: "t1".into(),
+                body: None,
+                labels: vec![],
+                timestamp: Some("2026-05-07T12:00:02Z".into()),
+            }),
+        )
+        .unwrap_err();
+        assert!(err.to_string().starts_with("task.claim: conflict: "));
+    }
+
+    #[test]
+    fn task_update_after_done_is_conflict() {
+        let dir = tempdir().unwrap();
+        let layout = OrbitLayout::at(dir.path());
+        layout.ensure_dirs().unwrap();
+        write_spec(&layout, "0001", "g", SpecStatus::Open);
+        open_task(&layout, "0001", "t1", "x");
+
+        execute(
+            &layout,
+            &VerbRequest::TaskDone(TaskDoneArgs {
+                spec_id: "0001".into(),
+                task_id: "t1".into(),
+                body: None,
+                labels: vec![],
+                timestamp: Some("2026-05-07T12:00:01Z".into()),
+            }),
+        )
+        .unwrap();
+
+        let err = execute(
+            &layout,
+            &VerbRequest::TaskUpdate(TaskUpdateArgs {
+                spec_id: "0001".into(),
+                task_id: "t1".into(),
+                body: "post-mortem".into(),
+                labels: vec![],
+                timestamp: Some("2026-05-07T12:00:02Z".into()),
+            }),
+        )
+        .unwrap_err();
+        assert!(err.to_string().starts_with("task.update: conflict: "));
+    }
+
+    #[test]
+    fn task_show_returns_full_event_history() {
+        let dir = tempdir().unwrap();
+        let layout = OrbitLayout::at(dir.path());
+        layout.ensure_dirs().unwrap();
+        write_spec(&layout, "0001", "g", SpecStatus::Open);
+        open_task(&layout, "0001", "t1", "x");
+        execute(
+            &layout,
+            &VerbRequest::TaskClaim(TaskClaimArgs {
+                spec_id: "0001".into(),
+                task_id: "t1".into(),
+                body: None,
+                labels: vec![],
+                timestamp: Some("2026-05-07T12:00:01Z".into()),
+            }),
+        )
+        .unwrap();
+        execute(
+            &layout,
+            &VerbRequest::TaskUpdate(TaskUpdateArgs {
+                spec_id: "0001".into(),
+                task_id: "t1".into(),
+                body: "in progress".into(),
+                labels: vec![],
+                timestamp: Some("2026-05-07T12:00:02Z".into()),
+            }),
+        )
+        .unwrap();
+
+        let resp = execute(
+            &layout,
+            &VerbRequest::TaskShow(TaskShowArgs {
+                spec_id: "0001".into(),
+                task_id: "t1".into(),
+            }),
+        )
+        .unwrap();
+        let VerbResponse::TaskShow(r) = resp else {
+            panic!()
+        };
+        assert_eq!(r.events.len(), 3);
+        assert_eq!(r.state.state, "update");
+        assert_eq!(r.state.event_count, 3);
+    }
+
+    #[test]
+    fn task_state_survives_session_reset() {
+        // ac-07 verification: after an open-and-claim, a fresh layout reads
+        // the JSONL stream and reproduces the prior state. Tasks live on
+        // disk; the index is derivable but not the source of truth.
+        let dir = tempdir().unwrap();
+        let layout = OrbitLayout::at(dir.path());
+        layout.ensure_dirs().unwrap();
+        write_spec(&layout, "0001", "g", SpecStatus::Open);
+        open_task(&layout, "0001", "t1", "x");
+        execute(
+            &layout,
+            &VerbRequest::TaskClaim(TaskClaimArgs {
+                spec_id: "0001".into(),
+                task_id: "t1".into(),
+                body: None,
+                labels: vec![],
+                timestamp: Some("2026-05-07T12:00:01Z".into()),
+            }),
+        )
+        .unwrap();
+
+        // "Restart" — drop and rebuild the layout handle. The disk state is
+        // unchanged; the in-memory index is a derived view we don't keep.
+        let layout2 = OrbitLayout::at(dir.path());
+        let resp = execute(&layout2, &VerbRequest::TaskList(TaskListArgs::default())).unwrap();
+        let VerbResponse::TaskList(r) = resp else {
+            panic!()
+        };
+        assert_eq!(r.tasks.len(), 1);
+        assert_eq!(r.tasks[0].state, "claim");
+    }
+
+    #[test]
+    fn spec_close_rejects_unfinished_tasks() {
+        // ac-06 verification: "spec.close requires all child tasks done;
+        // rejects with a clear error otherwise."
+        let dir = tempdir().unwrap();
+        let layout = OrbitLayout::at(dir.path());
+        layout.ensure_dirs().unwrap();
+        let spec = Spec {
+            id: "0001".into(),
+            goal: "g".into(),
+            cards: vec![],
+            status: SpecStatus::Open,
+            labels: vec![],
+            acceptance_criteria: vec![],
+        };
+        std::fs::write(
+            layout.spec_file("0001"),
+            crate::canonical::serialise_yaml(&spec).unwrap(),
+        )
+        .unwrap();
+        open_task(&layout, "0001", "t1", "still going");
+
+        let err = execute(
+            &layout,
+            &VerbRequest::SpecClose(SpecCloseArgs { id: "0001".into() }),
+        )
+        .unwrap_err();
+        assert!(err.to_string().starts_with("spec.close: conflict: "));
+        assert!(err.message.contains("unfinished"));
+    }
+
+    #[test]
+    fn spec_close_full_lifecycle_integration() {
+        // ac-06 integration test: create spec → open tasks → close spec
+        // without finishing tasks (rejected) → finish tasks → close spec
+        // (succeeds, linked cards' specs_array updated).
+        let dir = tempdir().unwrap();
+        let layout = OrbitLayout::at(dir.path());
+        layout.ensure_dirs().unwrap();
+        write_card(&layout, "0020-test");
+
+        // 1. Create spec linked to one card
+        execute(
+            &layout,
+            &VerbRequest::SpecCreate(SpecCreateArgs {
+                id: "0001".into(),
+                goal: "do the thing".into(),
+                cards: vec!["0020-test".into()],
+                labels: vec![],
+                acceptance_criteria: vec![],
+            }),
+        )
+        .unwrap();
+
+        // 2. Open two tasks
+        open_task(&layout, "0001", "t1", "task one");
+        open_task(&layout, "0001", "t2", "task two");
+
+        // 3. Close fails — tasks unfinished
+        let err = execute(
+            &layout,
+            &VerbRequest::SpecClose(SpecCloseArgs { id: "0001".into() }),
+        )
+        .unwrap_err();
+        assert!(err.message.contains("unfinished"));
+
+        // 4. Finish both tasks
+        for tid in ["t1", "t2"] {
+            execute(
+                &layout,
+                &VerbRequest::TaskDone(TaskDoneArgs {
+                    spec_id: "0001".into(),
+                    task_id: tid.into(),
+                    body: None,
+                    labels: vec![],
+                    timestamp: Some("2026-05-07T12:00:00Z".into()),
+                }),
+            )
+            .unwrap();
+        }
+
+        // 5. Close succeeds
+        let resp = execute(
+            &layout,
+            &VerbRequest::SpecClose(SpecCloseArgs { id: "0001".into() }),
+        )
+        .unwrap();
+        let VerbResponse::SpecClose(r) = resp else {
+            panic!()
+        };
+        assert_eq!(r.spec.status, SpecStatus::Closed);
+        assert_eq!(r.cards_updated, vec!["0020-test".to_string()]);
+
+        // 6. Linked card's specs array now contains the ref
+        let card = read_card(&layout, "0020-test");
+        assert_eq!(card.specs, vec![".orbit/specs/0001.yaml".to_string()]);
+    }
+
+    #[test]
+    fn task_show_unknown_task_is_not_found() {
+        let dir = tempdir().unwrap();
+        let layout = OrbitLayout::at(dir.path());
+        layout.ensure_dirs().unwrap();
+        write_spec(&layout, "0001", "g", SpecStatus::Open);
+
+        let err = execute(
+            &layout,
+            &VerbRequest::TaskShow(TaskShowArgs {
+                spec_id: "0001".into(),
+                task_id: "nope".into(),
+            }),
+        )
+        .unwrap_err();
+        assert!(err.to_string().starts_with("task.show: not-found: "));
     }
 
     #[test]
