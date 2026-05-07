@@ -21,11 +21,15 @@
 use clap::{Parser, Subcommand};
 use orbit_state_core::layout::OrbitLayout;
 use orbit_state_core::{
-    envelope_err_string, envelope_ok_string, execute, SpecCloseArgs, SpecCloseResult,
-    SpecCreateArgs, SpecCreateResult, SpecListArgs, SpecListResult, SpecNoteArgs, SpecNoteResult,
-    SpecShowArgs, SpecShowResult, SpecUpdateArgs, SpecUpdateResult, TaskClaimArgs, TaskDoneArgs,
-    TaskEventResult, TaskListArgs, TaskListResult, TaskOpenArgs, TaskOpenResult, TaskReadyArgs,
-    TaskShowArgs, TaskShowResult, TaskUpdateArgs, VerbRequest, VerbResponse,
+    envelope_err_string, envelope_ok_string, execute, CardListArgs, CardSearchArgs, CardShowArgs,
+    CardShowResult, ChoiceListArgs, ChoiceListResult, ChoiceSearchArgs, ChoiceShowArgs,
+    ChoiceShowResult, MemoryListArgs, MemoryListResult, MemoryRememberArgs, MemoryRememberResult,
+    MemorySearchArgs, SessionPrimeArgs, SessionPrimeResult, SpecCloseArgs, SpecCloseResult,
+    SpecCreateArgs,
+    SpecCreateResult, SpecListArgs, SpecListResult, SpecNoteArgs, SpecNoteResult, SpecShowArgs,
+    SpecShowResult, SpecUpdateArgs, SpecUpdateResult, TaskClaimArgs, TaskDoneArgs, TaskEventResult,
+    TaskListArgs, TaskListResult, TaskOpenArgs, TaskOpenResult, TaskReadyArgs, TaskShowArgs,
+    TaskShowResult, TaskUpdateArgs, VerbRequest, VerbResponse,
 };
 use std::path::PathBuf;
 use std::process::ExitCode;
@@ -61,6 +65,73 @@ enum Command {
         #[command(subcommand)]
         action: TaskAction,
     },
+    /// Memory verbs (remember, list, search).
+    Memory {
+        #[command(subcommand)]
+        action: MemoryAction,
+    },
+    /// Card verbs (show, list, search) — read-only.
+    Card {
+        #[command(subcommand)]
+        action: CardAction,
+    },
+    /// Choice verbs (show, list, search) — read-only.
+    Choice {
+        #[command(subcommand)]
+        action: ChoiceAction,
+    },
+    /// Session priming context (open specs + recent memories).
+    Session {
+        #[command(subcommand)]
+        action: SessionAction,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+enum SessionAction {
+    /// Prime an agent session — bounded output: open specs + up to K memories.
+    Prime {
+        /// Override the default memory cap (K=10).
+        #[arg(long)]
+        memory_cap: Option<usize>,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+enum MemoryAction {
+    /// Upsert a memory entry.
+    Remember {
+        key: String,
+        body: String,
+        #[arg(long = "label")]
+        labels: Vec<String>,
+        #[arg(long)]
+        timestamp: Option<String>,
+    },
+    /// List all memories.
+    List,
+    /// Search memories (substring, case-insensitive, body + labels).
+    Search { query: String },
+}
+
+#[derive(Debug, Subcommand)]
+enum CardAction {
+    Show { slug: String },
+    List {
+        #[arg(long)]
+        maturity: Option<String>,
+    },
+    Search { query: String },
+}
+
+#[derive(Debug, Subcommand)]
+enum ChoiceAction {
+    Show { id: String },
+    List {
+        #[arg(long)]
+        status: Option<String>,
+    },
+    Search { query: String },
 }
 
 #[derive(Debug, Subcommand)]
@@ -347,6 +418,46 @@ fn build_request(command: &Command) -> VerbRequest {
                 timestamp: timestamp.clone(),
             }),
         },
+        Command::Memory { action } => match action {
+            MemoryAction::Remember {
+                key,
+                body,
+                labels,
+                timestamp,
+            } => VerbRequest::MemoryRemember(MemoryRememberArgs {
+                key: key.clone(),
+                body: body.clone(),
+                labels: labels.clone(),
+                timestamp: timestamp.clone(),
+            }),
+            MemoryAction::List => VerbRequest::MemoryList(MemoryListArgs::default()),
+            MemoryAction::Search { query } => VerbRequest::MemorySearch(MemorySearchArgs {
+                query: query.clone(),
+            }),
+        },
+        Command::Card { action } => match action {
+            CardAction::Show { slug } => VerbRequest::CardShow(CardShowArgs { slug: slug.clone() }),
+            CardAction::List { maturity } => VerbRequest::CardList(CardListArgs {
+                maturity: maturity.clone(),
+            }),
+            CardAction::Search { query } => VerbRequest::CardSearch(CardSearchArgs {
+                query: query.clone(),
+            }),
+        },
+        Command::Choice { action } => match action {
+            ChoiceAction::Show { id } => VerbRequest::ChoiceShow(ChoiceShowArgs { id: id.clone() }),
+            ChoiceAction::List { status } => VerbRequest::ChoiceList(ChoiceListArgs {
+                status: status.clone(),
+            }),
+            ChoiceAction::Search { query } => VerbRequest::ChoiceSearch(ChoiceSearchArgs {
+                query: query.clone(),
+            }),
+        },
+        Command::Session { action } => match action {
+            SessionAction::Prime { memory_cap } => VerbRequest::SessionPrime(SessionPrimeArgs {
+                memory_cap: *memory_cap,
+            }),
+        },
     }
 }
 
@@ -368,7 +479,95 @@ fn render_human(response: &VerbResponse) {
         VerbResponse::TaskClaim(result)
         | VerbResponse::TaskUpdate(result)
         | VerbResponse::TaskDone(result) => render_task_event(result),
+        VerbResponse::MemoryRemember(result) => render_memory_remember(result),
+        VerbResponse::MemoryList(result) | VerbResponse::MemorySearch(result) => {
+            render_memory_list(result)
+        }
+        VerbResponse::CardShow(result) => render_card_show(result),
+        VerbResponse::CardList(result) | VerbResponse::CardSearch(result) => {
+            render_card_list(result)
+        }
+        VerbResponse::ChoiceShow(result) => render_choice_show(result),
+        VerbResponse::ChoiceList(result) | VerbResponse::ChoiceSearch(result) => {
+            render_choice_list(result)
+        }
+        VerbResponse::SessionPrime(result) => render_session_prime(result),
     }
+}
+
+fn render_session_prime(result: &SessionPrimeResult) {
+    println!("session.prime — bound: {} items", result.item_bound);
+    println!();
+    if !result.open_specs.is_empty() {
+        println!("Open specs ({}):", result.open_specs.len());
+        for s in &result.open_specs {
+            println!("  {}: {}", s.id, s.goal);
+        }
+    }
+    if !result.memories.is_empty() {
+        println!();
+        println!("Recent memories ({}):", result.memories.len());
+        for m in &result.memories {
+            println!("  {}: {}", m.key, first_line(&m.body));
+        }
+    }
+}
+
+fn render_memory_remember(result: &MemoryRememberResult) {
+    println!("remembered: {} ({})", result.memory.key, result.memory.timestamp);
+}
+
+fn render_memory_list(result: &MemoryListResult) {
+    if result.memories.is_empty() {
+        println!("(no memories)");
+        return;
+    }
+    for m in &result.memories {
+        println!("{}\t{}", m.key, first_line(&m.body));
+    }
+}
+
+fn render_card_show(result: &CardShowResult) {
+    println!("slug:     {}", result.slug);
+    println!("feature:  {}", result.card.feature);
+    println!("goal:     {}", result.card.goal);
+    println!("maturity: {:?}", result.card.maturity);
+    if !result.card.specs.is_empty() {
+        println!("specs:    {}", result.card.specs.join(", "));
+    }
+}
+
+fn render_card_list(result: &orbit_state_core::CardListResult) {
+    if result.cards.is_empty() {
+        println!("(no cards)");
+        return;
+    }
+    for c in &result.cards {
+        println!("{}\t{}\t{}", c.slug, c.maturity, c.feature);
+    }
+}
+
+fn render_choice_show(result: &ChoiceShowResult) {
+    println!("id:           {}", result.choice.id);
+    println!("title:        {}", result.choice.title);
+    println!("status:       {:?}", result.choice.status);
+    println!("date_created: {}", result.choice.date_created);
+    println!();
+    println!("{}", result.choice.body);
+}
+
+fn render_choice_list(result: &ChoiceListResult) {
+    if result.choices.is_empty() {
+        println!("(no choices)");
+        return;
+    }
+    for c in &result.choices {
+        println!("{}\t{}\t{}", c.id, c.status, c.title);
+    }
+}
+
+fn first_line(s: &str) -> &str {
+    s.lines().next().unwrap_or(s)
 }
 
 fn render_task_open(result: &TaskOpenResult) {

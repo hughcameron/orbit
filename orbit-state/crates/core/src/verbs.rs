@@ -25,7 +25,10 @@ use crate::canonical::{parse_json_line, parse_yaml, serialise_json_line, seriali
 use crate::error::{Error, Result};
 use crate::layout::OrbitLayout;
 use crate::locks;
-use crate::schema::{AcceptanceCriterion, NoteEvent, Spec, SpecStatus, TaskEvent, TaskEventKind};
+use crate::schema::{
+    AcceptanceCriterion, Card, Choice, Memory, NoteEvent, Spec, SpecStatus, TaskEvent,
+    TaskEventKind,
+};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::collections::BTreeMap;
@@ -81,6 +84,26 @@ pub enum VerbRequest {
     TaskUpdate(TaskUpdateArgs),
     #[serde(rename = "task.done")]
     TaskDone(TaskDoneArgs),
+    #[serde(rename = "memory.remember")]
+    MemoryRemember(MemoryRememberArgs),
+    #[serde(rename = "memory.list")]
+    MemoryList(MemoryListArgs),
+    #[serde(rename = "memory.search")]
+    MemorySearch(MemorySearchArgs),
+    #[serde(rename = "card.show")]
+    CardShow(CardShowArgs),
+    #[serde(rename = "card.list")]
+    CardList(CardListArgs),
+    #[serde(rename = "card.search")]
+    CardSearch(CardSearchArgs),
+    #[serde(rename = "choice.show")]
+    ChoiceShow(ChoiceShowArgs),
+    #[serde(rename = "choice.list")]
+    ChoiceList(ChoiceListArgs),
+    #[serde(rename = "choice.search")]
+    ChoiceSearch(ChoiceSearchArgs),
+    #[serde(rename = "session.prime")]
+    SessionPrime(SessionPrimeArgs),
 }
 
 /// Args for `spec.list`. Optional `status` filter; further filters land later.
@@ -233,6 +256,89 @@ pub struct TaskDoneArgs {
     pub timestamp: Option<String>,
 }
 
+// ----------------------------------------------------------------------------
+// Memory / card / choice verb args (ac-08, ac-09, ac-10)
+// ----------------------------------------------------------------------------
+
+/// Args for `memory.remember` — upsert a memory entry.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct MemoryRememberArgs {
+    pub key: String,
+    pub body: String,
+    #[serde(default)]
+    pub labels: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub timestamp: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct MemoryListArgs {}
+
+/// Args for `memory.search` — substring (case-insensitive) over body + labels.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct MemorySearchArgs {
+    pub query: String,
+}
+
+/// Args for `card.show`.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct CardShowArgs {
+    pub slug: String,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct CardListArgs {
+    /// Filter by maturity (`planned`, `emerging`, `established`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub maturity: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct CardSearchArgs {
+    pub query: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct ChoiceShowArgs {
+    pub id: String,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct ChoiceListArgs {
+    /// Filter by status (`proposed`, `accepted`, `rejected`, `deprecated`, `superseded`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub status: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct ChoiceSearchArgs {
+    pub query: String,
+}
+
+/// Args for `session.prime` — agent session priming context.
+///
+/// Per ac-11: bounded output formula `f(N specs, M memories) ≤ 40 +
+/// 2*open_specs + min(M,10)`. The K=10 memory cap is enforced here;
+/// the per-open-spec bound is structural (each spec contributes one
+/// summary to the output, regardless of how heavy it is).
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct SessionPrimeArgs {
+    /// Override the default memory cap (K=10). Tests use this to verify
+    /// the bound is enforced; production callers omit it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub memory_cap: Option<usize>,
+}
+
 /// Args for `spec.note` — append a timestamped note to a spec.
 ///
 /// The `timestamp` arg is the documented test/migration seam. Production
@@ -281,6 +387,26 @@ pub enum VerbResponse {
     TaskUpdate(TaskEventResult),
     #[serde(rename = "task.done")]
     TaskDone(TaskEventResult),
+    #[serde(rename = "memory.remember")]
+    MemoryRemember(MemoryRememberResult),
+    #[serde(rename = "memory.list")]
+    MemoryList(MemoryListResult),
+    #[serde(rename = "memory.search")]
+    MemorySearch(MemoryListResult),
+    #[serde(rename = "card.show")]
+    CardShow(CardShowResult),
+    #[serde(rename = "card.list")]
+    CardList(CardListResult),
+    #[serde(rename = "card.search")]
+    CardSearch(CardListResult),
+    #[serde(rename = "choice.show")]
+    ChoiceShow(ChoiceShowResult),
+    #[serde(rename = "choice.list")]
+    ChoiceList(ChoiceListResult),
+    #[serde(rename = "choice.search")]
+    ChoiceSearch(ChoiceListResult),
+    #[serde(rename = "session.prime")]
+    SessionPrime(SessionPrimeResult),
 }
 
 /// Result for `spec.list`.
@@ -322,6 +448,68 @@ pub struct SpecUpdateResult {
 pub struct SpecCloseResult {
     pub spec: Spec,
     pub cards_updated: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct MemoryRememberResult {
+    pub memory: Memory,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct MemoryListResult {
+    pub memories: Vec<Memory>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct CardShowResult {
+    pub slug: String,
+    pub card: Card,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct CardListResult {
+    pub cards: Vec<CardSummary>,
+}
+
+/// Projection of a card for list/search views.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct CardSummary {
+    pub slug: String,
+    pub feature: String,
+    pub goal: String,
+    pub maturity: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ChoiceShowResult {
+    pub choice: Choice,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ChoiceListResult {
+    pub choices: Vec<ChoiceSummary>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ChoiceSummary {
+    pub id: String,
+    pub title: String,
+    pub status: String,
+    pub date_created: String,
+}
+
+/// Result for `session.prime` — agent priming context. Per ac-11:
+/// `f(N specs, M memories) ≤ 40 + 2*open_specs + min(M,10)`.
+///
+/// The bound is "items in the response", not bytes/tokens — agents can size
+/// their context separately. Items here are open spec summaries + memory
+/// references.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct SessionPrimeResult {
+    pub open_specs: Vec<SpecSummary>,
+    pub memories: Vec<Memory>,
+    /// Hard upper bound on items: 40 + 2*open_specs + min(memory_cap, 10).
+    pub item_bound: usize,
 }
 
 /// Reduced view of a task — its current state derived from the last event
@@ -402,6 +590,24 @@ pub fn execute(layout: &OrbitLayout, request: &VerbRequest) -> Result<VerbRespon
         VerbRequest::TaskClaim(args) => task_claim(layout, args).map(VerbResponse::TaskClaim),
         VerbRequest::TaskUpdate(args) => task_update(layout, args).map(VerbResponse::TaskUpdate),
         VerbRequest::TaskDone(args) => task_done(layout, args).map(VerbResponse::TaskDone),
+        VerbRequest::MemoryRemember(args) => {
+            memory_remember(layout, args).map(VerbResponse::MemoryRemember)
+        }
+        VerbRequest::MemoryList(args) => memory_list(layout, args).map(VerbResponse::MemoryList),
+        VerbRequest::MemorySearch(args) => {
+            memory_search(layout, args).map(VerbResponse::MemorySearch)
+        }
+        VerbRequest::CardShow(args) => card_show(layout, args).map(VerbResponse::CardShow),
+        VerbRequest::CardList(args) => card_list(layout, args).map(VerbResponse::CardList),
+        VerbRequest::CardSearch(args) => card_search(layout, args).map(VerbResponse::CardSearch),
+        VerbRequest::ChoiceShow(args) => choice_show(layout, args).map(VerbResponse::ChoiceShow),
+        VerbRequest::ChoiceList(args) => choice_list(layout, args).map(VerbResponse::ChoiceList),
+        VerbRequest::ChoiceSearch(args) => {
+            choice_search(layout, args).map(VerbResponse::ChoiceSearch)
+        }
+        VerbRequest::SessionPrime(args) => {
+            session_prime(layout, args).map(VerbResponse::SessionPrime)
+        }
     }
 }
 
@@ -1252,6 +1458,355 @@ fn stamp_or(verb: &str, supplied: &Option<String>) -> Result<String> {
         None => current_rfc3339_utc()
             .map_err(|e| Error::unavailable(verb, format!("substrate timestamp: {e}"))),
     }
+}
+
+// ============================================================================
+// Memory verbs (ac-08) — substrate-written entities; cross-session/cross-machine via git.
+// ============================================================================
+
+fn memory_remember(layout: &OrbitLayout, args: &MemoryRememberArgs) -> Result<MemoryRememberResult> {
+    const VERB: &str = "memory.remember";
+    validate_memory_key(VERB, &args.key)?;
+    if args.body.is_empty() {
+        return Err(Error::malformed(VERB, "body must not be empty"));
+    }
+
+    let lock_key = format!("memory-{}", args.key);
+    let _guard = locks::acquire_default(layout, &lock_key).map_err(|mut e| {
+        e.verb = VERB.into();
+        e
+    })?;
+
+    layout
+        .ensure_dirs()
+        .map_err(|e| Error::unavailable(VERB, format!("ensure dirs: {e}")))?;
+
+    let timestamp = stamp_or(VERB, &args.timestamp)?;
+    let memory = Memory {
+        key: args.key.clone(),
+        body: args.body.clone(),
+        timestamp,
+        labels: args.labels.clone(),
+    };
+    let yaml = serialise_yaml(&memory).map_err(|mut e| {
+        e.verb = VERB.into();
+        e
+    })?;
+    write_atomic(layout.memory_file(&args.key), yaml.as_bytes()).map_err(|mut e| {
+        e.verb = VERB.into();
+        e
+    })?;
+    Ok(MemoryRememberResult { memory })
+}
+
+fn memory_list(layout: &OrbitLayout, _args: &MemoryListArgs) -> Result<MemoryListResult> {
+    const VERB: &str = "memory.list";
+    Ok(MemoryListResult {
+        memories: read_all_memories(layout, VERB)?,
+    })
+}
+
+fn memory_search(layout: &OrbitLayout, args: &MemorySearchArgs) -> Result<MemoryListResult> {
+    const VERB: &str = "memory.search";
+    if args.query.is_empty() {
+        return Err(Error::malformed(VERB, "query must not be empty"));
+    }
+    let needle = args.query.to_lowercase();
+    let all = read_all_memories(layout, VERB)?;
+    let matched: Vec<Memory> = all
+        .into_iter()
+        .filter(|m| {
+            m.body.to_lowercase().contains(&needle)
+                || m.labels.iter().any(|l| l.to_lowercase().contains(&needle))
+        })
+        .collect();
+    Ok(MemoryListResult { memories: matched })
+}
+
+fn read_all_memories(layout: &OrbitLayout, verb: &'static str) -> Result<Vec<Memory>> {
+    let files = layout
+        .list_memory_files()
+        .map_err(|e| Error::unavailable(verb, format!("list memories: {e}")))?;
+    let mut out = Vec::with_capacity(files.len());
+    for path in files {
+        let text = std::fs::read_to_string(&path)
+            .map_err(|e| Error::unavailable(verb, format!("read {}: {e}", path.display())))?;
+        let m: Memory = parse_yaml(&text).map_err(|mut e| {
+            e.verb = verb.into();
+            e
+        })?;
+        out.push(m);
+    }
+    out.sort_by(|a, b| a.key.cmp(&b.key));
+    Ok(out)
+}
+
+fn validate_memory_key(verb: &str, key: &str) -> Result<()> {
+    if key.is_empty() {
+        return Err(Error::malformed(verb, "key must not be empty"));
+    }
+    if key.contains('/') || key.contains('\\') || key.contains("..") {
+        return Err(Error::malformed(
+            verb,
+            format!("key must not contain path separators or '..': '{key}'"),
+        ));
+    }
+    Ok(())
+}
+
+// ============================================================================
+// Card verbs (ac-09) — read-only; the only substrate-driven card write is
+// the `specs` array append from spec.close, handled there.
+// ============================================================================
+
+fn card_show(layout: &OrbitLayout, args: &CardShowArgs) -> Result<CardShowResult> {
+    const VERB: &str = "card.show";
+    validate_card_slug(VERB, &args.slug)?;
+    let path = layout.card_file(&args.slug);
+    if !path.exists() {
+        return Err(Error::not_found(
+            VERB,
+            format!("no card at {}", path.display()),
+        ));
+    }
+    let text = std::fs::read_to_string(&path)
+        .map_err(|e| Error::unavailable(VERB, format!("read {}: {e}", path.display())))?;
+    let card: Card = parse_yaml(&text).map_err(|mut e| {
+        e.verb = VERB.into();
+        e
+    })?;
+    Ok(CardShowResult {
+        slug: args.slug.clone(),
+        card,
+    })
+}
+
+fn card_list(layout: &OrbitLayout, args: &CardListArgs) -> Result<CardListResult> {
+    const VERB: &str = "card.list";
+    if let Some(m) = args.maturity.as_deref() {
+        if !matches!(m, "planned" | "emerging" | "established") {
+            return Err(Error::malformed(
+                VERB,
+                format!("maturity must be planned|emerging|established, got '{m}'"),
+            ));
+        }
+    }
+    let summaries = collect_card_summaries(layout, VERB)?;
+    let filtered = match &args.maturity {
+        Some(m) => summaries.into_iter().filter(|s| s.maturity == *m).collect(),
+        None => summaries,
+    };
+    Ok(CardListResult { cards: filtered })
+}
+
+fn card_search(layout: &OrbitLayout, args: &CardSearchArgs) -> Result<CardListResult> {
+    const VERB: &str = "card.search";
+    if args.query.is_empty() {
+        return Err(Error::malformed(VERB, "query must not be empty"));
+    }
+    let needle = args.query.to_lowercase();
+    let summaries = collect_card_summaries(layout, VERB)?;
+    let matched: Vec<CardSummary> = summaries
+        .into_iter()
+        .filter(|s| {
+            s.feature.to_lowercase().contains(&needle)
+                || s.goal.to_lowercase().contains(&needle)
+                || s.slug.to_lowercase().contains(&needle)
+        })
+        .collect();
+    Ok(CardListResult { cards: matched })
+}
+
+fn collect_card_summaries(layout: &OrbitLayout, verb: &'static str) -> Result<Vec<CardSummary>> {
+    let files = layout
+        .list_card_files()
+        .map_err(|e| Error::unavailable(verb, format!("list cards: {e}")))?;
+    let mut out = Vec::with_capacity(files.len());
+    for path in files {
+        let text = std::fs::read_to_string(&path)
+            .map_err(|e| Error::unavailable(verb, format!("read {}: {e}", path.display())))?;
+        let card: Card = parse_yaml(&text).map_err(|mut e| {
+            e.verb = verb.into();
+            e
+        })?;
+        let slug = path
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .ok_or_else(|| Error::malformed(verb, format!("card path has no stem: {}", path.display())))?
+            .to_string();
+        let maturity = match card.maturity {
+            crate::schema::CardMaturity::Planned => "planned",
+            crate::schema::CardMaturity::Emerging => "emerging",
+            crate::schema::CardMaturity::Established => "established",
+        };
+        out.push(CardSummary {
+            slug,
+            feature: card.feature,
+            goal: card.goal,
+            maturity: maturity.into(),
+        });
+    }
+    out.sort_by(|a, b| a.slug.cmp(&b.slug));
+    Ok(out)
+}
+
+// ============================================================================
+// Choice verbs (ac-10) — read-only; choices are human-written, CI-validated.
+// ============================================================================
+
+fn choice_show(layout: &OrbitLayout, args: &ChoiceShowArgs) -> Result<ChoiceShowResult> {
+    const VERB: &str = "choice.show";
+    if args.id.is_empty() {
+        return Err(Error::malformed(VERB, "id must not be empty"));
+    }
+    if args.id.contains('/') || args.id.contains('\\') || args.id.contains("..") {
+        return Err(Error::malformed(
+            VERB,
+            format!("id must not contain path separators or '..': '{}'", args.id),
+        ));
+    }
+    let path = layout.choice_file(&args.id);
+    if !path.exists() {
+        return Err(Error::not_found(
+            VERB,
+            format!("no choice at {}", path.display()),
+        ));
+    }
+    let text = std::fs::read_to_string(&path)
+        .map_err(|e| Error::unavailable(VERB, format!("read {}: {e}", path.display())))?;
+    let choice: Choice = parse_yaml(&text).map_err(|mut e| {
+        e.verb = VERB.into();
+        e
+    })?;
+    Ok(ChoiceShowResult { choice })
+}
+
+fn choice_list(layout: &OrbitLayout, args: &ChoiceListArgs) -> Result<ChoiceListResult> {
+    const VERB: &str = "choice.list";
+    if let Some(s) = args.status.as_deref() {
+        if !matches!(s, "proposed" | "accepted" | "rejected" | "deprecated" | "superseded") {
+            return Err(Error::malformed(
+                VERB,
+                format!(
+                    "status must be proposed|accepted|rejected|deprecated|superseded, got '{s}'"
+                ),
+            ));
+        }
+    }
+    let summaries = collect_choice_summaries(layout, VERB)?;
+    let filtered = match &args.status {
+        Some(s) => summaries.into_iter().filter(|c| c.status == *s).collect(),
+        None => summaries,
+    };
+    Ok(ChoiceListResult { choices: filtered })
+}
+
+fn choice_search(layout: &OrbitLayout, args: &ChoiceSearchArgs) -> Result<ChoiceListResult> {
+    const VERB: &str = "choice.search";
+    if args.query.is_empty() {
+        return Err(Error::malformed(VERB, "query must not be empty"));
+    }
+    let needle = args.query.to_lowercase();
+    // Search hits title or body, so we must read full Choice (not just summary).
+    let files = layout
+        .list_choice_files()
+        .map_err(|e| Error::unavailable(VERB, format!("list choices: {e}")))?;
+    let mut matched = Vec::new();
+    for path in files {
+        let text = std::fs::read_to_string(&path)
+            .map_err(|e| Error::unavailable(VERB, format!("read {}: {e}", path.display())))?;
+        let choice: Choice = parse_yaml(&text).map_err(|mut e| {
+            e.verb = VERB.into();
+            e
+        })?;
+        if choice.title.to_lowercase().contains(&needle)
+            || choice.body.to_lowercase().contains(&needle)
+        {
+            matched.push(ChoiceSummary {
+                id: choice.id,
+                title: choice.title,
+                status: choice_status_str(&choice.status).into(),
+                date_created: choice.date_created,
+            });
+        }
+    }
+    matched.sort_by(|a, b| a.id.cmp(&b.id));
+    Ok(ChoiceListResult { choices: matched })
+}
+
+fn collect_choice_summaries(
+    layout: &OrbitLayout,
+    verb: &'static str,
+) -> Result<Vec<ChoiceSummary>> {
+    let files = layout
+        .list_choice_files()
+        .map_err(|e| Error::unavailable(verb, format!("list choices: {e}")))?;
+    let mut out = Vec::with_capacity(files.len());
+    for path in files {
+        let text = std::fs::read_to_string(&path)
+            .map_err(|e| Error::unavailable(verb, format!("read {}: {e}", path.display())))?;
+        let choice: Choice = parse_yaml(&text).map_err(|mut e| {
+            e.verb = verb.into();
+            e
+        })?;
+        out.push(ChoiceSummary {
+            id: choice.id,
+            title: choice.title,
+            status: choice_status_str(&choice.status).into(),
+            date_created: choice.date_created,
+        });
+    }
+    out.sort_by(|a, b| a.id.cmp(&b.id));
+    Ok(out)
+}
+
+fn choice_status_str(s: &crate::schema::ChoiceStatus) -> &'static str {
+    use crate::schema::ChoiceStatus::*;
+    match s {
+        Proposed => "proposed",
+        Accepted => "accepted",
+        Rejected => "rejected",
+        Deprecated => "deprecated",
+        Superseded => "superseded",
+    }
+}
+
+// ============================================================================
+// Session verb (ac-11)
+// ============================================================================
+
+/// `session.prime` — agent priming context with bounded output.
+///
+/// Returns:
+/// - All open specs (summaries — id/goal/status/cards/labels)
+/// - Up to K memories (default K=10), most recent first
+/// - The item bound formula's value, for caller diagnostics
+fn session_prime(layout: &OrbitLayout, args: &SessionPrimeArgs) -> Result<SessionPrimeResult> {
+    const VERB: &str = "session.prime";
+    const DEFAULT_MEMORY_CAP: usize = 10;
+    let cap = args.memory_cap.unwrap_or(DEFAULT_MEMORY_CAP);
+
+    // Open specs.
+    let SpecListResult { specs: all_specs } =
+        spec_list(layout, &SpecListArgs::default())?;
+    let open_specs: Vec<SpecSummary> = all_specs
+        .into_iter()
+        .filter(|s| s.status == "open")
+        .collect();
+
+    // Memories — sort by timestamp DESC, take up to cap.
+    let mut memories = read_all_memories(layout, VERB)?;
+    memories.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
+    let effective = cap.min(memories.len());
+    memories.truncate(effective);
+
+    let item_bound = 40 + 2 * open_specs.len() + cap.min(DEFAULT_MEMORY_CAP);
+
+    Ok(SessionPrimeResult {
+        open_specs,
+        memories,
+        item_bound,
+    })
 }
 
 /// Generate an RFC 3339 UTC timestamp. The substrate's default clock for
@@ -2483,6 +3038,337 @@ mod tests {
         )
         .unwrap_err();
         assert!(err.to_string().starts_with("task.show: not-found: "));
+    }
+
+    // ------------------------------------------------------------------------
+    // Memory / card / choice tests (ac-08, ac-09, ac-10)
+    // ------------------------------------------------------------------------
+
+    use crate::schema::{ChoiceStatus, Memory};
+
+    fn write_memory(layout: &OrbitLayout, key: &str, body: &str) {
+        layout.ensure_dirs().unwrap();
+        let m = Memory {
+            key: key.into(),
+            body: body.into(),
+            timestamp: "2026-05-07T12:00:00Z".into(),
+            labels: vec![],
+        };
+        std::fs::write(
+            layout.memory_file(key),
+            crate::canonical::serialise_yaml(&m).unwrap(),
+        )
+        .unwrap();
+    }
+
+    fn write_choice(layout: &OrbitLayout, id: &str, title: &str, body: &str, status: ChoiceStatus) {
+        layout.ensure_dirs().unwrap();
+        let c = Choice {
+            id: id.into(),
+            title: title.into(),
+            status,
+            date_created: "2026-05-07".into(),
+            date_modified: None,
+            body: body.into(),
+            references: vec![],
+        };
+        std::fs::write(
+            layout.choice_file(id),
+            crate::canonical::serialise_yaml(&c).unwrap(),
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn memory_remember_writes_yaml_and_returns_memory() {
+        let dir = tempdir().unwrap();
+        let layout = OrbitLayout::at(dir.path());
+        let resp = execute(
+            &layout,
+            &VerbRequest::MemoryRemember(MemoryRememberArgs {
+                key: "estimate-guard".into(),
+                body: "recut at Claude-pace".into(),
+                labels: vec!["methodology".into()],
+                timestamp: Some("2026-05-07T12:00:00Z".into()),
+            }),
+        )
+        .unwrap();
+        let VerbResponse::MemoryRemember(r) = resp else {
+            panic!()
+        };
+        assert_eq!(r.memory.key, "estimate-guard");
+        assert!(layout.memory_file("estimate-guard").exists());
+    }
+
+    #[test]
+    fn memory_remember_upserts_existing_key() {
+        let dir = tempdir().unwrap();
+        let layout = OrbitLayout::at(dir.path());
+        execute(
+            &layout,
+            &VerbRequest::MemoryRemember(MemoryRememberArgs {
+                key: "k".into(),
+                body: "v1".into(),
+                labels: vec![],
+                timestamp: Some("2026-05-07T12:00:00Z".into()),
+            }),
+        )
+        .unwrap();
+        execute(
+            &layout,
+            &VerbRequest::MemoryRemember(MemoryRememberArgs {
+                key: "k".into(),
+                body: "v2".into(),
+                labels: vec![],
+                timestamp: Some("2026-05-07T12:00:01Z".into()),
+            }),
+        )
+        .unwrap();
+        let text = std::fs::read_to_string(layout.memory_file("k")).unwrap();
+        assert!(text.contains("v2"), "upsert failed: {text}");
+        assert!(!text.contains("v1"), "v1 still present: {text}");
+    }
+
+    #[test]
+    fn memory_search_substring_case_insensitive_over_body_and_labels() {
+        let dir = tempdir().unwrap();
+        let layout = OrbitLayout::at(dir.path());
+        layout.ensure_dirs().unwrap();
+        write_memory(&layout, "k1", "Recut at Claude-pace");
+        write_memory(&layout, "k2", "atomic writes for substrate");
+        write_memory(&layout, "k3", "completely unrelated");
+
+        let resp = execute(
+            &layout,
+            &VerbRequest::MemorySearch(MemorySearchArgs {
+                query: "CLAUDE".into(),
+            }),
+        )
+        .unwrap();
+        let VerbResponse::MemorySearch(r) = resp else {
+            panic!()
+        };
+        assert_eq!(r.memories.len(), 1);
+        assert_eq!(r.memories[0].key, "k1");
+    }
+
+    #[test]
+    fn memory_list_returns_sorted_by_key() {
+        let dir = tempdir().unwrap();
+        let layout = OrbitLayout::at(dir.path());
+        layout.ensure_dirs().unwrap();
+        write_memory(&layout, "zebra", "z");
+        write_memory(&layout, "apple", "a");
+
+        let resp = execute(&layout, &VerbRequest::MemoryList(MemoryListArgs::default())).unwrap();
+        let VerbResponse::MemoryList(r) = resp else {
+            panic!()
+        };
+        let keys: Vec<_> = r.memories.iter().map(|m| m.key.as_str()).collect();
+        assert_eq!(keys, vec!["apple", "zebra"]);
+    }
+
+    #[test]
+    fn card_show_returns_full_card() {
+        let dir = tempdir().unwrap();
+        let layout = OrbitLayout::at(dir.path());
+        layout.ensure_dirs().unwrap();
+        write_card(&layout, "0020-orbit-state");
+
+        let resp = execute(
+            &layout,
+            &VerbRequest::CardShow(CardShowArgs {
+                slug: "0020-orbit-state".into(),
+            }),
+        )
+        .unwrap();
+        let VerbResponse::CardShow(r) = resp else {
+            panic!()
+        };
+        assert_eq!(r.slug, "0020-orbit-state");
+    }
+
+    #[test]
+    fn card_list_filters_by_maturity() {
+        let dir = tempdir().unwrap();
+        let layout = OrbitLayout::at(dir.path());
+        layout.ensure_dirs().unwrap();
+        // write_card uses Planned. Add one Established manually.
+        write_card(&layout, "0020-planned");
+        let est = Card {
+            feature: "f".into(),
+            as_a: None,
+            i_want: None,
+            so_that: None,
+            goal: "g".into(),
+            maturity: CardMaturity::Established,
+            scenarios: vec![],
+            specs: vec![],
+            relations: vec![],
+            references: vec![],
+            notes: vec![],
+        };
+        std::fs::write(
+            layout.card_file("0021-established"),
+            crate::canonical::serialise_yaml(&est).unwrap(),
+        )
+        .unwrap();
+
+        let resp = execute(
+            &layout,
+            &VerbRequest::CardList(CardListArgs {
+                maturity: Some("established".into()),
+            }),
+        )
+        .unwrap();
+        let VerbResponse::CardList(r) = resp else {
+            panic!()
+        };
+        assert_eq!(r.cards.len(), 1);
+        assert_eq!(r.cards[0].slug, "0021-established");
+    }
+
+    #[test]
+    fn card_search_hits_feature_or_goal() {
+        let dir = tempdir().unwrap();
+        let layout = OrbitLayout::at(dir.path());
+        layout.ensure_dirs().unwrap();
+        write_card(&layout, "0020-orbit-state");
+        write_card(&layout, "0021-tasks");
+
+        let resp = execute(
+            &layout,
+            &VerbRequest::CardSearch(CardSearchArgs {
+                query: "TASKS".into(),
+            }),
+        )
+        .unwrap();
+        let VerbResponse::CardSearch(r) = resp else {
+            panic!()
+        };
+        assert_eq!(r.cards.len(), 1);
+        assert_eq!(r.cards[0].slug, "0021-tasks");
+    }
+
+    #[test]
+    fn choice_show_returns_full_choice() {
+        let dir = tempdir().unwrap();
+        let layout = OrbitLayout::at(dir.path());
+        write_choice(&layout, "0015", "title", "body", ChoiceStatus::Accepted);
+
+        let resp = execute(
+            &layout,
+            &VerbRequest::ChoiceShow(ChoiceShowArgs { id: "0015".into() }),
+        )
+        .unwrap();
+        let VerbResponse::ChoiceShow(r) = resp else {
+            panic!()
+        };
+        assert_eq!(r.choice.title, "title");
+    }
+
+    #[test]
+    fn choice_list_filters_by_status() {
+        let dir = tempdir().unwrap();
+        let layout = OrbitLayout::at(dir.path());
+        write_choice(&layout, "0015", "first", "b", ChoiceStatus::Accepted);
+        write_choice(&layout, "0016", "second", "b", ChoiceStatus::Proposed);
+
+        let resp = execute(
+            &layout,
+            &VerbRequest::ChoiceList(ChoiceListArgs {
+                status: Some("accepted".into()),
+            }),
+        )
+        .unwrap();
+        let VerbResponse::ChoiceList(r) = resp else {
+            panic!()
+        };
+        assert_eq!(r.choices.len(), 1);
+        assert_eq!(r.choices[0].id, "0015");
+    }
+
+    #[test]
+    fn choice_search_hits_title_or_body() {
+        let dir = tempdir().unwrap();
+        let layout = OrbitLayout::at(dir.path());
+        write_choice(&layout, "0015", "Atomic writes", "trade-off discussion", ChoiceStatus::Accepted);
+        write_choice(&layout, "0016", "Other", "irrelevant", ChoiceStatus::Accepted);
+
+        let resp = execute(
+            &layout,
+            &VerbRequest::ChoiceSearch(ChoiceSearchArgs {
+                query: "TRADE".into(),
+            }),
+        )
+        .unwrap();
+        let VerbResponse::ChoiceSearch(r) = resp else {
+            panic!()
+        };
+        assert_eq!(r.choices.len(), 1);
+        assert_eq!(r.choices[0].id, "0015");
+    }
+
+    // ------------------------------------------------------------------------
+    // session.prime tests (ac-11)
+    // ------------------------------------------------------------------------
+
+    #[test]
+    fn session_prime_returns_open_specs_and_capped_memories() {
+        let dir = tempdir().unwrap();
+        let layout = OrbitLayout::at(dir.path());
+        layout.ensure_dirs().unwrap();
+        write_spec(&layout, "0001", "open one", SpecStatus::Open);
+        write_spec(&layout, "0002", "closed one", SpecStatus::Closed);
+        write_spec(&layout, "0003", "open two", SpecStatus::Open);
+        for i in 0..15 {
+            write_memory(
+                &layout,
+                &format!("k{i:02}"),
+                &format!("memory body {i}"),
+            );
+        }
+
+        let resp = execute(
+            &layout,
+            &VerbRequest::SessionPrime(SessionPrimeArgs::default()),
+        )
+        .unwrap();
+        let VerbResponse::SessionPrime(r) = resp else {
+            panic!()
+        };
+
+        // Only open specs.
+        assert_eq!(r.open_specs.len(), 2);
+        assert!(r.open_specs.iter().all(|s| s.status == "open"));
+
+        // Memories capped at K=10.
+        assert_eq!(r.memories.len(), 10);
+
+        // Bound formula: 40 + 2*open + min(10, 10) = 40 + 4 + 10 = 54.
+        assert_eq!(r.item_bound, 54);
+    }
+
+    #[test]
+    fn session_prime_respects_custom_memory_cap() {
+        let dir = tempdir().unwrap();
+        let layout = OrbitLayout::at(dir.path());
+        layout.ensure_dirs().unwrap();
+        for i in 0..5 {
+            write_memory(&layout, &format!("k{i}"), &format!("body {i}"));
+        }
+
+        let resp = execute(
+            &layout,
+            &VerbRequest::SessionPrime(SessionPrimeArgs {
+                memory_cap: Some(3),
+            }),
+        )
+        .unwrap();
+        let VerbResponse::SessionPrime(r) = resp else {
+            panic!()
+        };
+        assert_eq!(r.memories.len(), 3);
     }
 
     #[test]

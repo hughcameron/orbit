@@ -22,10 +22,13 @@ pub mod verbs;
 pub use error::{Category, Error, Result};
 pub use sqlite_link::{link_sanity_check, sqlite_version};
 pub use verbs::{
-    envelope_err, envelope_err_string, envelope_ok, envelope_ok_string, execute, SpecCloseArgs,
-    SpecCloseResult, SpecCreateArgs, SpecCreateResult, SpecListArgs, SpecListResult, SpecNoteArgs,
-    SpecNoteResult, SpecShowArgs, SpecShowResult, SpecSummary, SpecUpdateArgs, SpecUpdateResult,
-    TaskClaimArgs, TaskDoneArgs, TaskEventResult, TaskListArgs, TaskListResult, TaskOpenArgs,
-    TaskOpenResult, TaskReadyArgs, TaskShowArgs, TaskShowResult, TaskState, TaskUpdateArgs,
-    VerbRequest, VerbResponse,
+    envelope_err, envelope_err_string, envelope_ok, envelope_ok_string, execute, CardListArgs,
+    CardListResult, CardSearchArgs, CardShowArgs, CardShowResult, CardSummary, ChoiceListArgs,
+    ChoiceListResult, ChoiceSearchArgs, ChoiceShowArgs, ChoiceShowResult, ChoiceSummary,
+    MemoryListArgs, MemoryListResult, MemoryRememberArgs, MemoryRememberResult, MemorySearchArgs,
+    SessionPrimeArgs, SessionPrimeResult, SpecCloseArgs, SpecCloseResult, SpecCreateArgs,
+    SpecCreateResult, SpecListArgs, SpecListResult, SpecNoteArgs, SpecNoteResult, SpecShowArgs,
+    SpecShowResult, SpecSummary, SpecUpdateArgs, SpecUpdateResult, TaskClaimArgs, TaskDoneArgs,
+    TaskEventResult, TaskListArgs, TaskListResult, TaskOpenArgs, TaskOpenResult, TaskReadyArgs,
+    TaskShowArgs, TaskShowResult, TaskState, TaskUpdateArgs, VerbRequest, VerbResponse,
 };

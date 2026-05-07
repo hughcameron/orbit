@@ -306,6 +306,116 @@ fn tool_descriptors() -> Vec<Value> {
                 "additionalProperties": false
             }
         }),
+        json!({
+            "name": "memory.remember",
+            "description": "Upsert a memory entry. Persists across sessions/machines via git.",
+            "inputSchema": {
+                "type": "object",
+                "required": ["key", "body"],
+                "properties": {
+                    "key":    { "type": "string" },
+                    "body":   { "type": "string" },
+                    "labels": { "type": "array", "items": { "type": "string" } },
+                    "timestamp": { "type": "string" }
+                },
+                "additionalProperties": false
+            }
+        }),
+        json!({
+            "name": "memory.list",
+            "description": "List all memories.",
+            "inputSchema": { "type": "object", "additionalProperties": false }
+        }),
+        json!({
+            "name": "memory.search",
+            "description": "Substring (case-insensitive) search over body + labels.",
+            "inputSchema": {
+                "type": "object",
+                "required": ["query"],
+                "properties": { "query": { "type": "string" } },
+                "additionalProperties": false
+            }
+        }),
+        json!({
+            "name": "card.show",
+            "description": "Show a card by slug.",
+            "inputSchema": {
+                "type": "object",
+                "required": ["slug"],
+                "properties": { "slug": { "type": "string" } },
+                "additionalProperties": false
+            }
+        }),
+        json!({
+            "name": "card.list",
+            "description": "List cards. Optional filter by maturity.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "maturity": { "type": "string", "enum": ["planned", "emerging", "established"] }
+                },
+                "additionalProperties": false
+            }
+        }),
+        json!({
+            "name": "card.search",
+            "description": "Substring (case-insensitive) search over slug + feature + goal.",
+            "inputSchema": {
+                "type": "object",
+                "required": ["query"],
+                "properties": { "query": { "type": "string" } },
+                "additionalProperties": false
+            }
+        }),
+        json!({
+            "name": "choice.show",
+            "description": "Show a choice by id.",
+            "inputSchema": {
+                "type": "object",
+                "required": ["id"],
+                "properties": { "id": { "type": "string" } },
+                "additionalProperties": false
+            }
+        }),
+        json!({
+            "name": "choice.list",
+            "description": "List choices. Optional filter by status.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "status": {
+                        "type": "string",
+                        "enum": ["proposed", "accepted", "rejected", "deprecated", "superseded"]
+                    }
+                },
+                "additionalProperties": false
+            }
+        }),
+        json!({
+            "name": "choice.search",
+            "description": "Substring (case-insensitive) search over title + body.",
+            "inputSchema": {
+                "type": "object",
+                "required": ["query"],
+                "properties": { "query": { "type": "string" } },
+                "additionalProperties": false
+            }
+        }),
+        json!({
+            "name": "session.prime",
+            "description": "Agent session priming context — bounded output (open specs + up to K memories).",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "memory_cap": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "description": "Override the default K=10 memory cap."
+                    }
+                },
+                "additionalProperties": false
+            }
+        }),
     ]
 }
 
