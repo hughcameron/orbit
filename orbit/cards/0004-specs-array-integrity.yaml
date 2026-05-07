@@ -1,3 +1,14 @@
+status: deprecated
+deprecated_date: 2026-05-07
+superseded_by:
+  - 0020-orbit-state
+deprecation_reason: |
+  The integrity concern (specs array on cards staying in sync) dissolves when specs are
+  agent-state in orbit-state with structured queries. Cross-cutting questions like "which
+  specs reference card 0042?" become orbit queries, not stored arrays on the card. Cards
+  no longer maintain a specs array — orbit-state derives the relationship from spec
+  metadata. Historical content preserved below for reference.
+
 feature: Specs array stays complete without manual upkeep
 as_a: author
 i_want: the specs array on cards to be updated automatically when specs are created, and reconciled when design sessions start

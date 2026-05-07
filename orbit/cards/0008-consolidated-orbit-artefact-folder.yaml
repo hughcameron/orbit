@@ -1,46 +1,47 @@
-feature: Consolidated orbit artefact folder
+feature: Consolidated orbit artefact folder under .orbit/
 as_a: developer using the orbit workflow
-i_want: all orbit-generated artefacts (cards, specs, decisions, discovery) to live under a single top-level orbit/ folder
-so_that: my repo root stays clean, orbit's workflow state is clearly distinguished from source code and standard repo metadata, and the cognitive footprint of adopting orbit in a project is smaller
+i_want: all orbit-managed artefacts (cards, choices, specs, memories, memos, derived index) to live under a single hidden .orbit/ folder with selective gitignore
+so_that: the repo root stays clean, orbit's workflow state is clearly distinguished from source code, canonical files are git-tracked while the derived index is not, and the cognitive footprint of adopting orbit in a project is minimal
 
 scenarios:
-  - name: Fresh project adopts orbit
+  - name: Fresh project adopts orbit-state
     given: a new project runs /orb:setup
     when: setup completes
-    then: a single orbit/ directory is created at the repo root, containing cards/, specs/, decisions/, and discovery/ subdirectories — no orbit artefact folders appear at the repo root
-    source_lines: "author-directed during distill: 'refactor to use an orbit folder to hold artefacts'"
+    then: a single .orbit/ directory is created at the repo root, containing cards/, choices/, specs/, memories.jsonl, the derived state.db, and a shipped .gitignore — no orbit artefact folders appear at the repo root
+    gate: true
 
-  - name: Skills write to the orbit folder
-    given: a user runs /orb:card, /orb:design, /orb:spec, /orb:discovery, or any skill that persists an artefact
+  - name: Selective gitignore inside .orbit/
+    given: a freshly initialised .orbit/ directory
+    when: I inspect .orbit/.gitignore
+    then: it ignores state.db, schema-version, locks/ (derived index, gitignored); cards/, choices/, specs/, memories.jsonl are tracked (canonical files, in git)
+    gate: true
+
+  - name: Skills write to the .orbit/ folder
+    given: a user runs /orb:card, /orb:tabletop, /orb:spec, or any skill that persists an artefact
     when: the skill writes its output
-    then: the file lands under orbit/<subdir>/ (e.g. orbit/cards/NNNN-slug.yaml, orbit/specs/YYYY-MM-DD-topic/spec.yaml) rather than at the repo root
-    source_lines: "author-directed during distill — consequence of the capability"
+    then: the file lands under .orbit/<subdir>/ (e.g. .orbit/cards/NNNN-slug.yaml, .orbit/specs/<id>.yaml) — never at the repo root, never under orbit/
 
-  - name: Skills read from the orbit folder
-    given: a skill needs to load prior artefacts (e.g. /orb:design reading a card's specs array, /orb:review-pr finding the spec for a PR)
+  - name: Skills read from the .orbit/ folder
+    given: a skill needs to load prior artefacts (e.g. /orb:tabletop reading a card, /orb:review-pr finding the spec for a PR)
     when: the skill looks up paths
-    then: it resolves them under orbit/ — no skill references bare cards/, specs/, decisions/, or discovery/ at the root
-    source_lines: "author-directed during distill — consequence of the capability"
+    then: it resolves them under .orbit/ — no skill references bare cards/, specs/, decisions/, or discovery/ at the root
 
   - name: Hooks and scripts respect the new layout
-    given: SessionStart hooks or coherence-scan scripts look for outstanding memos, active drives, or keyword matches
+    given: orbit prime, file-watchers, or coherence scans look for outstanding memos, active specs, or keyword matches
     when: they run
-    then: they scan orbit/cards/memos/, orbit/specs/, orbit/decisions/ — not the old root locations
-    source_lines: "author-directed during distill — consequence of the capability"
+    then: they scan .orbit/cards/memos/, .orbit/specs/, .orbit/choices/ — not the old locations
 
-  - name: Existing orbit-using repo migrates
-    given: a repo already has cards/, specs/, decisions/, discovery/ at the root from a prior orb version
-    when: the repo upgrades to the new orb
-    then: the author has a clear, deterministic way to move the four directories under orbit/ — either a one-shot migration skill, a documented git mv recipe, or both — with zero silent breakage of cross-references inside shipped artefacts
-    source_lines: "author-directed during distill — orbit is used on itself, so this repo is the first migration case"
+  - name: Migration from orbit/ to .orbit/ ships with orbit-state
+    given: an existing orbit-using repo with orbit/cards, orbit/decisions, orbit/specs at its root
+    when: the repo upgrades to orbit-state
+    then: a one-shot migration moves the directories under .orbit/ (renaming decisions → choices and converting MD → YAML in the same pass); cross-references inside shipped artefacts are rewritten; a grep for the old paths in any live file returns nothing
 
-  - name: orbit repo itself is migrated
-    given: this repository currently has cards/, specs/, decisions/, discovery/ at its root
-    when: the refactor ships
-    then: those four directories live under orbit/ in this repo, and every skill, hook, script, card, spec, decision, progress file, and memo reference that points at the old paths has been rewritten — a grep for the old bare paths in any live file returns nothing
-    source_lines: "Repo audit 2026-04-20: cards/, specs/, decisions/, discovery/ all present at /home/hugh/github/hughcameron/orbit/ root (ls output)"
+  - name: orbit repo migrates itself when orbit-state ships
+    given: this repository currently has orbit/cards, orbit/decisions, orbit/specs at orbit/
+    when: orbit-state v0.1 ships
+    then: a migration spec opens to move artefacts into .orbit/ — orbit dogfoods its own setup migration, just as it dogfoods every other capability
 
-goal: "Orbit-workflow artefacts in any project live under a single orbit/ folder; no cards/, specs/, decisions/, or discovery/ directory appears at the repo root"
+goal: "Orbit-workflow artefacts in any project live under a single .orbit/ folder with selective gitignore (canonical files tracked, derived index ignored); no cards/, specs/, decisions/, or choices/ directory appears at the repo root or under orbit/"
 
 maturity: planned
 
@@ -48,11 +49,18 @@ specs:
   - orbit/specs/2026-04-20-orbit-artefact-folder/spec.yaml
 
 notes:
-  - "No top-level designs/ folder. Per rally/drive (plugins/orb/skills/rally/SKILL.md §4a, §6a) and /orb:design for single-card sessions, design artefacts live inside the per-topic <spec_dir>/ — decisions.md and interview.md sit alongside spec.yaml so one spec equals one directory with full audit trail. The flat designs/NNNN-<slug>.md pattern from rally's inspiring interaction was an informal pre-rally precursor; rally's formalisation supersedes it. This card does not introduce a designs/ folder."
+  - "The hidden directory mirrors how .git/ and .beads/ work — tool-managed state in one place. Difference: .orbit/.gitignore *selectively* tracks the canonical files (cards, choices, specs, memories) and ignores the derived index (state.db, schema-version, locks)."
+  - "No top-level designs/ folder. Per rally/drive (plugins/orb/skills/rally/SKILL.md), design artefacts live inside the per-spec context — there is no flat designs/NNNN-<slug>.md pattern."
+
+relations:
+  - card: 0020-orbit-state
+    type: depends-on
+    reason: the substrate for the .orbit/ layout is orbit-state; without it, the folder is just convention
+  - card: 0017-setup-is-bead-aware
+    type: feeds
+    reason: setup creates the .orbit/ structure as part of its bootstrap
 
 references:
-  - "author-directed during distill (2026-04-20 session close)"
-  - "repo audit 2026-04-20: /home/hugh/github/hughcameron/orbit root contains cards/, specs/, decisions/, discovery/ alongside plugins/, README.md, CHANGELOG.md, CLAUDE.md, LICENSE, .claude-plugin/"
-  - "plugins/orb/skills/*/SKILL.md — every path reference to cards/, specs/, decisions/, discovery/ is a rewrite site"
-  - "plugins/orb/scripts/session-context.sh, plugins/orb/scripts/rally-coherence-scan.sh — hook and scan sites that touch these paths"
-  - "plugins/orb/skills/rally/SKILL.md §4a, §6a: design artefacts co-locate in <spec_dir>/, not a flat designs/"
+  - "orbit/cards/memos/2026-05-06-orbit-state.md: the .orbit/ layout with selective gitignore"
+  - "orbit/decisions/0015-orbit-state-architecture.md: substrate decision that ships the layout"
+  - "orbit/decisions/0016-choices-vocabulary.md: decisions/ → choices/ rename within orbit"

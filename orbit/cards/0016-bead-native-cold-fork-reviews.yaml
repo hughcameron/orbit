@@ -1,3 +1,15 @@
+status: deprecated
+deprecated_date: 2026-05-07
+superseded_by:
+  - 0007-drive-forked-reviews
+  - 0020-orbit-state
+deprecation_reason: |
+  Bead-era card. The cold-fork review pattern is preserved in card 0007. The substrate
+  moves from beads to orbit-state (card 0020) — review-spec and review-pr now read spec
+  YAML directly via the orbit-state MCP server, not the bead acceptance field. Decision
+  0013 (bead acceptance field as cold-fork substrate) is superseded by 0015. Historical
+  content preserved below for reference.
+
 feature: Bead-native cold-fork reviews
 as_a: author
 i_want: /orb:review-spec and /orb:review-pr to read directly from the bead's structured acceptance field, with the same rule coverage they had against spec.yaml

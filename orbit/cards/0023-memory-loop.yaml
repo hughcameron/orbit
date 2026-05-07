@@ -1,0 +1,61 @@
+feature: Project memory — accreted facts auto-injected at prime
+as_a: agent starting a session in a project
+i_want: relevant project-specific facts that prior sessions discovered to be in my context window from the moment I start work
+so_that: I do not re-discover the same gotchas, conventions, and quirks across sessions — and I can register new facts as I find them so future sessions benefit immediately
+
+scenarios:
+  - name: Agent appends a discovered fact
+    given: an agent finds a non-obvious project fact during work (e.g., "FineType uses uv, not pip")
+    when: it calls orbit memory.remember "<fact>"
+    then: the fact is appended to .orbit/memories.jsonl with auto-timestamp; future prime sessions surface it
+
+  - name: Prime auto-injects relevant memories
+    given: an agent starts a new session
+    when: it calls orbit prime
+    then: recent and relevant memories are surfaced in the agent's context — auto-injected, not requiring manual recall
+    gate: true
+
+  - name: Memories are append-only
+    given: a memory record exists
+    when: an agent wants to update it
+    then: the agent appends a new record (asserting the fact again, possibly with refinement); old records stay; audit shows when each fact was last asserted
+
+  - name: Audit prunes stale or duplicate facts
+    given: a periodic memory audit (per-release lean cadence)
+    when: it scans memories.jsonl
+    then: near-duplicates are flagged for compression; stale facts (no longer true) are flagged for archive; the agent decides per-record — never auto-acts
+
+  - name: Multi-step procedures are NOT memories
+    given: a recurring procedure with steps
+    when: an agent considers what to remember
+    then: it recognises this is a skill, not a memory; opens a skill-author spec instead — the boundary is crisp
+
+  - name: Hugh's stated preferences are explicit memories
+    given: Hugh states a session-spanning preference in conversation
+    when: the agent recognises the persistence intent
+    then: it registers it as a memory so future sessions honour it without re-prompting — Hugh's voice survives across sessions
+
+  - name: What does NOT go in memory
+    given: an agent considering whether to remember something
+    when: the candidate is time-bound, in-the-codebase, or user-level not project-level
+    then: it is rejected — memory is for project-scoped facts that survive past the current week and are not codified elsewhere
+
+goal: "agents accumulate competence across sessions — facts discovered in one session are available in the next without re-discovery, while the memory file stays curated through periodic audit"
+
+maturity: planned
+
+specs: []
+
+relations:
+  - card: 0020-orbit-state
+    type: depends-on
+    reason: memories are an orbit-state table; auto-injection at prime is an orbit-state primitive
+  - card: 0022-skill-curator
+    type: feeds
+    reason: memories that recur with multi-step procedural shape promote to skills via the workshop spec
+  - card: 0024-lean-pass
+    type: feeds
+    reason: memory audit is one column in the system-wide lean ledger
+
+references:
+  - "orbit/cards/memos/2026-05-06-skill-memory-lifecycle.md: distillation source — memory loop section"

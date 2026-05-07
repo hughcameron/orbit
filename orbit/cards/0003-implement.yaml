@@ -1,3 +1,15 @@
+status: deprecated
+deprecated_date: 2026-05-07
+superseded_by:
+  - 0019-tabletop
+  - 0005-drive
+deprecation_reason: |
+  Pre-flight discipline is now part of tabletop's pre-flight contract output (card 0019);
+  implementation mechanics live in card 0005 (drive). The discrete "implement skill" no
+  longer maps to a separate capability — drive consumes the spec contract directly,
+  appending notes and tasks during execution. The historical content below is preserved
+  for reference and to inform the drive card's lineage.
+
 feature: Pre-flight spec check before implementation
 as_a: author
 i_want: the implementing agent to read the spec and extract a checklist before writing any code

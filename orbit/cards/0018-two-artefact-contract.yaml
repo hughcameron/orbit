@@ -1,0 +1,51 @@
+feature: Two-artefact executive surface
+as_a: orbit user
+i_want: only cards and decisions to land on my desk; specs, agent state, and skill iteration to live in the agent substrate where I never have to read them
+so_that: my read flow is "what capabilities advanced" and "what choices were made" — the workflow pipeline runs invisibly underneath, surfacing only via card maturity advances and new choice files
+
+scenarios:
+  - name: Cards and decisions are the on-disk artefacts I curate
+    given: an orbit project under steady-state operation
+    when: I look at the repo
+    then: I see cards/ and choices/ directories with files I read directly; specs and agent state live in the agent substrate (.orbit/) but I never open those files
+    gate: true
+
+  - name: Session close surfaces the executive view
+    given: a working session has just closed
+    when: the close summary is rendered
+    then: the dashboard is three to four lines — cards advanced, choices landed, open specs (count by capability), halts/escalations — never spec or task IDs
+
+  - name: Specs and agent state never surface to me
+    given: a long-running spec is in progress
+    when: I read the close summary
+    then: the spec is referenced by capability terms or check-in content, never by ID; spec files are agent-internal substrate
+
+  - name: Adding a fourth on-disk reading surface fails
+    given: an agent considers adding briefs/, progress.md, or other Hugh-readable files
+    when: the proposed work would surface to me as a separate artefact type
+    then: the design is rejected — the contract caps the surface at two artefacts plus the rendered dashboard
+
+  - name: Outcomes render from cards plus state
+    given: a session close
+    when: the dashboard is rendered
+    then: outcomes (verifiable artefacts) surface inline as "try it: <command>" pulled from each advanced card's verify field — they are a property of cards, never a fourth artefact type
+    gate: true
+
+goal: "the executive read surface stays exactly cards plus decisions plus the rendered dashboard; everything else runs invisibly in the agent substrate, never adding a third reading surface"
+
+maturity: planned
+
+specs: []
+
+relations:
+  - card: 0001-memos
+    type: feeds
+    reason: memos are pre-distillation input; cards are the curated executive output that survives the contract
+  - card: 0020-orbit-state
+    type: depends-on
+    reason: the agent substrate is orbit-state — without it, the contract has no implementation
+
+references:
+  - "orbit/cards/memos/2026-05-06-orbit-unarchive.md: load-bearing principle"
+  - "orbit/cards/memos/2026-05-06-two-artefact-contract-and-curator-lifecycle.md: original distillation source — the constitutional rule"
+  - "orbit/decisions/0014-orbit-unarchive.md: reverses ops 0031; orbit returns under the contract"

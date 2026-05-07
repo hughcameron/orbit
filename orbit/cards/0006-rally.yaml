@@ -1,66 +1,67 @@
-feature: Rally — coordinated multi-card delivery
+feature: Rally — orchestrated parallel drives with fan-out techniques
 as_a: developer
-i_want: to hand a group of independent cards to an agent and have it drive them through the pipeline as a coordinated rally
-so_that: agent throughput is maximised between the two stages where I need to be involved — ideation and assurance
+i_want: to hand a set of specs (or sub-spec ACs) to a rally, have it determine parallelism, spawn drives across fan-out techniques, coordinate results, and surface escalations
+so_that: agent throughput is maximised between the two stages where I need to be involved (tabletop and assurance) — and the fan-out leverage is pushed as far as the work allows
 
 scenarios:
+  - name: Rally is the orchestrator, not the implementer
+    given: a set of specs ready for execution
+    when: rally opens
+    then: it determines which specs can run in parallel, spawns one drive per parallel track, coordinates state, and closes when all drives close — implementation happens in drives
+    gate: true
+
+  - name: Map fan-out (independent parallelism)
+    given: N specs with no shared output or coordination need
+    when: rally fans out
+    then: N drives run in parallel; rally collects results; close when all close — the baseline pattern
+
+  - name: Fork-join (parallel with explicit join)
+    given: N specs that share a common output but can be drafted independently
+    when: rally fans out
+    then: N drives run in parallel; a join drive runs after all complete to integrate results and resolve cross-track conflicts
+
+  - name: Type-fanout (mixed-type drives on one spec)
+    given: an AC that benefits from parallel role-specialised execution (code + test + doc)
+    when: rally spawns mixed-type drives on the same spec
+    then: each agent has a different role; coordination happens via the shared spec's notes.jsonl
+
+  - name: Speculative (race-and-pick)
+    given: an approach is uncertain and trying multiple is cheaper than deliberating
+    when: rally fans out N drives attempting the same AC with different approaches
+    then: fastest-to-quality wins; others are archived; a choice file may land documenting why one approach was picked
+
+  - name: Tree-of-thoughts (mid-drive branching)
+    given: a drive hits a substantive fork during execution
+    when: the drive spawns child drives to explore branches
+    then: the parent drive pauses; child drives explore; results return as data; the parent picks based on evidence — capped at one level (no grandchildren)
+
+  - name: Cold-fork review (post-rally quality gate)
+    given: a rally with material code changes has just closed
+    when: the assurance gate runs
+    then: fresh-context review drives are spawned that read the work without the original drives' context; failures re-open the spec
+    gate: true
+
   - name: Goal-scoped rally proposal
-    given: multiple cards exist for the same subsystem or goal
+    given: multiple cards or specs ready for the same goal
     when: I invoke /orb:rally with a goal string
-    then: the agent scans orbit/cards/, proposes a rally with per-card rationale, and waits for my approval before proceeding
-
-  - name: Queued design decisions
-    given: I approve a rally of N cards
-    when: the design stage begins
-    then: N sub-agents analyse their cards and produce decision packs (options, trade-offs, recommendations), the lead agent presents all decisions grouped by card, and I approve or override
-
-  - name: Consolidated design review
-    given: all N designs have completed
-    when: the designs are presented for review
-    then: I review all designs in a single session, and the agent surfaces cross-cutting concerns (shared types, trait changes, execution order dependencies)
-
-  - name: Parallel-to-serial decision
-    given: the consolidated design review is complete
-    when: designs share types, traits, or interfaces
-    then: the agent proposes a serial implementation order with rationale, recorded in rally.yaml
-
-  - name: Implementation follows declared order
-    given: the rally has a declared implementation order
-    when: implementation begins
-    then: cards are implemented in order, each following the full drive stage logic (spec -> review-spec -> implement -> review-pr)
+    then: the agent surfaces the candidate set with per-spec rationale and waits for my approval (AskUserQuestion: approve-all / modify-list / decline) before fanning out
 
   - name: Rally state persists across sessions
-    given: a rally is in progress and the session dies
+    given: a rally in progress and the session dies
     when: a new session starts
-    then: the session-context hook surfaces the rally state and the agent resumes from where it stopped
+    then: orbit prime surfaces the rally state; the agent resumes orchestration from where it stopped
 
-  - name: Single-card NO-GO does not kill the rally
-    given: one card in a rally receives a NO-GO verdict
-    when: the NO-GO is recorded
-    then: the failed card is parked with its constraint, remaining cards continue, and the rally summary reports the parked card
+  - name: Single-drive halt does not kill the rally
+    given: one drive in a rally hits a halt condition
+    when: the halt is recorded
+    then: the failed drive is parked with its state snapshot; remaining drives continue; the rally summary names what halted
 
-  - name: Assurance gate scales with rally strategy
-    given: the rally has completed implementation
-    when: PR review begins
-    then: serial rallies use stacked PR review, parallel rallies use batched diff review, and individual review is the fallback
+  - name: Cross-drive coordination escalates rather than improvises
+    given: two drives hit related issues that need coordination
+    when: the issue is detected
+    then: the rally escalates to me with both drives' state — drives never coordinate directly; if the work needs cross-drive coordination, the rally is wrong
 
-  - name: Disjointness check at design review
-    given: all designs are complete and presented for consolidated review
-    when: the definitive disjointness check runs using actual design outputs
-    then: the agent identifies shared symbols and files, and proposes serial ordering or confirms parallel is safe
-
-  - name: Live rally visibility
-    given: a rally is in progress
-    when: I check progress mid-session
-    then: the task list shows per-card status, dependencies, and what is blocked or in progress
-
-  - name: Rally approval is a structured prompt
-    given: a rally has been proposed with N candidate cards
-    when: the author is asked to approve
-    then: the approval uses AskUserQuestion with options (approve-all / modify-list / decline) rather than a free-text prompt
-    source_lines: "tools-reference: AskUserQuestion — Asks multiple-choice questions to gather requirements or clarify ambiguity"
-
-goal: "agents coordinate multi-card delivery with fewer human touchpoints per card than serial drives"
+goal: "rally orchestrates parallel drives across six fan-out techniques (map / fork-join / type-fanout / speculative / tree-of-thoughts / cold-fork-review); fan-out leverage is pushed as far as the work allows without compromising review depth"
 
 maturity: planned
 
@@ -69,11 +70,19 @@ specs:
   - orbit/specs/2026-04-19-rally-subagent-model/spec.yaml
   - orbit/specs/2026-04-20-rally-approval-prompt/spec.yaml
 
+relations:
+  - card: 0019-tabletop
+    type: depends-on
+    reason: rally consumes the specs tabletop produces — each spec carries its own pre-flight contract that drives consume
+  - card: 0005-drive
+    type: feeds
+    reason: rally spawns drives; each drive is one fan-out track within the rally
+  - card: 0007-drive-forked-reviews
+    type: extends
+    reason: the cold-fork review fan-out is the post-rally quality gate; preserved from v1
+
 references:
+  - "orbit/cards/memos/2026-05-06-rally-fan-out.md: distillation source — six fan-out techniques and tasks-within-drives"
   - "orbit/discovery/rally.md: observed pattern from parallel design session"
   - "orbit/discovery/rally-research.md: precedent analysis across agent frameworks"
   - "orbit/decisions/0003-rally-skill-boundary.md: rally as separate skill from drive"
-  - "CodeR task-graph artefact pattern: durable plan state"
-  - "MetaGPT structured communication: artefact-path contracts"
-  - "LangGraph interrupt/resume: parallel-interrupts at batch boundaries"
-  - "Claude Code TaskCreate/TaskList: live in-session progress visibility"

@@ -1,7 +1,7 @@
 ---
-status: accepted
+status: superseded by 0015
 date-created: 2026-05-01
-date-modified: 2026-05-01
+date-modified: 2026-05-07
 ---
 # 0013. Bead acceptance field as the cold-fork review substrate
 

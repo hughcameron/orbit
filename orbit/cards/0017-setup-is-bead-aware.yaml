@@ -1,57 +1,60 @@
-feature: /orb:setup is bead-aware
+feature: /orb:setup is orbit-state-aware
 as_a: orbit user setting up a new project or migrating an existing one
-i_want: /orb:setup to handle bead initialisation as part of project setup, not as a separate manual step
-so_that: orbit/ layout and beads init are atomic — there is no half-set-up state where the workflow vocabulary exists but beads isn't initialised, and pilot rollouts to downstream projects can be a single command per project
+i_want: /orb:setup to handle orbit-state initialisation and the .orbit/ layout in one atomic pass — not as a separate manual step
+so_that: the .orbit/ layout, gitignore, and orbit-state initialisation land together — there is no half-set-up state where the workflow vocabulary exists but state initialisation is missing, and pilot rollouts to downstream projects can be a single command per project
 
 scenarios:
-  - name: bd precondition check refuses without bd 1.0.3+
-    given: a project where bd is not installed or is older than 1.0.3
+  - name: orbit-state precondition check refuses without orbit-state binary
+    given: a project where orbit-state is not installed
     when: the user runs /orb:setup
-    then: setup refuses with a one-line install instruction and exits without mutating the repo — orbit IS the bead-native workflow under 0.4.0+, there is no useful orbit-without-beads degradation
+    then: setup refuses with a one-line install instruction and exits without mutating the repo — orbit IS the orbit-state-native workflow, there is no useful orbit-without-state degradation
     gate: true
 
-  - name: Plugin version sanity requires 0.4.0+
-    given: the orbit plugin cache directory only contains pre-0.4.0 versions
+  - name: Plugin version sanity requires orbit-state-compatible release
+    given: the orbit plugin cache only contains pre-orbit-state versions
     when: the user runs /orb:setup
-    then: setup refuses with a message naming the missing minimum version, since the bd-init.sh script writes a PRIME.md that assumes the bead-native skill set
+    then: setup refuses with a message naming the missing minimum version, since the new setup pathway depends on orbit-state primitives
 
-  - name: Greenfield setup creates orbit layout AND .beads in one pass
-    given: a project with no orbit/ directory and no .beads/ directory
+  - name: Greenfield setup creates .orbit/ layout and initialises state in one pass
+    given: a project with no .orbit/ directory and no prior orbit artefacts
     when: the user runs /orb:setup
-    then: setup creates orbit/cards/, orbit/specs/, orbit/decisions/, orbit/cards/memos/, runs bd-init.sh to create .beads/ + PRIME.md + gitignore entries, and writes the CLAUDE.md vocabulary block — all in a single idempotent pass
+    then: setup creates .orbit/cards/, .orbit/choices/, .orbit/specs/, .orbit/cards/memos/; runs orbit init to scaffold the SQLite index and ship .orbit/.gitignore; writes the CLAUDE.md vocabulary block — all in a single idempotent pass
 
-  - name: Brownfield with orbit/ but no .beads/ prompts before adding
-    given: a project that already has orbit/ but no .beads/ directory (an orbit project from before 0.4.0)
+  - name: Brownfield with orbit/ but no .orbit/ prompts before migrating
+    given: a project that already has orbit/cards, orbit/decisions, orbit/specs from a pre-orbit-state version
     when: the user runs /orb:setup
-    then: setup detects the gap and prompts the user before mutating — the prompt names what will be added (.beads/, PRIME.md, gitignore entries) and the user can decline; on yes, the bd-init.sh invocation runs idempotently
+    then: setup detects the gap and prompts before mutating; the prompt names what will move (orbit/ → .orbit/, decisions/ → choices/, MD → YAML); on yes, the migration runs idempotently
 
-  - name: Brownfield with both orbit/ and .beads/ is a clean no-op
-    given: a project that already has orbit/ and .beads/ initialised
+  - name: Brownfield with both .orbit/ and initialised state is a clean no-op
+    given: a project that already has .orbit/ and orbit-state initialised
     when: the user runs /orb:setup
-    then: setup verifies the layout, reports what's already in place, and exits without mutating anything — running setup on a fully-initialised project is safe and emits no warnings
+    then: setup verifies the layout, reports what is in place, and exits without mutating anything — running setup on a fully-initialised project is safe and emits no warnings
 
-  - name: Drive's input contract surfaces a "run setup first" error when .beads/ is absent
-    given: a project where /orb:setup has not been run (no .beads/ directory)
+  - name: Drive's input contract surfaces "run setup first" when state is uninitialised
+    given: a project where /orb:setup has not been run (no .orbit/ directory)
     when: the user runs /orb:drive
-    then: drive halts at its input contract with a message naming /orb:setup as the prerequisite, rather than failing downstream when bd commands fail mid-pipeline
+    then: drive halts at its input contract with a message naming /orb:setup as the prerequisite — rather than failing downstream when orbit commands fail mid-pipeline
 
   - name: Smoke-test stays out of setup
     given: setup has just completed successfully
-    when: the user wants to validate the bead-native flow end-to-end
+    when: the user wants to validate the orbit-state-native flow end-to-end
     then: setup does not auto-run a drive — validation is a separate operator concern (manual /orb:drive on an existing card, or a future /orb:smoke-test skill if it earns its keep)
 
-goal: "/orb:setup is the canonical bead-init gate for orbit 0.4.0+ — running it on any project (greenfield or brownfield) leaves both the orbit/ workflow layout and the .beads/ tracker in a working state, with no manual bd-init.sh step required by the operator"
+goal: "/orb:setup is the canonical orbit-state-init gate — running it on any project (greenfield or brownfield) leaves the .orbit/ workflow layout, the gitignore, and the SQLite index in a working state, with no manual orbit init step required by the operator"
 
 maturity: planned
 
 specs: []
 
 relations:
-  - card: 0016-bead-native-cold-fork-reviews
+  - card: 0008-consolidated-orbit-artefact-folder
+    type: feeds
+    reason: setup creates the .orbit/ structure that 0008 specifies
+  - card: 0020-orbit-state
     type: depends-on
-    reason: 0016 made the bead acceptance field the substrate for cold-fork reviews; this card makes /orb:setup the canonical entry point for getting that substrate in place
+    reason: setup runs orbit init under the hood; without orbit-state the setup pathway has no implementation
 
 references:
-  - "plugins/orb/scripts/bd-init.sh: idempotent script that creates .beads/, PRIME.md, and gitignore entries — already exists, /orb:setup just needs to call it"
-  - "plugins/orb/skills/setup/SKILL.md: current setup skill — handles orbit/ layout and CLAUDE.md vocabulary, no beads awareness"
-  - "orbit/decisions/0011-beads-execution-layer.md: substrate decision that makes setup-without-beads a non-state under 0.4.0+"
+  - "plugins/orb/skills/setup/SKILL.md: current setup skill — handles orbit/ layout and CLAUDE.md vocabulary; needs orbit-state awareness rewrite"
+  - "orbit/decisions/0015-orbit-state-architecture.md: substrate decision that makes setup-without-orbit-state a non-state"
+  - "orbit/cards/memos/2026-05-06-orbit-state.md: the .orbit/ layout setup creates"

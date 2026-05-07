@@ -1,79 +1,62 @@
-feature: Agent-driven card delivery
+feature: Drive — autonomous spec implementation
 as_a: developer
-i_want: to hand a card and an autonomy level to an agent and have it drive through design, spec, implementation, and review
-so_that: I collaborate on goals and cards while agents handle the delivery pipeline
+i_want: to hand a spec (output of tabletop) to an agent and have it drive through implementation against the pre-flight contract — opening session-scoped tasks, appending notes, handing off to review at close
+so_that: I collaborate on cards and tabletops while agents handle the implementation pipeline within pre-committed halt and escalation conditions
 
 scenarios:
-  - name: Full autonomy drive
-    given: a card with clear scenarios and a measurable goal
-    when: I invoke /orb:drive with autonomy level "full"
-    then: the agent drives design → spec → implement → review-pr, pausing only for PR merge
+  - name: Drive consumes a spec contract
+    given: a spec with values, trade-offs, ACs, halt conditions, and escalation triggers (output of tabletop)
+    when: I invoke /orb:drive on the spec
+    then: the agent reads the contract, opens tasks decomposing the ACs, and begins implementation autonomously within the contract
+    gate: true
 
-  - name: Guided drive pauses at review gates
-    given: a card handed to an agent
-    when: I invoke /orb:drive with autonomy level "guided"
-    then: the agent pauses at review-spec and review-pr for my approval before continuing
+  - name: Tasks track sub-spec progress
+    given: a drive in progress on a substantive AC
+    when: the agent decomposes work
+    then: it calls orbit task.open / claim / update / done for each sub-step; <id>.tasks.jsonl is the persisted TaskList
 
-  - name: Supervised drive delivers spec only
-    given: a card handed to an agent
-    when: I invoke /orb:drive with autonomy level "supervised"
-    then: the agent delivers through spec and waits for my greenlight at each subsequent step
+  - name: Notes record events
+    given: an agent encounters a noteworthy state during the drive
+    when: it logs the observation
+    then: it appends to <id>.notes.jsonl with auto-timestamp; tasks (intentions with state) and notes (events without state) are kept distinct
+
+  - name: Mid-run rule applies
+    given: the agent encounters an unexpected state
+    when: the state is not covered by a pre-committed branch in the spec
+    then: it appends a note and continues — does not ask, does not improvise; halts only on conditions named in the spec's halt list
+    gate: true
+
+  - name: Halt conditions trigger graceful stop
+    given: a halt condition from the spec's pre-flight contract is met
+    when: the drive detects it
+    then: the agent stops, surfaces the halt with the named revert path, and escalates to me with a state snapshot
+
+  - name: Escalation triggers fire with proposed actions
+    given: an escalation trigger from the spec is hit
+    when: the drive detects it
+    then: the agent produces an ask with the state snapshot and proposed action specified in the trigger — never an open-ended "I am confused"
 
   - name: Drive state persists across sessions
-    given: a drive in progress that was interrupted
-    when: a new session starts with the same card in-flight
-    then: the session-context hook surfaces the drive state and the agent resumes from where it stopped
+    given: a drive in progress that was interrupted (session reset, machine change)
+    when: a new session starts on the same spec
+    then: orbit prime surfaces the open tasks and recent notes; the agent resumes from where it stopped
 
-  - name: NO-GO re-enters at design
-    given: an implementation attempt that fails review or invalidates spec assumptions
-    when: the review produces a NO-GO result
-    then: the agent re-enters at design with the failure as a new constraint, incrementing the iteration count
+  - name: Drive types vary by need
+    given: a spec whose AC fits a non-standard work shape
+    when: the drive type is chosen
+    then: code drive (default), test drive (tests-first), doc drive (documentation), research drive (notes/memo output), or review drive (cold-fork verdict on another drive's output) is selected per the spec's pre-flight intent
 
-  - name: Escalation on budget exhaustion
-    given: a drive that has cycled through its iteration budget without passing review
-    when: the budget is exhausted
-    then: the agent surfaces findings and stops, presenting what was learned and recommending next steps
+  - name: Drive close hands off to review
+    given: a drive whose tasks are all done and all ACs are met
+    when: the drive closes
+    then: the close-comment captures the check-in summary (what shipped, what's open, what needs Hugh); review (per-drive or cold-fork) takes the verdict
 
-  - name: Drive parameters recorded in spec directory
-    given: a drive is initiated
-    when: the agent begins work
-    then: a drive.yaml is created in the spec directory recording autonomy level, card reference, start time, and iteration state
-
-  - name: Thin card blocks full autonomy
-    given: a card with fewer than 3 scenarios
-    when: I invoke /orb:drive with autonomy level "full"
-    then: drive refuses, names the gap, and suggests what to add before retrying
-
-  - name: Default autonomy is guided
-    given: a card handed to an agent without an explicit autonomy level
+  - name: Default autonomy follows the spec contract
+    given: a spec with halt conditions and escalation triggers pre-committed
     when: /orb:drive is invoked
-    then: the autonomy level defaults to "guided"
+    then: autonomy level is implicit in the contract — strict halts and narrow escalations enforce the boundary; no separate autonomy parameter is needed
 
-  - name: Drive schedules a check-in at start
-    given: /orb:drive begins an unattended run in full autonomy
-    when: drive.yaml is written
-    then: the drive creates a recurring CronCreate task that prints a one-line status (current stage, current AC, iteration count, time elapsed) every N minutes
-    source_lines: "tools-reference: CronCreate — Schedules a recurring or one-shot prompt within the current session. Tasks are session-scoped and restored on --resume or --continue if unexpired"
-
-  - name: Escalation fires a one-shot ping
-    given: the drive hits its 3-iteration budget on an AC
-    when: the escalation path is taken
-    then: a one-shot CronCreate task fires a prominent "drive escalated on <spec>" message so the author notices even in a long session
-    source_lines: "tools-reference: see scheduled tasks"
-
-  - name: Check-ins survive resume
-    given: a session is resumed via --resume after a drive check-in was scheduled
-    when: the session reopens
-    then: the check-in is restored and continues firing on schedule
-    source_lines: "tools-reference: Tasks are session-scoped and restored on --resume or --continue if unexpired"
-
-  - name: Review verdicts route via structured choice
-    given: a spec review or PR review has surfaced findings at MEDIUM+ severity
-    when: the drive presents the verdict to the author
-    then: the next-action prompt is AskUserQuestion with options (approve / request-changes / block / read-full-review)
-    source_lines: "tools-reference: AskUserQuestion — Asks multiple-choice questions to gather requirements or clarify ambiguity"
-
-goal: "agents deliver cards end-to-end within declared autonomy bounds"
+goal: "drives consume spec contracts and produce shipped work plus a check-in summary, autonomously within pre-committed halt and escalation boundaries; sessions and machines do not interrupt progress"
 
 maturity: planned
 
@@ -81,7 +64,17 @@ specs:
   - orbit/specs/2026-04-15-drive/spec.yaml
   - orbit/specs/2026-04-20-drive-live-visibility/spec.yaml
 
+relations:
+  - card: 0019-tabletop
+    type: depends-on
+    reason: drives consume the pre-flight contract that tabletop produces — without the contract, the drive has no halt or escalation discipline
+  - card: 0021-tasks
+    type: depends-on
+    reason: tasks are how a drive tracks sub-spec progress; the persisted TaskList equivalent
+  - card: 0006-rally
+    type: feeds
+    reason: rallies orchestrate parallel drives — each drive is one fan-out track
+
 references:
+  - "orbit/cards/memos/2026-05-06-rally-fan-out.md: drive types, the mid-run rule, and the contract-consumption pattern"
   - "Prior experience: disposition embedded in agent definition + CLAUDE.md proved effective for focus and throughput"
-  - "ralph-loop: existing self-referential loop pattern for autonomous iteration"
-  - "orbit/cards/0003-implement.yaml: progress.md checklist pattern reusable for drive state"

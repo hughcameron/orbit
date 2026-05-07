@@ -1,0 +1,43 @@
+---
+status: accepted
+date-created: 2026-05-07
+date-modified: 2026-05-07
+---
+# 0017. Tabletop's output is the spec's contract, not the spec's solution
+
+## Context and Problem Statement
+
+Orbit v1 had a `design` skill that attempted to front-load thinking before specs were written. Hugh's diagnosis: it "tried to do this and reduced ambiguity, but drove too far into implementation." Tabletop replaces the design role; without an explicit discipline, it would inherit the same failure. The discipline must be load-bearing — the rule that prevents tabletop from collapsing into implementation planning.
+
+## Considered Options
+
+- **A. No explicit rule.** Trust agents to keep tabletop alignment-focused. Re-introduces the v1 failure when agents drift toward providing answers rather than surfacing trade-offs.
+- **B. Soft guidance ("tabletop is alignment").** Captures intent but does not prevent drift; the rule is ambiguous in edge cases where alignment surfaces an obvious approach.
+- **C. Hard rule: tabletop's output is the spec's contract, not the spec's solution.** Specifically: tabletop produces values + trade-offs + halt conditions + escalation triggers + acceptance criteria. Approach selection happens in the spec or in a speculative-fanout drive — *never* in tabletop. Implementation happens in the drive.
+
+## Decision Outcome
+
+Chosen option: **C — hard rule, load-bearing.** The discipline is a specific separation: tabletop captures what to optimise for; the spec captures the contract; the drive captures the implementation. Conflating these is the failure mode. The rule appears in the tabletop card (0019) as a gate scenario and in the tabletop skill's prompt as a hard constraint.
+
+Tabletop output covers:
+- Values extraction — what does Hugh care about for this work
+- Trade-off articulation — what is being traded against
+- Goal narrowing — testable success criteria
+- Scenario walk — lateral approaches identified, not yet picked
+- Halt conditions — pre-committed kill switches with revert paths
+- Escalation triggers — narrow, listed, with state snapshot and proposed action per trigger
+
+What tabletop output does NOT cover:
+- Implementation approach selection (deferred to spec or speculative drive)
+- Pseudo-code or implementation sketches
+- Step-by-step plans
+- Architectural decisions about *how* (deferred to choice files when forks are hit)
+
+### Consequences
+
+- Good, because the v1 design failure mode is structurally prevented — there is no "tabletop just decides the approach" path because the rule explicitly disallows it.
+- Good, because alignment work and approach work are cleanly separable; alignment can be re-run without redoing approach analysis (and vice versa).
+- Good, because the spec's pre-flight contract has a consistent shape across all specs (always values + trade-offs + ACs + halt + escalations).
+- Bad, because there will be edge cases where alignment surfaces an obvious approach and ignoring it feels artificial. Discipline says: name it as a candidate in the scenario walk, defer the pick to the spec.
+- Bad, because the rule requires explicit teaching; new agents will violate it until prompted with the constraint.
+- Neutral, because the rule operationalises Karpathy's "Think Before Coding" principle as a structural separation rather than a soft guideline.

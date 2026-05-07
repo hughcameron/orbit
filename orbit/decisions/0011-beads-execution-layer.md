@@ -1,7 +1,7 @@
 ---
-status: accepted
+status: superseded by 0015
 date-created: 2026-04-30
-date-modified: 2026-04-30
+date-modified: 2026-05-07
 ---
 # 0011. Beads as orbit's execution substrate
 

@@ -1,18 +1,18 @@
 feature: Distill capability cards from source material
 as_a: author
-i_want: to extract structured feature cards from memos, documents, or an existing project
-so_that: the product's capabilities are described as cards without re-interviewing
+i_want: to extract structured feature cards from memos, documents, conversations, or an existing project
+so_that: the product's capabilities are described as cards without re-interviewing — distill is the entry point of the pipeline (Memo → Distill → Cards; a tabletop scopes 1+ Cards → 1+ Specs → Rally → Drives)
 
 scenarios:
-  - name: Distill a memo into a card
+  - name: Distill a memo into one or more cards
     given: a memo exists at orbit/cards/memos/2026-04-04-search-ux.md
     when: I run /orb:distill orbit/cards/memos/2026-04-04-search-ux.md
-    then: one or more capability cards are presented for my approval
+    then: one or more capability cards are presented for my approval; the memo can yield multiple cards if it covers distinct capabilities
 
-  - name: Distill a discovery interview
-    given: a discovery interview exists at orbit/specs/2026-04-01-topic/interview.md
-    when: I run /orb:distill orbit/specs/2026-04-01-topic/interview.md
-    then: distinct capabilities are identified and offered as separate cards
+  - name: Distill a memo cluster
+    given: multiple related memos exist (e.g., the 2026-05-06 cluster on the orbit-v2 thinking)
+    when: I run /orb:distill on the cluster
+    then: cards are extracted across the cluster; cross-memo coupling is recognised; consumed memos are deleted after promotion
 
   - name: Distill an existing project
     given: a project has a README, docs, source code, and specs
@@ -24,14 +24,19 @@ scenarios:
     when: distill extracts features
     then: cards describe capabilities users experience, not incremental changes developers plan
 
+  - name: Distill updates existing cards as well as creating new ones
+    given: a memo refines an existing card's understanding
+    when: distill processes the memo
+    then: the existing card is updated in place (cards are living documents); only genuinely new capabilities become new cards
+
   - name: Staged review — draft then review then write
-    given: distill has extracted candidate cards
+    given: distill has extracted candidate cards (new or updated)
     when: it presents them to me
     then: all cards are shown as a numbered batch with nothing written to disk yet
 
   - name: Batch feedback
-    given: I'm reviewing the drafted card set
-    when: I spot overlaps, gaps, or cards to merge/drop/rename
+    given: I am reviewing the drafted card set
+    when: I spot overlaps, gaps, or cards to merge / drop / rename
     then: I give feedback on the batch and the agent revises until I say "write"
 
   - name: Nothing written until explicit approval
@@ -40,9 +45,14 @@ scenarios:
     then: no files are created on disk until I explicitly approve the final set
 
   - name: Card references its source
-    given: a card is created via distill
+    given: a card is created or updated via distill
     when: I look at the card
-    then: the references field includes the source artifacts
+    then: the references field includes the source artefacts — memos, interview files, or document paths
+
+  - name: Retirement signals are honoured
+    given: a memo (or its source) carries explicit retirement guidance from the user
+    when: distill processes it
+    then: the named retirement is enforced — the academic apparatus or implementation-driving framings the user flagged are *structurally absent* from the resulting cards, not merely "noted as cut"
 
 maturity: established
 
@@ -52,3 +62,4 @@ specs:
 references:
   - "/orb:card: interactive interview produces one card"
   - "/orb:discovery: Socratic Q&A produces interview.md — a common distill input"
+  - "orbit/cards/memos/2026-05-06-orbit-unarchive.md: pipeline shape (Memo → Distill → Cards → ...)"
