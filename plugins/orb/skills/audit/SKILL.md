@@ -10,73 +10,71 @@ Audit the linkage between spec acceptance criteria and test files. Produces an a
 ## Usage
 
 ```
-/orb:audit [spec_path]
+/orb:audit [spec-id]
 ```
 
-- If a spec path is provided: audit that single spec
-- If no argument: audit all specs under `orbit/specs/`
+- If a spec id is provided: audit that single spec.
+- If no argument: audit every spec listed by `orbit --json spec list`.
 
 ## Why This Exists
 
 Orbit's AC-to-test naming convention (`ac-03` in the spec maps to `test_ac03_*` in tests) makes coverage a grep instead of a re-read. But the convention only works if someone actually checks it. This skill is that check.
 
-It also handles the reality that not every AC is testable code. Document deliverables, gate decisions, and configuration changes don't have test functions — and shouldn't be flagged as gaps. The `ac_type` field on each AC tells the audit what to expect.
+It also handles the reality that not every AC is testable code. Document deliverables, gate decisions, and configuration changes don't have test functions — and shouldn't be flagged as gaps. The judgement of which ACs are non-code is made from each AC's `description` (and the `gate` flag where present), captured per-spec in the report below.
 
 ## Instructions
 
 ### 1. Locate Specs
 
-If `$ARGUMENTS` provides a path, use it. Otherwise, find all `orbit/specs/*/spec.yaml` files in the project.
+If `$ARGUMENTS` provides a spec id, use it. Otherwise:
 
-If no specs exist, stop: *"No specs found. Run `/orb:spec` to create one."*
+```bash
+orbit --json spec list
+```
+
+…and audit every spec returned. The wire envelope's `data.result.specs[].id` field is the canonical id. If no specs exist, stop: *"No specs found. Run `/orb:spec` to create one."*
 
 ### 2. Parse Acceptance Criteria
 
-For each spec, extract every AC entry. Each AC should have:
+For each spec, fetch its acceptance_criteria via:
 
-- `id`: the `ac-NN` identifier
-- `description`: what it requires
-- `ac_type`: one of `code`, `doc`, `gate`, `config` (defaults to `code` if missing)
+```bash
+plugins/orb/scripts/orbit-acceptance.sh acs <spec-id>
+```
 
-Also extract `metadata.test_prefix` if present. This prefix scopes test names to the spec, preventing AC ID collisions across specs in multi-spec projects.
+The parser emits one tab-separated tuple per AC: `<ac-id>\t<status>\t<description>\t<is_gate>`. The `<is_gate>` flag mirrors the spec's `acceptance_criteria[].gate` boolean.
 
-**AC type meanings:**
+orbit-state v0.1 specs do not carry an explicit `ac_type` field — all ACs are stored uniformly with `id`, `description`, `gate`, and `checked`. Decide non-code status from the AC's description text and gate marker (see classification below).
 
-| Type | Meaning | Test expected? |
+**AC classification (from description + gate flag):**
+
+| Class | Detection signal | Test expected? |
 |------|---------|----------------|
-| `code` | Functional behaviour implemented in source | Yes |
-| `doc` | Document deliverable (decision record, runbook, etc.) | No |
-| `gate` | Manual or process gate (approval, review checkpoint) | No |
-| `config` | Configuration change (env vars, infra settings, CI) | No |
+| `code` | description names runtime behaviour or a code change | Yes |
+| `doc` | description names a documentation deliverable (decision record, runbook, README clause) | No |
+| `gate` | `gate=1` AND description names a process/manual checkpoint without functional code (e.g. "tag pushed", "review approved") | No — but flag if description implies code |
+| `config` | description names env vars, infra settings, CI workflow, gitignore | No |
+
+A `gate=1` flag does **not** automatically mean non-code — many gates are gateways on testable behaviour. Use the description text as the source of truth.
 
 ### 3. Search for Matching Tests
 
-For each `code`-type AC, search test directories for functions matching the AC ID.
+For each `code`-class AC, search test directories for functions matching the AC ID.
 
-**If the spec has a `test_prefix`** (e.g., `remat`): search for the prefixed form first. The AC `ac-01` with prefix `remat` maps to `remat_ac01` in test names.
+If the project uses a per-spec test prefix (e.g. `remat`): search for the prefixed form first. The AC `ac-01` with prefix `remat` maps to `remat_ac01` in test names. Test prefixes are project conventions; orbit-state v0.1 specs do not store them in the spec record itself, so derive the prefix from the project's existing test naming (a quick `rg "fn ac0\\d|def test_ac0\\d|fn [a-z]+_ac0\\d" tests/` pass surfaces the convention).
 
-Cross-language patterns with prefix:
+Cross-language patterns (with optional `<prefix>_` prefix):
 
-- Python: `def test_remat_ac<NN>` or `def remat_ac<NN>`
-- Rust: `fn remat_ac<NN>`
-- TypeScript/JavaScript: `test('remat_ac<NN>` or `it('remat_ac<NN>`
-- Go: `func TestRematAc<NN>` or `func Test_remat_ac<NN>`
-- General fallback: grep for `remat_ac<NN>` prefix in test directories
-
-**If the spec has no `test_prefix`** (backward-compatible): search for bare `ac<NN>` as before.
+- Python: `def test_<prefix>_ac<NN>` or `def <prefix>_ac<NN>`
+- Rust: `fn <prefix>_ac<NN>`
+- TypeScript/JavaScript: `test('<prefix>_ac<NN>` or `it('<prefix>_ac<NN>`
+- Go: `func Test<Prefix>Ac<NN>` or `func Test_<prefix>_ac<NN>`
+- General fallback: grep for `<prefix>_ac<NN>` (or bare `ac<NN>`) prefix in any file under `tests/`, `test/`, or `__tests__/`
 
 Handle both naming formats:
 
 - Zero-padded: `ac-01` maps to `ac01` prefix in tests
 - Unpadded: `ac-1` also maps to `ac01` prefix (normalise to two digits)
-
-Cross-language patterns without prefix:
-
-- Python: `def test_ac<NN>` or `def ac<NN>`
-- Rust: `fn ac<NN>`
-- TypeScript/JavaScript: `test('ac<NN>` or `it('ac<NN>` or `describe('ac<NN>`
-- Go: `func TestAc<NN>` or `func Test_ac<NN>`
-- General fallback: grep for `ac<NN>` prefix in any file under `tests/` or `test/` or `__tests__/`
 
 Also search for the prefix + `acNN` in test **file names** (e.g. `test_remat_ac03_ordering.py` or `test_ac03_ordering.py`).
 
@@ -91,7 +89,7 @@ Report these separately as orphans.
 
 ### 5. Check for Stale Specs
 
-If a spec directory contains `progress.md` where all items are checked, and the spec is older than the most recent spec, note it as **completed**. Its ACs still count but are informational, not actionable.
+If a spec's status is `closed` (per `orbit spec list`), note it as **completed**. Its ACs still count but are informational, not actionable.
 
 ### 6. Produce the Report
 
@@ -101,12 +99,12 @@ Output the report in this format:
 ## AC Traceability Audit
 
 **Date:** <today>
-**Scope:** <spec path or "all specs">
+**Scope:** <spec-id or "all specs">
 
-### <spec-directory-name> (spec.yaml)
+### <spec-id> (status: <open|closed>)
 
-| AC | Type | Status | Test(s) |
-|----|------|--------|---------|
+| AC | Class | Status | Test(s) |
+|----|-------|--------|---------|
 | ac-01 | code | COVERED | test_ac01_creates_structure, test_ac01_validates_input |
 | ac-02 | code | MISSING | — |
 | ac-03 | doc | EXEMPT | — (document deliverable) |
@@ -139,17 +137,16 @@ Output the report in this format:
 
 After the report, suggest concrete next steps:
 
-- If ACs are missing `ac_type`: *"N ACs have no ac_type field. Run `/orb:spec` to update, or add `ac_type: code|doc|gate|config` manually."*
 - If coverage is below 80% for code ACs: *"Coverage is below 80%. Consider adding tests for the MISSING items above."*
 - If orphaned tests exist: *"N orphaned test prefixes found. These may reference superseded ACs — verify and clean up."*
 - If naming format is inconsistent (mix of `ac-N` and `ac-NN`): *"Found inconsistent AC naming: some specs use ac-N, others use ac-NN. Standardise on ac-NN (zero-padded)."*
-- If multiple specs exist but any lack `test_prefix`: *"N specs have no test_prefix in metadata. AC IDs collide across specs — add `test_prefix` to disambiguate test names (see decision 0002)."*
+- If multiple specs share AC ids without test prefixes: *"AC ids collide across specs and your tests use bare `ac<NN>` names. Consider per-spec test prefixes (see decision 0002) to disambiguate."*
 
 ## Integration with Other Skills
 
-- **`/orb:review-pr`** runs a subset of this audit (AC coverage check) during PR review
-- **`/orb:implement`** tracks AC progress in `progress.md` — this audit cross-references against actual tests
-- **`/orb:spec`** and `/orb:spec-architect` generate the AC IDs and `ac_type` fields that this audit reads
+- **`/orb:review-pr`** runs a subset of this audit (AC coverage check) during PR review.
+- **`/orb:implement`** flips spec ACs to `checked: true` via `orbit-acceptance.sh check` (which calls `orbit spec update --ac-check`); this audit cross-references those `[x]` flags against actual tests.
+- **`/orb:spec`** and `/orb:spec-architect` generate the AC ids and descriptions that this audit reads.
 
 ---
 

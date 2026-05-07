@@ -1,0 +1,143 @@
+goal: >
+  Establish the bead encoding conventions, gate syntax, custom PRIME.md, and
+  promote flow that the subsequent implement, drive, and rally migration specs
+  depend on. After this spec ships, orbit can create beads from cards with
+  structured acceptance criteria and agents get thin progressive context at
+  session start.
+
+constraints:
+  - beads (bd CLI) is a runtime dependency; bd must be installed and bd init run in any project using orbit execution
+  - Cards and memos are unchanged — this spec touches the execution layer only
+  - The acceptance field format is an orbit convention parsed by orbit skills, not validated by beads itself
+  - Gate enforcement is declaration-order based — a gate AC blocks all subsequent ACs regardless of dependency
+  - Cold-fork review architecture is preserved — reviewers read the acceptance field instead of spec.yaml
+  - session-context.sh is deprecated by this spec; its responsibilities move to PRIME.md and bd show
+  - Autonomy-first — all new skills and flows assume full autonomy as default; guided/supervised are exception paths
+  - No changes to card or memo formats
+  - bd must be built from source at /home/hugh/github/gastownhall/beads and installed to ~/.local/bin/bd
+
+acceptance_criteria:
+  - id: ac-01
+    ac_type: gate
+    description: >
+      Define the acceptance field format convention as a markdown document in
+      the orbit repo (e.g. .orbit/conventions/acceptance-field.md). The format
+      is: one line per AC, `- ac-NN [gate]: description` for gates,
+      `- ac-NN: description` for non-gates. Gate ACs block all subsequent ACs
+      by declaration order. Non-gate ACs do not block each other. The document
+      includes at least two worked examples (one with gates, one without) and
+      the regex used for parsing.
+    verification: >
+      Convention document exists, contains the regex, contains two worked
+      examples, and the regex correctly parses both examples.
+
+  - id: ac-02
+    ac_type: gate
+    description: >
+      Author the custom PRIME.md at a templateable location that orbit's
+      bd init integration can install into projects. The PRIME.md produces
+      thin session-start context: ready queue (bd ready --type task for
+      execution, bd ready unfiltered for planning), objective function status
+      (from pinned memory), and persistent memories. No command reference
+      beyond the essential workflow commands (ready, show, update, close,
+      remember). Target: under 40 lines of rendered output for a project with
+      5 open beads and 3 memories.
+    verification: >
+      PRIME.md exists. bd prime --full in the trial scratch repo produces
+      output under 40 lines. Output includes ready queue, memories, and
+      essential commands only.
+
+  - id: ac-03
+    ac_type: code
+    description: >
+      Write the acceptance field parser as a standalone script or module
+      (e.g. plugins/orb/scripts/parse-acceptance.sh or equivalent) that reads
+      a bead's acceptance field (via bd show --json) and outputs: list of ACs
+      with id, gate flag, description, and checked status; the next unchecked
+      AC respecting gate blocks; whether any gates are blocking. The parser
+      must handle: empty acceptance field (no ACs), all ACs checked (done),
+      gate as last AC, consecutive gates, and malformed lines (skip with
+      warning).
+    verification: >
+      Parser script exists. Unit tests or fixture-based verification covers
+      all five edge cases listed. Parser output matches expected results for
+      the worked examples from ac-01.
+
+  - id: ac-04
+    ac_type: code
+    description: >
+      Write the promote module (e.g. plugins/orb/scripts/promote.sh or
+      equivalent) that reads a card YAML file and produces a bead via bd
+      create. The module: extracts the card's feature, goal, and scenarios;
+      generates numbered acceptance criteria from scenarios (ac-01 through
+      ac-NN); preserves the card path as a reference in the bead description;
+      sets issue_type to task and priority to 1; writes the acceptance field
+      in the convention format from ac-01. The module does NOT create
+      sub-beads, dependency edges, or memories — those are the drive and
+      rally specs' responsibility.
+    verification: >
+      Promote module exists. Running it against .orbit/cards/0009-mission-resilience.yaml
+      creates a bead whose bd show output contains numbered ACs derived from
+      the card's scenarios, with the card path referenced in the description.
+
+  - id: ac-05
+    ac_type: code
+    description: >
+      Write a bd init integration script (e.g. plugins/orb/scripts/bd-init.sh)
+      that initialises beads in a project with orbit's conventions: runs
+      bd init --quiet, installs the custom PRIME.md from ac-02, and sets a
+      pinned memory for the project's objective function if one is provided
+      as an argument. The script is idempotent — safe to run on an already-
+      initialised project.
+    verification: >
+      Running the script twice in the same directory succeeds without error.
+      The custom PRIME.md is installed. bd prime output matches the thin
+      format. If an objective function argument is provided, bd memories
+      shows it as a pinned entry.
+
+  - id: ac-06
+    ac_type: gate
+    description: >
+      Deprecate session-context.sh by removing the SessionStart hook
+      registration from orbit's plugin hooks configuration. The beads
+      SessionStart hook (installed by bd init) replaces it. Document the
+      deprecation in a short note at the top of session-context.sh explaining
+      that PRIME.md now owns session-start context and referencing this spec.
+    verification: >
+      The orbit plugin's hook configuration no longer references
+      session-context.sh for SessionStart. The beads hook is the only
+      SessionStart hook. session-context.sh still exists on disk (not deleted)
+      with a deprecation notice.
+
+  - id: ac-07
+    ac_type: code
+    description: >
+      End-to-end integration test: run bd-init in the trial scratch repo,
+      promote card 0009, verify bd ready surfaces the new bead, verify
+      bd show displays the acceptance field with numbered ACs, verify
+      the parser correctly identifies the next unchecked AC and any gate
+      blocks. Then check a gate AC and verify the parser advances to the
+      next AC correctly.
+    verification: >
+      Test script or documented manual test produces passing results for
+      the full promote → ready → show → parse → advance cycle.
+
+metadata:
+  interview_ref: .orbit/specs/2026-05-01-beads-foundation/interview.md
+  decision_ref: .orbit/choices/0011-beads-execution-layer.md
+  discovery_refs:
+    - .orbit/discovery/beads-flow.md
+    - .orbit/discovery/orbit-autonomy.md
+    - .orbit/discovery/beads-trial-findings.md
+
+deliverables:
+  - path: .orbit/conventions/acceptance-field.md
+    description: Acceptance field format convention with regex and worked examples
+  - path: plugins/orb/scripts/parse-acceptance.sh
+    description: Acceptance field parser (or equivalent module)
+  - path: plugins/orb/scripts/promote.sh
+    description: Card-to-bead promotion module
+  - path: plugins/orb/scripts/bd-init.sh
+    description: Beads initialisation with orbit conventions
+  - path: plugins/orb/PRIME.md
+    description: Custom thin PRIME.md template for orbit projects

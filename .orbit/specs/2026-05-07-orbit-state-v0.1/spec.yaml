@@ -1,0 +1,910 @@
+goal: >
+  Ship orbit-state v0.1 — the Rust + SQLite + MCP substrate decided in
+  decision 0015, with bd verb parity for single-repo workflow,
+  dogfooded in the orbit repo itself, within a 4-week budget. v0.1 proves
+  format-integrity as the load-bearing value across the v0.1-cluster cards
+  (0020 substrate, 0021 tasks, 0008 .orbit/ layout, 0017 setup).
+
+  "Single-repo workflow parity" excludes the following bd primitives, all
+  v0.2+: cross-repo / `--global` queries, the memory loop (auto-injection
+  at prime, card 0023), gate semantics (no current use case), the bd
+  issue-dependency-graph primitive. The tabletop skill (0019) and the
+  retirement of the design skill are separate work, not in this cluster.
+
+cards:
+  - 0020-orbit-state
+  - 0021-tasks
+  - 0008-consolidated-orbit-artefact-folder
+  - 0017-setup-is-bead-aware
+
+# Tabletop output per decision 0017 — values, trade-offs, halt conditions,
+# escalation triggers, kill conditions, and ACs. Implementation approach is
+# explicitly NOT specified; that's drive territory.
+
+values:
+  load_bearing: >
+    Format integrity — every file conforms to schema, parser-validated.
+    This is the SUBSTRATE value, not a peer of the others. Once it holds,
+    git-trackability, branch-awareness, recoverability, inspectability,
+    and queryability all land naturally on top because every file is
+    well-formed by construction. The other four are downstream consequences,
+    not parallel goals.
+  enforcement:
+    # Dual-mode enforcement reflects which entities the substrate writes
+    # vs. which entities humans/skills write. Both modes guarantee the
+    # same end-state property (every file conforms to schema); the
+    # mechanisms differ.
+    substrate_written:
+      entities: [specs, memories, schema-version]
+      mechanism: serde round-trip on every write (structural — the
+        substrate IS the writer; agents never touch raw YAML).
+        schema-version is explicitly classified here because the
+        migration runner reads it first on every invocation; undetected
+        drift there breaks every migration.
+    human_written:
+      entities: [cards, choices]
+      mechanism: CI round-trip check on every commit (validation —
+        humans/skills write directly; CI fails the build if any file
+        fails to round-trip cleanly through serde)
+    append_only_excluded:
+      entities: [tasks]
+      mechanism: tasks are append-only JSONL written exclusively by the
+        substrate (no edit-in-place). Each event is validated at write
+        time; no round-trip CI check applies because the file is never
+        rewritten — only appended. The exclusion is intentional, not
+        accidental.
+  consequences:
+    - git-trackable — diffs show semantic state changes (downstream)
+    - branch-aware — checkout switches state without sync (downstream)
+    - recoverable — clone alone reconstructs full state (downstream)
+    - inspectable — cat / grep without learning new tools (downstream)
+    - queryable at scale — SQLite index makes large state fast (downstream)
+
+trade_offs:
+  accepted:
+    - id: t-a
+      cost: No raw-YAML escape hatch — if the serializer hits a bug, nobody
+        writes anything until it's fixed
+      counterweight: Round-trip test suite as ship-blocker; atomic write
+        (temp + rename); golden files for canonical format
+    - id: t-b
+      cost: MCP server on the critical path from day one — no "CLI first,
+        MCP later" phasing trick
+      counterweight: CLI and MCP share the same Rust core; surface is
+        duplicated, core is not
+    - id: t-c
+      cost: Schema is a public API — every YAML field name is a contract
+      counterweight: schema-version file from day one; migration runner is
+        v0.1, not v0.2; README early-release notice (verbatim below) makes
+        breaking changes between releases explicit policy
+
+  early_release_notice: >
+    The following block ships in README.md as a v0.1 ship-blocker — the
+    policy counterweight that converts trade-off (c) from "schema is forever"
+    into "schema is stable per-pinned-version":
+
+      Early Release — Orbit is under active development. Expect breaking
+      changes to schemas, CLI arguments, library APIs, and model formats
+      between releases. Pin to a specific version if stability matters
+      for your use case.
+
+lateral_approaches_considered:
+  # Per decision 0017, alternatives are named explicitly so they're not
+  # silently rejected. If one of these later turns out to have been right,
+  # we'll know we didn't default to our pick.
+  - id: l-prior-1
+    label: Stay with bd + Dolt as-is
+    rejected_in: decision 0015 (Option A)
+    reason: Database-canonical, git-opaque
+  - id: l-prior-2
+    label: bd + MCP wrapper, Dolt-canonical
+    rejected_in: decision 0015 (Option B)
+    reason: Still git-opaque, schema gap remains
+  - id: l-1
+    label: Slim v0.1 (specs + tasks only)
+    rejected: true
+    reason: Budget recut showed 4 weeks comfortable for full surface;
+      slim cut would lose memories and cards/choices indexing for no budget
+      reason
+  - id: l-2
+    label: Fork bd, contribute upstream
+    rejected: true
+    reason: Removing Dolt makes it a rebuild in disguise; unlikely to land
+      upstream
+  - id: l-3
+    label: Defer v0.1 entirely
+    rejected: true
+    reason: Reverses decisions 0014, 0015, 0017 by implication; substrate
+      shortcomings don't improve by waiting
+
+  # Sequence-as-v0.1-series (Option D from budget question) was the
+  # recommended fallback if the 4-week budget needed defending. Recut
+  # showed it unnecessary; held in reserve if circumstances change.
+
+scope:
+  in_v0_1:
+    entities:
+      specs: [create, show, list, update, close, note]
+      tasks: [ready, show, list, claim, update, done]
+      cards: [show, list, search]    # read-only verbs; spec.close updates specs_array as side-effect
+      choices: [show, list, search]  # read-only verbs
+      memories: [remember, list, search]
+      session: [prime]
+    schema_extensions:
+      - tasks.labels — list[str]
+      - specs.labels — list[str]
+    behaviours:
+      - spec.close requires all child tasks done (no --force flag)
+      - spec.close updates linked cards' specs_array as a serde side-effect
+      - tasks are append-only event streams (state = last event)
+      - notes are append-only events on specs
+      - schema-version file present from day one
+      - migration runner exists from day one
+  deferred_to_v0_2_or_later:
+    - cross-repo / --global queries
+    - memory loop / auto-injection at prime time (card 0023)
+    - skill entity type or curator verb (skill iteration uses task labels)
+    - gate verb (no current use case)
+    - performance benchmarks at scale
+    - external publishing (binary releases / crates.io)
+    - tabletop skill itself (card 0019, separate work)
+    - design skill retirement (post-tabletop-skill)
+
+constraints:
+  budget: 4 calendar weeks (recut estimate 13–17 working days; not
+    upfront-padded)
+  scope_brake: bd verb parity — halt and reassess if scope creeps past it
+  hardware: Single-repo only; multi-machine binary builds (mac + beelink)
+    required as a v0.1 ship gate
+  fallback_policy:
+    pre_dogfood: >
+      Outside the dogfood window, bd-version skills and bd verbs MAY be
+      used until each skill's orbit-version replacement passes its parity
+      test (ac-14 verification). The dogfood window starts only after
+      every skill in ac-14 has shipped and passed its parity test.
+      Self-reference note: the six skills under rewrite (drive, implement,
+      rally, review-spec, review-pr, audit) operate the rewrite itself
+      until their orbit-versions are ready — this is expected and
+      contracted, not a violation.
+    during_dogfood: >
+      Strict — no `bd X` invocation in the orbit repo during the dogfood
+      window. If a verb is broken, fix and restart the window; do not
+      fall back to bd. Restart bounds are pinned in escalation E5.
+    post_ship: >
+      `.beads/` is preserved for at least 2 calendar weeks post-ship
+      (renamed to `.beads-archive/` and gitignored), giving K7 a return
+      path. Final removal is a separate operator step after the post-ship
+      window closes clean.
+  estimate_discipline: Recut at Claude-execution pace before treating as
+    planning input. If real burn rate trends toward upfront-padded estimates
+    inside week 1, that's a Theme 5a halt-trigger condition (scope/architecture
+    wrong, not execution slow).
+  concurrency:
+    lock_timeout_default: 30 seconds (matches typical LLM tool-call latency)
+    stale_lock_recovery: Lock files contain pid + start_timestamp; locks
+      older than 3× timeout are considered stale and reclaimable
+    read_consistency: Reads do not require lock acquisition; readers may
+      see a slightly stale view, never a partial view (atomic temp+rename
+      guarantees this)
+  chezmoi_distribution: chezmoi distribution of v0.1 MCP config and updated
+    skills happens only after ac-19 ships. During the build, the second
+    machine continues to use pre-orbit-state config — multi-machine
+    consistency is a ship-gate, not a build-time invariant.
+
+acceptance_criteria:
+  # Foundation — gates that block all subsequent work
+  - id: ac-01
+    ac_type: gate
+    description: >
+      Rust core implements canonical serde for all six entity types
+      (specs, tasks, cards, choices, memories, schema-version) with
+      atomic writes (temp + rename) and a round-trip property: every
+      fixture parses + reserialises to byte-identical output. Implementation
+      includes the canonical formatter that prevents whitespace/ordering
+      drift between writes. Parser is configured with strict schema
+      conformance — unknown fields are rejected at parse time, not
+      silently dropped (the lossy-parse failure mode where deserialise +
+      reserialise stays byte-identical because the dropped field is
+      absent from both sides).
+    verification: >
+      Round-trip test runs over the full fixture set (≥1 fixture per entity
+      type, ≥3 covering edge cases like unicode and quoting). The choice
+      fixture suite specifically includes (i) a body with a triple-backtick
+      code fence containing YAML, (ii) a body ending in a trailing blank
+      line, (iii) a body with hard-tab indentation — these must round-trip
+      byte-identical. Plus (iv) a body with CRLF line endings — this MUST
+      fail parse with a clear error. Canonical files are LF-only by
+      contract; CRLF rejection at parse time keeps the canonical output
+      deterministic across platforms. Cases (i)-(iii) pass byte-identical
+      comparison; case (iv) passes the parse-rejection test. Atomic write verified by killing
+      the process mid-write in a test and confirming no partial file
+      remains. Schema conformance verified by a fixture with an extra
+      unknown field that MUST fail parse with a clear error (one test
+      per entity type).
+
+  - id: ac-02
+    ac_type: gate
+    description: >
+      SQLite index can be rebuilt from files alone (the canonical
+      truth claim). Implementation includes `orbit verify` mode that
+      rebuilds from scratch and diffs against current index, surfacing
+      any drift.
+    verification: >
+      Test deletes state.db, runs prime, runs query suite (one per verb
+      that returns a result set), confirms results match pre-deletion
+      query results. `orbit verify` exits 0 on a healthy index, non-zero
+      on injected drift.
+
+  - id: ac-03
+    ac_type: code
+    description: >
+      File-level locking under .orbit/locks/ prevents concurrent-write
+      races. Lock acquisition has a configurable timeout (default 30s,
+      matching typical LLM tool-call latency); failure to acquire surfaces
+      a clear error rather than silent overwrite. Lock files contain pid
+      + start_timestamp; locks older than 3× timeout are considered stale
+      and reclaimable. Reads do not require lock acquisition; readers may
+      see a slightly stale view, never a partial view (atomic temp+rename
+      guarantees this).
+    verification: >
+      Concurrency test spawns N processes attempting simultaneous writes
+      to the same file; final state matches one of the writes (no
+      interleaved corruption). Lock timeout test confirms loud failure
+      instead of silent loss. Stale-lock recovery test: simulate a dead
+      process holding a lock; second process can acquire after staleness
+      threshold. Read-during-write test: while a writer holds the lock,
+      a reader returns the pre-write state with no error.
+
+  - id: ac-04
+    ac_type: gate
+    description: >
+      schema-version file ships in .orbit/ from day one; migration runner
+      exists and is exercised at least once on real content during v0.1
+      development. Migration runner is idempotent (running twice is a
+      no-op on the second run).
+    verification: >
+      schema-version file present in .orbit/ after `orbit init`. Migration
+      runner has at least one schema-version transition test that runs
+      twice and produces no diff on the second run. Migration covers
+      Migration A (layout) and Migration B (substrate) defined in ac-12
+      and ac-13.
+
+  - id: ac-05
+    ac_type: gate
+    description: >
+      MCP server and CLI both call the same Rust core. The 22 verbs are
+      exposed identically through both surfaces; behaviour parity is
+      verified by running the CLI and MCP through the same test suite.
+      Parity covers both output structures AND on-disk state mutations
+      (canonical files + state.db) — output equivalence is necessary but
+      not sufficient. Error messages follow the orbit error format:
+      `<verb>: <category>: <human-sentence>`. Categories: not-found,
+      conflict, locked, malformed, unauthorised, unavailable.
+    verification: >
+      For each of the 22 verbs: snapshot the .orbit/ tree before
+      invocation; invoke via CLI; snapshot; **reset**; invoke via MCP;
+      snapshot. Reset semantics: `git stash` of any working-tree changes
+      to canonical files, plus deletion-and-rebuild of state.db
+      (`rm .orbit/state.db && orbit verify --rebuild`). This restores
+      canonical files to pre-invocation state and rebuilds the index
+      from files; reset correctness is exercised by ac-02. The two
+      post-invocation snapshots are byte-identical (canonical files AND
+      state.db). Output structures returned by each surface also match.
+      Error-format test: at least one error per category per applicable
+      verb produces output matching the format string.
+
+  # Verb surface — implementation work, parallelisable after ac-05
+  - id: ac-06
+    ac_type: code
+    description: >
+      Spec verbs implemented: create, show, list, update, close, note. Each
+      verb round-trips through serde (per ac-01) and updates the index
+      incrementally. spec.close requires all child tasks done; rejects with
+      a clear error otherwise. spec.close also appends the spec's path to
+      the specs_array of every linked card (cards array on the spec) — the
+      multi-card update is transactional: either all linked cards update
+      or none do, with the spec remaining open if any update fails.
+    verification: >
+      Per-verb tests cover happy + error path. Integration test: create
+      spec → open tasks → close spec without finishing tasks (rejected) →
+      finish tasks → close spec (succeeds, linked cards' specs_array
+      updated). Partial-update test: simulate a failure on the second
+      card update during a 2-card spec.close; assert the first card is
+      unchanged, the second card is unchanged, and the spec is still open.
+
+  - id: ac-07
+    ac_type: code
+    description: >
+      Task verbs implemented: ready, show, list, claim, update, done. Tasks
+      are append-only JSONL events (state = last event for that task_id).
+      task.ready returns claimable tasks (open, no claim).
+    verification: >
+      Per-verb tests cover happy + error path. Integration test:
+      task.open → task.claim → task.update → task.done. Verify event stream
+      is append-only and state reconstructs from last event. Session-reset
+      simulation: after a task is opened-and-claimed, restart the index
+      and verify task.list shows the prior state.
+
+  - id: ac-08
+    ac_type: code
+    description: >
+      Memory verbs implemented: remember, list, search. Memories persist
+      across sessions and cross-machine sync via git.
+    verification: >
+      memory.remember writes a memory file; memory.list returns it;
+      memory.search finds it by keyword. Cross-machine simulation: write
+      on machine A, sync via git, verify on machine B.
+
+  - id: ac-09
+    ac_type: code
+    description: >
+      Card verbs implemented: show, list, search. Cards are indexed read-
+      only (writes happen via /orb:card and /orb:distill skills). The
+      specs_array side-effect from ac-06 is the only substrate-driven
+      write to cards.
+    verification: >
+      card.list returns all cards in .orbit/cards/. card.search returns
+      matches by keyword. card.show returns parsed card content. Side-
+      effect test: closing a spec linked to two cards updates both cards'
+      specs_array exactly once.
+
+  - id: ac-10
+    ac_type: code
+    description: >
+      Choice verbs implemented: show, list, search. Choices are indexed
+      read-only (writes happen as MD-to-YAML during Migration A and as
+      direct file writes thereafter — substrate does not own choice writes
+      in v0.1).
+    verification: >
+      choice.list returns all choices in .orbit/choices/. choice.search
+      returns matches. choice.show returns parsed content.
+
+  - id: ac-11
+    ac_type: code
+    description: >
+      Session verb implemented: prime. Returns ready queue, recent memories,
+      and essential commands. Output is bounded for any project size:
+      f(N specs, M memories) ≤ 40 + 2*open_specs_count + min(M, 10)
+      lines. Recent memories capped at K=10 most-recent (configurable);
+      specs beyond the open set are summarised, not enumerated; the full
+      ready queue is shown.
+    verification: >
+      orbit prime in a test repo with 5 open specs + 3 memories produces
+      under-40-line output. Same test with 50 specs + 200 memories
+      produces output bounded by the formula above. Output includes ready
+      queue, memories (capped at K), and essential command reference only.
+
+  # Migration — ships in v0.1, runs against the orbit repo itself
+  - id: ac-12
+    ac_type: gate
+    description: >
+      Migration A (layout) implemented and validated in a worktree against
+      a snapshot of orbit's content: .orbit/cards/ → .orbit/cards/,
+      .orbit/choices/ → .orbit/choices/ (with MD → YAML conversion
+      preserving frontmatter as YAML keys), .orbit/specs/ → .orbit/specs/,
+      cross-references rewritten in tracked files. Idempotent; rollback
+      is `git reset` because all canonical files are tracked.
+    verification: >
+      Migration A runs against a worktree of orbit's main branch. After
+      run, the verbatim command
+      `git ls-files | xargs grep -l '.orbit/cards\|.orbit/choices\|.orbit/specs'`
+      returns no matches. Running migration twice produces no diff on the
+      second run (`git diff` is empty). Test rollback: `git reset --hard
+      HEAD` returns worktree to pre-migration state. Every converted
+      choice file round-trips byte-identical through serde (per ac-16
+      CI gate). At least one converted choice in the fixture set has a
+      multiline body containing the edge cases enumerated in ac-01's
+      choice fixture suite.
+
+  - id: ac-13
+    ac_type: code
+    description: >
+      Migration B (substrate) implemented: bd issues with label=spec →
+      .orbit/specs/<id>.yaml; bd notes on those issues → spec.note events;
+      bd memories → orbit memory entries; bd issues with label=skill-author
+      → tasks with that label (or memos for ones that ought to be memos).
+      Conversion is lossless and full-coverage — no spot-checking. .beads/
+      is renamed to .beads-archive/ and gitignored at this AC; final
+      removal is post-ship per the post_ship fallback policy.
+    verification: >
+      Migration B runs against orbit's actual bd state in a worktree.
+      Total-count equality: every bd issue with label=spec produces
+      exactly one .orbit/specs/<id>.yaml; every bd note produces exactly
+      one note event; every bd memory produces exactly one orbit memory
+      entry. Source-side hash set is captured BEFORE migration runs (and
+      before .beads/ is renamed to .beads-archive/) and persisted to a
+      test fixture; destination-side hash set is computed post-migration.
+      Comparison runs against the persisted source snapshot, not against
+      .beads-archive/. Hash-set comparison of (issue_id, note_id,
+      memory_id) tuples produces zero deltas. After migration,
+      .beads-archive/ is present and gitignored; .beads/ is absent.
+
+  # Skill integration — what makes dogfood real
+  - id: ac-14
+    ac_type: code
+    description: >
+      Six substantive skill rewrites: drive/, implement/, rally/,
+      review-spec/, review-pr/, audit/. Each replaces bd verb invocations
+      with orbit verb invocations and updates path references from
+      orbit/ to .orbit/ where applicable. Parity bar is differentiated
+      by skill class:
+        - State-mutating skills (drive, implement, rally): byte-identical
+          resulting state on disk after running the same reference
+          scenario through both the bd-version and orbit-version skill.
+        - Judgement-emitting skills (review-spec, review-pr, audit):
+          (a) verdict equality (APPROVE / REQUEST_CHANGES / BLOCK match)
+          AND (b) finding-coverage equality at HIGH severity (every HIGH
+          finding from the bd-version maps to a finding of equal-or-higher
+          severity in the orbit-version, and vice versa). Lower-severity
+          finding deltas are recorded but do not fail the parity test.
+      ALL six must ship and pass parity tests BEFORE the dogfood window
+      opens (per the pre_dogfood fallback policy in constraints).
+    verification: >
+      Each skill has a parity test against a fixed reference scenario.
+      State-mutating: `git diff` between bd-version-resulting and
+      orbit-version-resulting states is empty. Judgement-emitting:
+      verdict-equality assertion passes; HIGH-finding-set comparison
+      passes (same set or strict superset/subset by mapping). End-to-end
+      exercise against migrated orbit content: drive ships a spec;
+      implement claims tasks; rally coordinates; review-spec verifies a
+      spec; review-pr verifies a PR against ACs; audit traces ACs to
+      tests. ac-18 (dogfood window) may not begin until this AC's
+      verification passes for all six skills.
+
+  - id: ac-15
+    ac_type: code
+    description: >
+      Path-only updates for remaining skills (card, distill, memo,
+      discovery, interviewer, spec, spec-architect, keyword-scan).
+      CLAUDE.md updated to reference orbit verbs (no stranded `bd ready`,
+      `bd close`, etc.). README.md ships the early-release notice
+      verbatim from trade-off (c).
+    verification: >
+      `grep -F 'bd ' CLAUDE.md` returns 0 matches (deterministic — no
+      judgement-laden filtering). If any historical/migration-notes
+      reference to bd remains, it must be in a section that the grep
+      can exclude with a pinned exclusion rule, named here in the
+      verification. README.md contains the early-release notice block
+      verbatim. Each path-only skill, when exercised, writes to .orbit/
+      paths (no .orbit/cards/, .orbit/choices/, .orbit/specs/ writes
+      remain).
+
+  # CI gates — wire the halt triggers
+  - id: ac-16
+    ac_type: gate
+    description: >
+      CI runs the round-trip test on every commit, scoped to all
+      round-trippable entity types: specs, cards, choices, memories,
+      and schema-version. Tasks are explicitly excluded — they are
+      append-only JSONL (per values.enforcement.append_only_excluded),
+      written exclusively by the substrate, never rewritten in place;
+      a round-trip test does not apply. For human-written entities
+      (cards, choices) this AC is the validation mechanism; for
+      substrate-written entities (specs, memories, schema-version) it
+      is the regression net catching drift introduced by serde or
+      formatter bugs. Failure blocks merge. Wires Theme 1 halt trigger
+      into the build system.
+    verification: >
+      CI configuration includes the round-trip test job. The job iterates
+      every file under .orbit/specs/, .orbit/cards/, .orbit/choices/,
+      the memories file, and the schema-version file, asserting each
+      round-trips byte-identical. The job does NOT iterate task JSONL
+      files (excluded per the description). A test commit that
+      intentionally breaks canonical formatting on any covered entity
+      type fails CI. A test commit that adds an unknown field to any
+      covered entity fails CI (per ac-01's strict schema conformance).
+      A test commit that hand-edits schema-version into an invalid form
+      fails CI.
+
+  - id: ac-17
+    ac_type: code
+    description: >
+      CI runs `orbit verify` (index-rebuild verification) on every commit.
+      Failure blocks merge. This wires Theme 3 hygiene into the build
+      system.
+    verification: >
+      CI configuration includes the verify job. A test commit that
+      injects index drift fails CI.
+
+  # Dogfood + ship
+  - id: ac-18
+    ac_type: gate
+    description: >
+      ≥1 week dogfood window in the orbit repo: agents use orbit verbs
+      exclusively, no fallback to bd. Window is restartable if a verb
+      breaks mid-window (broken verb is fixed, window starts over).
+    verification: >
+      Operator log records the dogfood window dates. No `bd ` verb
+      invocations appear in agent transcripts during the window. At
+      least 5 working days elapsed without restart.
+
+  - id: ac-19
+    ac_type: code
+    description: >
+      git tag v0.1.0 created and pushed to origin. Binary builds and
+      runs on both mac and beelink (multi-machine criterion per Q6-iv).
+      `.beads/` was renamed to `.beads-archive/` in ac-13 and remains
+      gitignored — final removal is a post-ship operator step after
+      the 2-week post_ship window closes clean (see constraints
+      .fallback_policy.post_ship). Internal-only release: no GitHub
+      Release object, no artifacts uploaded, no crates.io publish.
+      The tag exists in the public git history but is not packaged or
+      announced.
+    verification: >
+      `git tag --list` shows v0.1.0. Binary smoke test passes on both
+      platforms (orbit prime returns expected output). `.beads-archive/`
+      present and gitignored; `.beads/` absent from main. README
+      early-release notice present (per ac-15). No GitHub Release object
+      exists (`gh release list` does not include v0.1.0).
+
+  # Supplementary ACs — added during review-spec amendments
+  - id: ac-20
+    ac_type: code
+    description: >
+      `.orbit/.gitignore` ships with the contracted ignore set: state.db,
+      schema-version, and locks/ are ignored; cards/, choices/, specs/,
+      and memories/ are tracked. README.md includes install instructions
+      covering both mac and beelink, end-to-end runnable on a clean
+      machine.
+    verification: >
+      grep .orbit/.gitignore for each contracted entry (state.db,
+      schema-version, locks/) — all present. grep .orbit/.gitignore for
+      tracked-entity negations (`!cards/`, `!choices/`, `!specs/`,
+      `!memories/`) — all present. README install section is followed
+      end-to-end on a clean test environment per platform; `orbit prime`
+      returns expected output on both.
+
+  - id: ac-21
+    ac_type: gate
+    description: >
+      Early multi-machine cross-compile validation: by end of week 1, a
+      skeleton orbit binary builds and runs on both mac and beelink.
+      The skeleton MUST link the same C-dependency chain as the
+      production binary (rusqlite at minimum, bundled or system per the
+      production build configuration) so the validation actually
+      exercises the cross-compile risk class. A version-only binary
+      that doesn't link SQLite would silently bypass the most likely
+      failure mode. Failure to validate by end of week 1 fires
+      escalation E6 immediately, not at ship time.
+    verification: >
+      Skeleton binary builds on both platforms in CI by end of calendar
+      week 1. `orbit --version` (or equivalent runtime invocation) is
+      acceptable as the runtime check, but the link step must exercise
+      SQLite. Verification command: `nm` (linux) or `otool -L` (mac)
+      on the skeleton binary shows SQLite symbols present. Both
+      binaries return matching version strings. Validation log
+      timestamped within week 1.
+
+  - id: ac-22
+    ac_type: gate
+    description: >
+      Pre-dogfood cutover on main: on the day the dogfood window opens
+      (after ac-14 has shipped clean), Migration A and Migration B run
+      against orbit's main branch — not a worktree. The cutover is a
+      single atomic operation: both migrations succeed in one commit, or
+      both are reverted via `git reset --hard HEAD` before the window
+      starts. No orbit-version skill invocation occurs against main
+      before the cutover commit; no bd-version skill invocation occurs
+      against main after it. The cutover is the implicit start moment of
+      the dogfood window.
+    verification: >
+      Cutover commit on main contains both migrations (Migration A
+      layout move + Migration B substrate move) in a single commit. The
+      commit contains the `.beads/ → .beads-archive/` rename as a
+      deletion of `.beads/` plus the `.gitignore` entry for
+      `.beads-archive/`. The archive contents themselves are NOT
+      committed — they live only in the operator's working tree, which
+      is what K7's local-rollback path depends on. Pre-cutover and
+      post-cutover commit hashes are recorded in the operator log.
+      Post-cutover, ac-12's verbatim grep returns no matches; ac-13's
+      hash-set comparison passes; .beads/ is absent (deleted) and
+      .beads-archive/ is gitignored (locally present in the operator's
+      working tree). Dogfood window timer (ac-18) starts at the cutover
+      commit's timestamp.
+
+halt_conditions:
+  # Per Q4 / Q7. Halts are automatic — system stops, revert path runs,
+  # work resumes after fix. Different from escalations (which require
+  # Hugh's call) and kills (which abandon v0.1 architecture).
+  - id: h-1-format-integrity
+    trigger: Round-trip test fails after a schema change
+    revert: Restore last passing schema; halt verb work; rebuild test
+      coverage before any further verb development
+    re_entry: Round-trip test passes again on full fixture suite
+  - id: h-4-migration-locks-repo
+    trigger: Migration A or B fails any acceptance check during worktree
+      validation
+    revert: Discard worktree; do NOT touch main
+    re_entry: Migration runs cleanly through worktree validation
+  - id: h-5a-work-creep
+    trigger: Any dogfood-discovered gap that requires >1 day of work to
+      address
+    revert: Stop work on the gap; file as memo per Theme 5 discipline
+    re_entry: Hugh confirms whether to defer to v0.2 (memo only) or
+      bless extension (escalation E5)
+  - id: h-5b-memo-overflow
+    trigger: Memo count grows by >5–10 within sprint without a
+      distillation pass
+    revert: Pause new dogfood work
+    re_entry: Distillation pass completed; memos either promoted or
+      deleted
+
+escalation_triggers:
+  # Per Q7. Escalations surface to Hugh for a fork decision. Each carries
+  # trigger + state snapshot + proposed action. "Ask Hugh, I'm stuck" is
+  # rejected as non-actionable.
+  - id: e-1-verb-surface-mismatch
+    trigger: A real bd usage in orbit cannot be expressed cleanly within
+      the v0.1 schema
+    snapshot: Failing usage (command + data); closest schema fit; gap
+    proposed_action: (a) extend schema by N columns/verb (cost in days);
+      (b) constrain workflow to fit. Recommend (b) by default; (a) only
+      if workflow is in active orbit use.
+  - id: e-2-schema-field-type
+    trigger: A schema field's structure (list vs map, enum vs free-text)
+      blocks a verb implementation
+    snapshot: Field; candidate types; workflow demanding the choice
+    proposed_action: Pick simpler form by default (list[str], free-text
+      with recommended-values doc note); note v0.2 alternative in a memo.
+      Surface only if Hugh's prior preference is unclear from cluster
+      decisions.
+  - id: e-3-malformed-migration-input
+    trigger: Migration A or B hits a file that can't be parsed
+    snapshot: File path; parse error; whether file is in active use
+    proposed_action: Skip + warn for non-active files; halt + surface
+      for active files. Recommend the active/non-active reading with
+      the surface.
+  - id: e-4-mcp-ergonomics
+    trigger: Week-1 MCP prototype has measurable problems (latency
+      >250ms steady-state, error messages requiring >2 agent attempts
+      to parse, tool-description bloat >2K tokens)
+    snapshot: Metric; verbs affected; proposed verb-shape change
+    proposed_action: Draft verb-shape change as sub-spec; surface BEFORE
+      locking the surface for the rest of the build. Must happen in
+      week 1 or it's too late.
+  - id: e-5-awkward-middle-gap
+    trigger: Dogfood-discovered gap that's larger than the 1-day memo
+      threshold but smaller than a clean v0.2 deferral; OR two
+      consecutive dogfood-window restarts (a verb breaks twice during
+      the ≥1-week dogfood window)
+    snapshot: Gap or restart cause; estimated cost; whether it blocks
+      dogfood criterion 4; restart count
+    proposed_action: (a) defer to v0.2 (memo only); (b) extend v0.1 by N
+      days (Hugh blesses budget); (c) restructure dogfood scope to route
+      around the gap. Recommend (a) by default, (c) if available, (b) only
+      if gap blocks dogfood criterion 4. For restart-count trigger,
+      recommend (c) — narrow the dogfood scope to verbs known stable.
+  - id: e-6-multi-machine-divergence
+    trigger: Binary builds on one platform but fails on the other (mac
+      vs beelink), or behaves differently
+    snapshot: Platform; failure mode; root cause class
+    proposed_action: If fix is <1 day, agent fixes and proceeds. If
+      >1 day, surface with options (a) pause multi-machine criterion
+      (ship single-machine, file v0.1.1 ticket), (b) extend budget.
+      Recommend (a) by default.
+  - id: e-7-distillation-reveals-scope-change
+    trigger: A distillation pass at the 5–10 memo cadence reveals a
+      pattern that, if addressed, would change v0.1 scope
+    snapshot: Pattern; memos that contributed; proposed v0.1 scope change
+    proposed_action: Recommend defer-to-v0.2 by default per Theme 5
+      discipline. Flag Hugh-decision required only if pattern addresses
+      a load-bearing value the current cut misses.
+
+kill_conditions:
+  # Per Q10. Kills abandon v0.1-as-architected. Each is a load-bearing
+  # claim turning out wrong; pivot path is named.
+  - id: k-1-format-integrity-unprovable
+    trigger: Round-trip test cannot be made to converge after 3 attempted
+      fixes; OR serde implementation exceeds 5 days (vs. 1-2 day recut)
+      by end of week 2
+    invalidates: Format-integrity-as-load-bearing-value claim
+    pivot: Revisit decision 0015. Fall back to Option B (bd + MCP wrapper,
+      database-canonical). Open new tabletop for substrate question.
+  - id: k-2-mcp-incompatible
+    trigger: E4 returns "verb shape cannot be made workable" after 2
+      optimization iterations (latency >500ms steady-state, error messages
+      requiring >2 agent attempts after 2 iterations, tool-description
+      bloat unfixable below 4K tokens)
+    invalidates: MCP-as-operator claim (trade-off (b) acceptance)
+    pivot: Revisit MCP-as-operator. Pivot to CLI-only with thin Claude
+      Code wrapper, or re-enter design for the agent-interface layer.
+  - id: k-3-bd-primitive-inexpressible
+    trigger: E1 surfaces a workflow requiring a bd primitive (issue
+      dependency graph, gate semantics, prime cross-repo) that the v0.1
+      schema cannot express AND extending would more-than-double verb count
+    invalidates: bd-verb-parity-as-the-goal claim
+    pivot: Revisit goal. Either accept partial parity (drop the workflow)
+      or pivot to bd + MCP wrapper.
+  - id: k-4-locking-insufficient
+    trigger: Reproducible test case shows .orbit/locks/ either fails to
+      prevent races at acceptable performance OR deadlocks under realistic
+      agent concurrency
+    invalidates: Files-canonical claim (decision 0015's architecture)
+    pivot: Revisit files-canonical. Pivot to database-canonical with file
+      export, OR single-writer-process model with file-based queue.
+  - id: k-5-migration-irreversible
+    trigger: Theme 4 halt fires twice during worktree validation; rollback
+      paths confirmed insufficient (data loss between runs that git reset
+      can't undo)
+    invalidates: Dogfood-in-orbit-self claim (success criterion 4)
+    pivot: Do NOT run migration on orbit's main. Dogfood orbit-state on a
+      fresh greenfield repo to prove the substrate; defer orbit-self
+      migration to v0.2+.
+  - id: k-6-need-changes
+    trigger: Hugh determines mid-build that the substrate need has
+      materially changed
+    invalidates: The cluster's premise
+    pivot: Archive v0.1 work-in-progress to a branch; close the cluster;
+      capture the strategic shift in a decision (MADR record).
+
+  - id: k-8-dogfood-not-converging
+    trigger: Three consecutive dogfood-window restarts within v0.1 budget
+      — the dogfood window has restarted twice from prior breakage (E5
+      escalations handled), and a third break occurs from any cause
+      (verb-surface failure, lock corruption, MCP latency, migration
+      drift, or other)
+    invalidates: Dogfood-in-orbit-self claim (success criterion 4) — the
+      orbit repo cannot stably run on the v0.1 substrate within the
+      planned window
+    pivot: Dogfood orbit-state on a fresh greenfield repo (per K5 pivot
+      path). v0.1 ships against a clean greenfield smoke-test, not the
+      orbit repo. orbit-self migration deferred to v0.2+ when the
+      substrate has stabilised across ≥1 external dogfood cycle.
+
+  - id: k-7-post-ship-critical-defect
+    trigger: Within 14 days of the v0.1.0 tag push, a critical defect
+      surfaces that would have been a halt-trigger pre-ship (format
+      integrity bug locking writes; migration corruption; substrate
+      unable to support orbit's normal workflow) AND cannot be patched
+      forward inside the post-ship window
+    invalidates: The "ship clean" claim — v0.1.0 was tagged prematurely
+    pivot: (1) Revert to bd: restore .beads-archive/ → .beads/. Note —
+      .beads-archive/ is gitignored, so its contents live only in the
+      operator's working tree from the cutover machine. If the working
+      tree on the recovery machine does not contain .beads-archive/
+      (fresh clone, aggressive reset, different machine), restore from
+      a pre-cutover commit instead: `git checkout <pre_cutover_hash> --
+      .beads/` (the pre-cutover hash is recorded in the operator log
+      per ac-22). Revert CLAUDE.md to its pre-v0.1 form (git history);
+      revert plugin skills to bd-version (git history). (2) Tag
+      v0.1.0-rollback marking the revert point. (3) Open new tabletop
+      against the failed claim — this is K1/K4 territory escalated by
+      having shipped first. v0.1.0 git tag remains in history but is
+      effectively superseded.
+    bounded_by: 14 days post-ship — after the window closes, .beads-archive/
+      removal is operator-blessed and K7 expires. Post-K7-expiry defects
+      are normal v0.1.x patch territory.
+
+success_criteria:
+  # Per Q6. Each is binary, measurable from outside, traces to a value
+  # or trade-off pinned above.
+  - id: sc-1
+    criterion: All planned verbs round-trip through serde and pass their
+      test suite (unit + integration; happy + error path each)
+    traces_to: Format integrity (load-bearing value), ac-06 through ac-11
+  - id: sc-2
+    criterion: orbit/ → .orbit/ migration has run on main; grep for old
+      paths in tracked files returns 0 results
+    traces_to: Card 0008, ac-12, h-4 halt trigger
+  - id: sc-3
+    criterion: CLAUDE.md references `orbit X` for every replaced bd verb
+    traces_to: Goal (dogfooded in orbit itself first), ac-15
+  - id: sc-4
+    criterion: orbit repo runs on the new substrate for ≥1 week without
+      fallback to bd for normal workflow
+    traces_to: Goal (dogfooded), strict fallback policy, ac-18
+  - id: sc-5
+    criterion: schema-version file present; migration runner exercised
+      at least once on real content; README early-release notice in place
+    traces_to: Trade-off (c) counterweight, h-5 halt trigger, ac-04, ac-15
+  - id: sc-6
+    criterion: CI runs round-trip + index-rebuild verification gates on
+      every commit
+    traces_to: Theme 1 + Theme 3 hygiene, ac-16, ac-17
+  - id: sc-7
+    criterion: v0.1.0 git tag pushed; binary builds on both mac and
+      beelink; .beads/ removed
+    traces_to: Release engineering close-out, ac-19
+
+budget:
+  pre_committed: 4 calendar weeks (~20 working days)
+  recut_estimate: 13–17 working days
+  confidence_at_4_weeks: ~80–85% (per recut)
+  brake: bd verb parity scope brake; Theme 5a halt trigger if real burn
+    rate trends toward upfront-padded estimates
+  indicative_split:
+    # Per-deliverable allocation hint (not a hard constraint). Gives Theme
+    # 5a halt-trigger an early-warning signal at the subtotal level. If a
+    # bucket overruns by >50% mid-build, escalate before the overall
+    # budget bites.
+    rust_core_serde_locks_atomic: 2 days
+    sqlite_index_rebuild_verify: 1 day
+    mcp_server_cli_22_verbs: 3 days
+    migrations_a_and_b: 1 day
+    six_substantive_skill_rewrites: 2 days
+    path_only_skill_updates_claude_md_readme: 0.5 day
+    test_suite_ci_gates: 1 day
+    week_1_cross_compile_validation_ac21: 0.5 day
+    multi_machine_full_build_test_ac19: 0.5 day
+    dogfood_window_irreducible_wall_clock: 5 days
+    release_engineering_close_out: 0.5 day
+    # Sum: 17 days (top of recut range)
+
+metadata:
+  tabletop_ref: .orbit/specs/2026-05-07-orbit-state-v0.1/tabletop.md
+  decision_refs:
+    - .orbit/choices/0014-orbit-unarchive.md
+    - .orbit/choices/0015-orbit-state-architecture.md
+    - .orbit/choices/0016-choices-vocabulary.md
+    - .orbit/choices/0017-tabletop-output-is-contract.md
+  card_refs:
+    - .orbit/cards/0008-consolidated-orbit-artefact-folder.yaml
+    - .orbit/cards/0017-setup-is-bead-aware.yaml
+    - .orbit/cards/0019-tabletop.yaml
+    - .orbit/cards/0020-orbit-state.yaml
+    - .orbit/cards/0021-tasks.yaml
+  related_specs:
+    - .orbit/specs/2026-04-20-orbit-artefact-folder/spec.yaml
+      # Pre-orbit-state spec for card 0008; superseded by this spec's ac-12
+
+deliverables:
+  - path: .orbit/ (new directory shipped via migration)
+    description: Consolidated orbit artefact folder per card 0008
+  - path: <crate root> (Rust + SQLite + MCP)
+    description: orbit-state binary — single statically-linked, MCP server
+      and CLI entry points
+  - path: .orbit/.gitignore
+    description: Selective gitignore — state.db, schema-version, locks/
+      ignored; cards/, choices/, specs/, memories tracked
+  - path: README.md (amended)
+    description: Early-release notice block (verbatim) + install instructions
+  - path: CLAUDE.md (rewritten)
+    description: orbit verbs replace bd verbs; "Beads Issue Tracker"
+      section replaced with "orbit-state" section
+  - path: plugins/orb/skills/{drive,implement,rally,review-spec,review-pr,audit}/SKILL.md
+    description: Six substantive skill rewrites — bd → orbit verb migration
+  - path: plugins/orb/skills/{card,distill,memo,discovery,interviewer,spec,spec-architect,keyword-scan}/SKILL.md
+    description: Path-only updates from orbit/ to .orbit/
+
+hot_wash:
+  # Meta-observations from the tabletop session itself, captured fresh
+  # per card 0019 scenario 11.
+  recurred:
+    - Format integrity reframed mid-session from peer-of-five-values to
+      substrate-of-the-others; the reframe rippled through every subsequent
+      question
+    - Defer-to-v0.2 discipline ran ~7 times during the session — strong
+      brake against scope creep
+    - Memo overflow surfaced twice (Q4 amendment + Q3 curator discussion);
+      treated as a load-bearing operational rule, not a one-off
+  surprised:
+    - bd→tasks reframe at Q3 was load-bearing and instant; agent's initial
+      cut would have been wrong in a way that wouldn't have surfaced until
+      dogfood week
+    - Estimate-inflation pushback at Q9 was the sharpest signal of the
+      session; structural correction, not a quibble
+    - Early-release notice at Q2 was a creative third option that softened
+      the hardest trade-off (schema-as-public-API)
+  friction:
+    - Initial cards/choices "untouched" cut at Q3 was a values-elicitation
+      miss — should have asked "what do you want to query/search?" earlier
+    - Halt vs escalation distinction was fuzzy in tone; clarified as
+      automatic-stop vs for-decision
+    - Migration sequencing was implied (week 3-4) but not explicitly pinned
+      until written into ac-12/13
+  meta_patterns_for_future_tabletops:
+    - Estimate-inflation guard captured as memory
+    - Values reframes propagate; retrofit earlier answers when one lands
+    - Methodology held under manual execution (no /orb:tabletop skill yet);
+      future skill should automate structure, not change substance
+    - Contract is mostly drafted by Q10; formal write-up is consolidation,
+      not creation
+    - Lateral-approach naming earned its place — without Q5, Option D would
+      have been more tempting at Q9 budget pressure
+    - AskUserQuestion tool would suit closing picks (Q6 four ambiguous
+      things, Q9 budget options) but would have foreclosed the creative
+      reframes at Q2/Q3/Q4. Hybrid pattern recommended.
+    - Card 0026 (executive communication) governs deliverables, not
+      working sessions. Within tabletop, 0026 applies to closing
+      recommendations; opening questions and scenario walks legitimately
+      diverge from 0026's anti-patterns.

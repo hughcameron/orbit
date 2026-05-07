@@ -1,0 +1,95 @@
+goal: "Tighten the §2b proposal-approval gate in plugins/orb/skills/rally/SKILL.md so the approval surface uses a single AskUserQuestion with canonical labels approve-all / modify-list / decline, a deterministic free-form AskUserQuestion follow-up for modifications, strict role separation between the preview block (per-card rationale) and AskUserQuestion option descriptions (action summary), and re-runs the thin-card guard before every re-prompt — keeping card 0006 scenario line 60 in lock-step with the skill labels."
+
+constraints:
+  - "Scope is strictly the §2b approval gate in plugins/orb/skills/rally/SKILL.md. Do not redesign the proposal flow upstream, the thin-card guard at §2a (only its re-run behaviour inside the modify loop), or the decision gate at §5."
+  - "Canonical option labels on the §2b approval AskUserQuestion are `approve-all`, `modify-list`, `decline`. No other label variants (`Approve as-is`, `select-subset`, `Reject the rally`, `approve-as-is`) appear on this surface."
+  - "Modification collection uses a second AskUserQuestion prompt that has no pre-populated options and an explicit prompt asking the author to name cards to add (by path) or remove (by number). An empty response cancels the modification and returns to the proposal."
+  - "The markdown preview block above the AskUserQuestion owns per-card rationale. The AskUserQuestion option `description` fields are restricted to a one-line action summary and MUST NOT contain per-card rationale."
+  - "The thin-card guard (§2a scenario-count check) re-runs before every re-prompt in the §2b modify loop. Guard invocations inside the modify loop are pre-qualification retries and do NOT count as rally-level strikes, matching the ac-04 framing in .orbit/specs/2026-04-19-rally-subagent-model/spec.yaml."
+  - "Card scenario at .orbit/cards/0006-rally.yaml line 60 is updated from `approve-all / select-subset / decline` to `approve-all / modify-list / decline` so card and skill stay in lock-step."
+  - "No changes to rally.yaml ontology, the proposal-scan logic, §3 state init, §4–§11, or any other skill."
+
+acceptance_criteria:
+  - id: ac-01
+    ac_type: doc
+    description: "plugins/orb/skills/rally/SKILL.md §2b presents exactly three AskUserQuestion options with the canonical labels `approve-all`, `modify-list`, `decline`. The legacy phrases `Approve as-is`, `Modify the list`, `Reject the rally`, and `select-subset` do not appear anywhere in §2b."
+    verification: "Read plugins/orb/skills/rally/SKILL.md §2b. Verify the three bullet-list labels are `approve-all`, `modify-list`, `decline`. Verify `Approve as-is`, `Modify the list`, `Reject the rally`, and `select-subset` are absent from §2b."
+
+  - id: ac-02
+    ac_type: doc
+    description: "plugins/orb/skills/rally/SKILL.md §2b documents the two-prompt modify interaction: on `modify-list`, the lead issues exactly one follow-up AskUserQuestion with no pre-populated options and a prompt text requesting card paths to add or numbers to remove, with the explicit note that an empty response cancels the modification and returns to the approval prompt."
+    verification: "Read §2b. Verify the follow-up AskUserQuestion is named, that it has no pre-populated options (free-form only), and that the prompt text requests add-by-path / remove-by-number and names the empty-response cancellation semantics."
+
+  - id: ac-03
+    ac_type: doc
+    description: "plugins/orb/skills/rally/SKILL.md §2b states the strict role separation: the markdown preview block above the AskUserQuestion owns per-card rationale, and the AskUserQuestion option `description` fields contain a terse one-line action summary only, never per-card rationale. A worked example in §2b shows the three option `description` values (e.g. `Proceed with all N candidates`, `Add or remove cards before proceeding`, `Abort the rally; offer individual drive as alternative`)."
+    verification: "Read §2b. Verify the role-separation clause is present and uses the words `preview block` (or equivalent) and `option description` (or equivalent). Verify the three example option descriptions appear and contain no card-specific rationale."
+
+  - id: ac-04
+    ac_type: doc
+    description: "plugins/orb/skills/rally/SKILL.md §2b states that after any `modify-list` response the lead (a) applies the requested additions and removals, (b) re-runs the §2a thin-card guard against the revised candidate list, and (c) re-presents the revised list with the same three canonical AskUserQuestion labels. The text names the invariant `no candidate list is shown to the author unless it has passed the thin-card guard in the current loop iteration` (or a byte-faithful paraphrase). The text also notes that guard re-runs inside the modify loop are pre-qualification retries and do not count as rally-level strikes."
+    verification: "Read §2b. Verify the modify-loop sequence (apply → re-guard → re-prompt) is named. Verify the pre-qualification-retry framing is stated. Verify the invariant about lists-shown-to-the-author passing the guard is present."
+
+  - id: ac-05
+    ac_type: doc
+    description: ".orbit/cards/0006-rally.yaml line 60 (scenario `Rally approval is a structured prompt`, `then:` clause) reads `the approval uses AskUserQuestion with options (approve-all / modify-list / decline) rather than a free-text prompt`. The token `select-subset` does not appear in the scenario's then-clause."
+    verification: "Read .orbit/cards/0006-rally.yaml line 60. Verify the three tokens are `approve-all`, `modify-list`, `decline` in that order inside the parenthetical. Verify `select-subset` is absent from the scenario then-clause."
+
+  - id: ac-06
+    ac_type: doc
+    description: "plugins/orb/skills/rally/SKILL.md §2a (thin-card guard) is not re-described or duplicated in §2b. §2b references the §2a guard by section number when stating the re-run behaviour, so the guard's own rules remain single-sourced."
+    verification: "Read §2b. Verify any mention of the guard re-run cites §2a (by section number or equivalent cross-reference) and does not restate the guard's scenario-count rule."
+
+  - id: ac-07
+    ac_type: gate
+    description: "The rest of plugins/orb/skills/rally/SKILL.md is unchanged by this spec. Specifically, §1, §2a, §3, §4, §5, §6, §7, §8, §9, §10, §11, §12, the Two-Layer State Model section, the Integration with Other Skills section, and the Critical Rules list are byte-identical to their pre-change contents except for the internal consistency of cross-references that mention §2b labels."
+    verification: "Compare plugins/orb/skills/rally/SKILL.md before and after via `git diff main...HEAD -- plugins/orb/skills/rally/SKILL.md`. Verify the diff is localised to §2b (lines within the §2b section) and, if present, any cross-reference lines that mention the §2b label set. Verify §1, §2a, §3–§12, Two-Layer State Model, Integration with Other Skills, and Critical Rules are untouched."
+
+ontology_schema:
+  name: "RallyApprovalSurface"
+  description: "The §2b approval-gate surface: a preview block plus a two-prompt AskUserQuestion interaction."
+  fields:
+    - name: "preview_block"
+      type: "markdown"
+      description: "Markdown shown above the AskUserQuestion. Contains the goal string, candidate card paths with per-card rationale, and the rally autonomy level. Single source of card rationale."
+    - name: "approval_options"
+      type: "list[string]"
+      description: "Fixed three-option list on the approval AskUserQuestion: [`approve-all`, `modify-list`, `decline`]. Order is canonical."
+    - name: "approval_option_descriptions"
+      type: "list[string]"
+      description: "Parallel list of one-line action summaries for each option. Terse, action-only, no per-card rationale. Example: [`Proceed with all N candidates`, `Add or remove cards before proceeding`, `Abort the rally; offer individual drive as alternative`]."
+    - name: "modify_followup_prompt"
+      type: "string"
+      description: "Prompt text for the free-form second AskUserQuestion invoked on `modify-list`. Asks the author to name cards to add (by path) or remove (by number); empty response cancels the modification."
+
+evaluation_principles:
+  - principle: "Lock-step between card and skill — the card scenario and the shipped skill present the same canonical label set, so a reader holding either artefact has the same mental model of the surface."
+    weight: 0.35
+  - principle: "Machine-parseable verdict, free-form modification — the approval turn returns one of three canonical tokens; the modification turn is explicitly free-form on a separate, labelled surface. Verdict parsing is not mixed with free-text parsing on the same turn."
+    weight: 0.25
+  - principle: "Evidence-surface / decision-surface separation — per-card rationale (evidence) lives in the preview block; the AskUserQuestion (decision surface) stays terse and action-focused. Honours rally's principle `maximum clarity based on the best available evidence`."
+    weight: 0.20
+  - principle: "Pre-qualified candidate lists — the author never decides against an invalid list. The thin-card guard re-runs before every re-prompt, and guard retries inside the loop are explicitly pre-qualification, not rally-level strikes."
+    weight: 0.20
+
+exit_conditions:
+  - "plugins/orb/skills/rally/SKILL.md §2b uses the canonical labels `approve-all` / `modify-list` / `decline` (ac-01)"
+  - "plugins/orb/skills/rally/SKILL.md §2b documents the two-prompt modify interaction (ac-02)"
+  - "plugins/orb/skills/rally/SKILL.md §2b states the preview-block / option-description role separation with a worked example (ac-03)"
+  - "plugins/orb/skills/rally/SKILL.md §2b documents the modify-loop sequence, the thin-card re-run, and the pre-qualification-retry framing (ac-04)"
+  - ".orbit/cards/0006-rally.yaml line 60 reads `approve-all / modify-list / decline` (ac-05)"
+  - "plugins/orb/skills/rally/SKILL.md §2a is not duplicated into §2b; §2b cross-references §2a (ac-06)"
+  - "The rest of plugins/orb/skills/rally/SKILL.md is unchanged outside §2b (ac-07)"
+  - "The /orb:review-pr verdict on this spec's implementation is APPROVE"
+
+metadata:
+  version: "1.0"
+  test_prefix: "rallyapp"
+  timestamp: "2026-04-20T00:00:00Z"
+  ambiguity_score: 0.10
+  interview_ref: ".orbit/specs/2026-04-20-rally-approval-prompt/interview.md"
+  relates_to:
+    - ".orbit/cards/0006-rally.yaml"
+    - ".orbit/specs/2026-04-19-rally/spec.yaml"
+    - ".orbit/specs/2026-04-19-rally-subagent-model/spec.yaml"
+  decision_pack_ref: ".orbit/specs/2026-04-20-rally-approval-prompt/decisions.md"

@@ -1,0 +1,50 @@
+feature: Measurable project objectives with guardrails
+as_a: author
+i_want: every active project to have a measurable, agent-checkable objective paired with at least one guardrail
+so_that: agents self-assess whether work is on-track and stop when the objective can't predict the impact of a choice
+goal: agents have a measurable north star per project, checked every session, with guardrails against gaming
+maturity: planned
+scenarios:
+- name: Objective defined per project
+  given: a project is active
+  when: the agent begins a session
+  then: a measurable objective (e.g. "validation >= 95%") is surfaced at session start alongside at least one guardrail that prevents Goodharting
+  gate: false
+- name: Objective grounds session start
+  given: an objective function exists for the project
+  when: the session-start ritual runs
+  then: the agent reads the current state of the metric before reading specs or cards
+  gate: false
+- name: Guardrail prevents Goodharting
+  given: an objective has a paired guardrail (e.g. "precision does not drop below 90%")
+  when: the agent considers an action that would improve the objective
+  then: the guardrail is checked and the action is blocked if it would violate the guardrail
+  gate: false
+- name: Infra-drift stop-loss
+  given: N consecutive PRs have not moved the objective function
+  when: the agent selects the next piece of work
+  then: the next PR must target the objective, surfacing the drift explicitly
+  gate: false
+- name: Stop condition on unpredictable impact
+  given: the agent faces a decision whose impact on the objective cannot be predicted
+  when: the agent evaluates whether to proceed autonomously
+  then: the agent stops and escalates rather than guessing
+  gate: false
+- name: Objective gates merge
+  given: an agent completes work and opens a PR
+  when: merge eligibility is assessed
+  then: tests passing plus objective function moved (or work is genuinely infrastructural) is the merge condition
+  gate: false
+specs: []
+relations:
+- card: 0011-cron-driven-execution
+  type: depends-on
+  reason: cron runs check the objective function to select ready work
+- card: 0012-daily-planning-protocol
+  type: feeds
+  reason: objective function status is a primary input to daily planning
+references:
+- '.orbit/discovery/orbit-autonomy.md: §Project objective functions become first-class'
+- '.orbit/discovery/beads-flow.md: §Project objective function — top-level bead or pinned bd remember entry'
+- '.orbit/cards/memos/2026-04-29-orbit-heavy-for-research.md: session-start grounded in the outcome metric'
+notes: []

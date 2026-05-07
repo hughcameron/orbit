@@ -2,6 +2,8 @@
 
 An opinionated specification-driven workflow for [Claude Code](https://claude.ai/claude-code).
 
+> Early Release — Orbit is under active development. Expect breaking changes to schemas, CLI arguments, library APIs, and model formats between releases. Pin to a specific version if stability matters for your use case.
+
 ## Why a workflow at all?
 
 Agents have gravity. Context windows fill, sessions end, and there's a constant pull toward closing things out, sometimes by taking shortcuts, sometimes by quietly making decisions that were never yours to delegate. That pull isn't a flaw; it's how agents get work done. But left unchecked, it drifts the software away from what you actually wanted.
@@ -30,7 +32,7 @@ This isn't ceremony. It's a division of labour that plays to each side's strengt
 Every piece of work in orbit becomes a **card**: a short YAML file describing who needs something, why it matters, and what they'd expect to see. Cards are the intake layer, and there's no single "right" way to produce one.
 
 - **`/card`**: you know what you want. Answer a few questions, get a card.
-- **`/memo`**: jot a rough idea as freeform markdown and have it filed in `orbit/cards/memos/`. The session hook will surface outstanding memos until you distill them.
+- **`/memo`**: jot a rough idea as freeform markdown and have it filed in `.orbit/cards/memos/`. The session hook will surface outstanding memos until you distill them.
 - **`/distill`**: you've got some reference material (meeting notes, research or an existing project). Distill extracts candidate cards from it and presents them as a batch for your review.
 - **`/discovery`**: the idea is big and new. A Socratic Q&A session explores it until a card can be written.
 
@@ -40,13 +42,13 @@ Whichever door you come in, you land in the same place: a card ready for `/desig
 
 Here's what it looks like to take a rough idea through to a merged change.
 
-You've been thinking about adding progress indicators to a long-running pipeline. You run `/memo` and jot down the gist: *"Analysts can't tell if jobs are stuck or just slow. Need visible progress."* It's filed in `orbit/cards/memos/` automatically.
+You've been thinking about adding progress indicators to a long-running pipeline. You run `/memo` and jot down the gist: *"Analysts can't tell if jobs are stuck or just slow. Need visible progress."* It's filed in `.orbit/cards/memos/` automatically.
 
-Next session, the hook surfaces it: *"1 outstanding memo in orbit/cards/memos/"*. You run `/distill orbit/cards/memos/2026-04-07-pipeline-progress.md` and the agent extracts a candidate card, showing it to you for approval. You tweak a scenario, approve it, and it's saved as `orbit/cards/0004-pipeline-progress.yaml`.
+Next session, the hook surfaces it: *"1 outstanding memo in .orbit/cards/memos/"*. You run `/distill .orbit/cards/memos/2026-04-07-pipeline-progress.md` and the agent extracts a candidate card, showing it to you for approval. You tweak a scenario, approve it, and it's saved as `.orbit/cards/0004-pipeline-progress.yaml`.
 
-Now `/design orbit/cards/0004-pipeline-progress.yaml` opens a focused session. The agent has already searched prior specs and surfaces what's relevant (*"earlier work found stdout flushing is the bottleneck; treating that as a constraint"*) and asks only the questions evidence can't answer. Four questions later, you have an interview.
+Now `/design .orbit/cards/0004-pipeline-progress.yaml` opens a focused session. The agent has already searched prior specs and surfaces what's relevant (*"earlier work found stdout flushing is the bottleneck; treating that as a constraint"*) and asks only the questions evidence can't answer. Four questions later, you have an interview.
 
-`/spec` turns the interview into a structured spec with numbered acceptance criteria. It's a STANDARD-tier change, so no spec review needed. You run `/implement orbit/specs/2026-04-07-pipeline-progress/spec.yaml` and the agent reads the spec, writes a progress tracker, and starts work. Halfway through, it hits a decision the spec didn't cover and stops to ask rather than guess.
+`/spec` turns the interview into a structured spec with numbered acceptance criteria. It's a STANDARD-tier change, so no spec review needed. You run `/implement .orbit/specs/2026-04-07-pipeline-progress/spec.yaml` and the agent reads the spec, writes a progress tracker, and starts work. Halfway through, it hits a decision the spec didn't cover and stops to ask rather than guess.
 
 When it's done, `/review-pr` runs in a fresh context, reads the diff cold, checks every AC has a matching test, and reports back. Merge.
 
@@ -101,7 +103,7 @@ flowchart LR
 | `/setup` | Set up a project: directories, CLAUDE.md, first card |
 | `/card` | Write a feature card with scenarios |
 | `/discovery` | Explore a vague idea through Socratic Q&A |
-| `/memo` | Quickly jot a rough idea and file it in `orbit/cards/memos/` |
+| `/memo` | Quickly jot a rough idea and file it in `.orbit/cards/memos/` |
 | `/distill` | Extract feature cards from notes, documents, or an existing project |
 | `/design` | Refine a card into technical decisions and constraints |
 | `/spec` | Generate a structured spec from an interview |
@@ -130,7 +132,7 @@ These personas drive the workflow skills, you don't invoke them directly but it'
 A card captures **who** needs something, **why** it matters, and **what they'd expect to see**. Scenarios are written in user language, not engineering language. Cards are living documents — when a capability evolves, the card is updated in place. Git history tracks how the product's self-description changes over time.
 
 ```yaml
-# orbit/cards/0001-step-progress.yaml
+# .orbit/cards/0001-step-progress.yaml
 feature: See pipeline step progress
 as_a: analyst
 i_want: to see progress of long-running steps as they execute
@@ -152,7 +154,7 @@ goal: "progress visible for all steps in the nightly pipeline"
 maturity: established
 
 specs:
-  - orbit/specs/2026-04-02-step-progress/spec.yaml
+  - .orbit/specs/2026-04-02-step-progress/spec.yaml
 ```
 
 Cards carry three fields that track evolution:
@@ -204,7 +206,7 @@ The `/audit` skill checks traceability across all specs — it finds untested co
 
 ### Decisions
 
-Decisions use the [MADR](https://adr.github.io/madr/) format and live in `orbit/decisions/`. They surface during design and discovery sessions and are recorded immediately, not after implementation.
+Decisions use the [MADR](https://adr.github.io/madr/) format and live in `.orbit/choices/`. They surface during design and discovery sessions and are recorded immediately, not after implementation.
 
 ### Context separation
 
@@ -215,7 +217,7 @@ Review skills (`/review-spec`, `/review-pr`) run in a forked context: a fresh ag
 orbit includes a `SessionStart` hook that checks for in-flight specs and suggests the next workflow step. For example:
 
 ```
-orbit: 2026-04-02-step-progress — spec ready. Next: implement or /review-spec orbit/specs/2026-04-02-step-progress/spec.yaml
+orbit: 2026-04-02-step-progress — spec ready. Next: implement or /review-spec .orbit/specs/2026-04-02-step-progress/spec.yaml
 ```
 
 The hook is silent when no orbit directories exist or when there's nothing in-flight.
@@ -225,12 +227,12 @@ The hook is silent when no orbit directories exist or when there's nothing in-fl
 orbit prescribes this structure at your project root:
 
 ```
-orbit/cards/                              # Feature cards (living capability descriptions)
+.orbit/cards/                              # Feature cards (living capability descriptions)
 ├── 0001-step-progress.yaml
 ├── 0002-search-without-sql.yaml
 └── memos/                          # Rough ideas awaiting distillation
 
-orbit/specs/                              # Specifications and knowledge
+.orbit/specs/                              # Specifications and knowledge
 ├── 2026-04-02-step-progress/
 │   ├── interview.md
 │   ├── spec.yaml
@@ -238,7 +240,7 @@ orbit/specs/                              # Specifications and knowledge
 │   └── review-pr-2026-04-02.md
 └── ...
 
-orbit/decisions/                          # MADR decision register
+.orbit/choices/                          # MADR decision register
 ├── 0001-short-title.md
 └── ...
 ```
@@ -265,12 +267,29 @@ Install the plugin:
 /plugin install orb@orbit
 ```
 
-Install [`bd`](https://github.com/gastownhall/beads) (≥ 1.0.3) — the issue tracker orbit uses as its execution substrate:
+Build the `orbit` binary — orbit's files-canonical agent substrate. Required in every project that uses the orb skills, since `orbit session prime`, `orbit task ready`, etc. are how the workflow tracks state.
 
-- **macOS**: `brew install beads`
-- **Linux / other**: download a release binary from [github.com/gastownhall/beads/releases](https://github.com/gastownhall/beads/releases) and place it on PATH
+**macOS:**
 
-Verify with `bd --version`. On Apple Silicon, note that `/opt/homebrew/bin` isn't on the default cron PATH — if you plan to run orbit's autonomous workflows from cron, export PATH explicitly in the cron job.
+```
+brew install rust            # provides cargo
+git clone https://github.com/hughcameron/orbit
+cd orbit
+cargo install --path orbit-state/crates/cli
+orbit --version              # verify
+```
+
+On Apple Silicon, note that `/opt/homebrew/bin` and `~/.cargo/bin` aren't on the default cron PATH — if you plan to run orbit's autonomous workflows from cron, export PATH explicitly in the cron job.
+
+**Linux (beelink and others):**
+
+```
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+git clone https://github.com/hughcameron/orbit
+cd orbit
+cargo install --path orbit-state/crates/cli
+orbit --version              # verify
+```
 
 Then in any project:
 
@@ -278,7 +297,7 @@ Then in any project:
 /setup
 ```
 
-This creates the directory structure (`orbit/cards/`, `orbit/specs/`, `orbit/decisions/`), adds a workflow snippet to your `CLAUDE.md`, and walks you through writing your first feature card.
+This creates the directory structure (`.orbit/cards/`, `.orbit/specs/`, `.orbit/choices/`), adds a workflow snippet to your `CLAUDE.md`, and walks you through writing your first feature card. Verify the install end-to-end with `orbit session prime` from the project root — it returns open specs and recent memories.
 
 ## License
 

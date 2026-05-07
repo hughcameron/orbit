@@ -1,0 +1,70 @@
+feature: Pre-flight spec check before implementation
+as_a: author
+i_want: the implementing agent to read the spec and extract a checklist before writing any code
+so_that: hard constraints and acceptance criteria from the spec are not missed during implementation
+goal: Pre-flight discipline reads the spec before code, surfacing ACs and hard constraints as a checklist (deprecated — see 0019, 0005).
+maturity: established
+scenarios:
+- name: Spec is loaded before any code is written
+  given: a spec exists for the current work
+  when: I run /orb:implement .orbit/specs/2026-04-01-topic/spec.yaml
+  then: the agent reads the spec and presents the hard constraints and ACs as a checklist
+  gate: false
+- name: Codebase gaps are flagged not worked around
+  given: the spec describes a requirement the codebase doesn't yet implement
+  when: the agent encounters the gap
+  then: it implements what the spec prescribes rather than working around the missing code
+  gate: false
+- name: Checklist is referenced during work
+  given: the implementation checklist has been extracted
+  when: the agent completes a unit of work
+  then: it marks the relevant AC as addressed
+  gate: false
+- name: Works with review-pr
+  given: implementation used the checklist from /orb:implement
+  when: /orb:review-pr runs
+  then: AC coverage aligns because both skills read the same spec
+  gate: false
+- name: Unspecced decisions surface during implementation
+  given: the agent encounters a choice not covered by the spec
+  when: the decision has meaningful consequences
+  then: it pauses and presents options rather than choosing silently
+  gate: false
+- name: Hard constraints injected at session start
+  given: a spec is in-flight with hard constraints defined
+  when: a new session starts
+  then: the SessionStart hook surfaces the hard constraints in the session context
+  gate: false
+- name: Constraints visible even if skill is skipped
+  given: an agent begins implementation without running /orb:implement
+  when: the session started with an in-flight spec
+  then: the hard constraints are already in context from the SessionStart hook
+  gate: false
+- name: Pre-flight checklist populates the session task list
+  given: /orb:implement reads a spec with N acceptance criteria
+  when: the pre-flight checklist is generated
+  then: each AC is written as a task via TaskCreate with status "pending", and each hard constraint is a task with status "pending"
+  gate: false
+- name: AC completion updates the task list in real time
+  given: the implementing agent finishes work on an AC
+  when: progress.md is updated to mark the AC done
+  then: the corresponding task is updated via TaskUpdate to status "completed" in the same tool-call turn
+  gate: false
+- name: Session resume recovers task state from progress.md
+  given: a session is resumed mid-implementation
+  when: the SessionStart hook fires
+  then: the hook reads progress.md and rebuilds the session task list so the author sees the same AC-by-AC status that was visible in the prior session
+  gate: false
+- name: Test failures stream back during implementation
+  given: /orb:implement runs a test suite that takes several minutes
+  when: the implementing agent runs the test command
+  then: a Monitor feeds each failing line back to the agent as it appears, so failures surface mid-run rather than on completion
+  gate: false
+specs:
+- .orbit/specs/2026-04-04-implement/spec.yaml
+- .orbit/specs/2026-04-20-implement-session-visibility/spec.yaml
+relations: []
+references:
+- 'Prior incident: agent treated codebase as ground truth, missed spec-prescribed entrypoint pattern'
+- '/orb:review-pr: post-hoc AC coverage check — implement is the pre-flight equivalent'
+notes: []

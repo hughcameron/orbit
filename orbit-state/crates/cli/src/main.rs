@@ -20,6 +20,7 @@
 
 use clap::{Parser, Subcommand};
 use orbit_state_core::layout::OrbitLayout;
+use orbit_state_core::Error as OrbitError;
 use orbit_state_core::{
     envelope_err_string, envelope_ok_string, execute, CardListArgs, CardSearchArgs, CardShowArgs,
     CardShowResult, ChoiceListArgs, ChoiceListResult, ChoiceSearchArgs, ChoiceShowArgs,
@@ -85,6 +86,10 @@ enum Command {
         #[command(subcommand)]
         action: SessionAction,
     },
+    /// Substrate hygiene check — round-trip every canonical file (ac-16) and
+    /// rebuild the index from files (ac-17). Exits non-zero on any drift.
+    /// CI invokes this once per commit as the merge gate.
+    Verify,
 }
 
 #[derive(Debug, Subcommand)]
@@ -250,6 +255,16 @@ enum SpecAction {
         /// Replace label list. Pass with no values to clear.
         #[arg(long = "labels", num_args = 0..)]
         labels: Option<Vec<String>>,
+        /// Mark the named AC as checked (e.g. `ac-05`). Reads the current
+        /// spec, flips the AC's `checked` flag to true, and writes the
+        /// full acceptance_criteria list back via the canonical writer.
+        /// Errors if the AC is missing or already checked.
+        #[arg(long = "ac-check")]
+        ac_check: Option<String>,
+        /// Mark the named AC as unchecked (e.g. `ac-05`). Mirror of
+        /// `--ac-check` — flips a checked AC back to unchecked.
+        #[arg(long = "ac-uncheck")]
+        ac_uncheck: Option<String>,
     },
     /// Close a spec; transactionally appends to linked cards' `specs` arrays.
     Close {
@@ -278,7 +293,25 @@ fn main() -> ExitCode {
     };
     let layout = OrbitLayout::at(&root);
 
-    let request = build_request(&cli.command);
+    // `verify` is a hygiene/admin command, not a verb — it doesn't go through
+    // execute(). Handle it directly so its output shape (per-failure path
+    // listings, exit code = drift presence) stays separate from the verb
+    // envelope.
+    if matches!(cli.command, Command::Verify) {
+        return run_verify(&layout, cli.json);
+    }
+
+    let request = match build_request(&layout, &cli.command) {
+        Ok(r) => r,
+        Err(err) => {
+            if cli.json {
+                println!("{}", envelope_err_string(&err));
+            } else {
+                eprintln!("{err}");
+            }
+            return ExitCode::FAILURE;
+        }
+    };
 
     match execute(&layout, &request) {
         Ok(response) => {
@@ -306,11 +339,88 @@ fn main() -> ExitCode {
     }
 }
 
-/// Translate the parsed argv into a [`VerbRequest`]. Pure function — no I/O,
-/// no dispatch — so it stays unit-testable and the parity layer's "two
-/// independent parsers, same dispatch" property is easy to reason about.
-fn build_request(command: &Command) -> VerbRequest {
-    match command {
+/// Run the substrate hygiene check (ac-16 + ac-17). Exits 0 on clean, 1 on
+/// any drift. JSON mode emits a single line `{"ok": true|false, "round_trip_failures": [...], "index_drift": [...]}`
+/// for CI consumption; human mode emits one line per failure plus a summary.
+fn run_verify(layout: &OrbitLayout, json: bool) -> ExitCode {
+    let outcome = match orbit_state_core::verify_all(layout) {
+        Ok(o) => o,
+        Err(e) => {
+            eprintln!("orbit verify: unavailable: {e}");
+            return ExitCode::FAILURE;
+        }
+    };
+
+    if json {
+        // Hand-rolled JSON to avoid pulling serde_json into the binary just
+        // for this one path — keeps the verify subcommand independent of the
+        // verb envelope's serialisation stack.
+        let mut out = String::from("{\"ok\":");
+        out.push_str(if outcome.has_failures() { "false" } else { "true" });
+        out.push_str(",\"round_trip_failures\":[");
+        for (i, f) in outcome.round_trip_failures.iter().enumerate() {
+            if i > 0 {
+                out.push(',');
+            }
+            let kind = match &f.kind {
+                orbit_state_core::RoundTripFailureKind::ParseFailed(msg) => {
+                    format!("parse_failed: {msg}")
+                }
+                orbit_state_core::RoundTripFailureKind::NotByteIdentical => {
+                    "not_byte_identical".into()
+                }
+            };
+            out.push_str(&format!(
+                "{{\"path\":{:?},\"kind\":{:?}}}",
+                f.path.display().to_string(),
+                kind
+            ));
+        }
+        out.push_str("],\"index_drift\":[");
+        for (i, d) in outcome.index_drift.iter().enumerate() {
+            if i > 0 {
+                out.push(',');
+            }
+            out.push_str(&format!("{d:?}"));
+        }
+        out.push_str("]}");
+        println!("{out}");
+    } else if outcome.has_failures() {
+        eprintln!("orbit verify: drift detected");
+        for f in &outcome.round_trip_failures {
+            let kind = match &f.kind {
+                orbit_state_core::RoundTripFailureKind::ParseFailed(msg) => {
+                    format!("parse failed: {msg}")
+                }
+                orbit_state_core::RoundTripFailureKind::NotByteIdentical => {
+                    "not byte-identical (run a verb that touches the file to canonicalise it)"
+                        .into()
+                }
+            };
+            eprintln!("  {} — {kind}", f.path.display());
+        }
+        for d in &outcome.index_drift {
+            eprintln!("  index: {d}");
+        }
+    } else {
+        println!("orbit verify: clean");
+    }
+
+    if outcome.has_failures() {
+        ExitCode::FAILURE
+    } else {
+        ExitCode::SUCCESS
+    }
+}
+
+/// Translate the parsed argv into a [`VerbRequest`]. Mostly pure — the only
+/// I/O happens for `spec update --ac-check / --ac-uncheck`, which must read
+/// the current spec to compute the new acceptance_criteria list. The parity
+/// layer's "two independent parsers, same dispatch" property still holds:
+/// the AC mutation lives entirely on the CLI side and emits a normal
+/// SpecUpdate request that MCP could equivalently produce.
+fn build_request(layout: &OrbitLayout, command: &Command) -> Result<VerbRequest, OrbitError> {
+    Ok(match command {
         Command::Spec { action } => match action {
             SpecAction::List { status } => VerbRequest::SpecList(SpecListArgs {
                 status: status.clone(),
@@ -344,13 +454,59 @@ fn build_request(command: &Command) -> VerbRequest {
                 goal,
                 cards,
                 labels,
-            } => VerbRequest::SpecUpdate(SpecUpdateArgs {
-                id: id.clone(),
-                goal: goal.clone(),
-                cards: cards.clone(),
-                labels: labels.clone(),
-                acceptance_criteria: None,
-            }),
+                ac_check,
+                ac_uncheck,
+            } => {
+                let acceptance_criteria = match (ac_check.as_deref(), ac_uncheck.as_deref()) {
+                    (None, None) => None,
+                    (Some(_), Some(_)) => {
+                        return Err(OrbitError::malformed(
+                            "spec.update",
+                            "--ac-check and --ac-uncheck are mutually exclusive",
+                        ));
+                    }
+                    (target, uncheck_target) => {
+                        // Read current spec, flip the named AC, return the full list.
+                        let resp = execute(layout, &VerbRequest::SpecShow(SpecShowArgs {
+                            id: id.clone(),
+                        }))?;
+                        let VerbResponse::SpecShow(show) = resp else {
+                            return Err(OrbitError::malformed(
+                                "spec.update",
+                                "spec.show returned unexpected response",
+                            ));
+                        };
+                        let mut acs = show.spec.acceptance_criteria.clone();
+                        let (ac_id, want_checked) = match (target, uncheck_target) {
+                            (Some(a), None) => (a, true),
+                            (None, Some(a)) => (a, false),
+                            _ => unreachable!(),
+                        };
+                        let pos = acs.iter().position(|c| c.id == ac_id).ok_or_else(|| {
+                            OrbitError::not_found(
+                                "spec.update",
+                                format!("AC {ac_id} not found on spec {id}"),
+                            )
+                        })?;
+                        if acs[pos].checked == want_checked {
+                            let state = if want_checked { "checked" } else { "unchecked" };
+                            return Err(OrbitError::conflict(
+                                "spec.update",
+                                format!("AC {ac_id} is already {state}"),
+                            ));
+                        }
+                        acs[pos].checked = want_checked;
+                        Some(acs)
+                    }
+                };
+                VerbRequest::SpecUpdate(SpecUpdateArgs {
+                    id: id.clone(),
+                    goal: goal.clone(),
+                    cards: cards.clone(),
+                    labels: labels.clone(),
+                    acceptance_criteria,
+                })
+            }
             SpecAction::Close { id } => VerbRequest::SpecClose(SpecCloseArgs { id: id.clone() }),
         },
         Command::Task { action } => match action {
@@ -458,7 +614,10 @@ fn build_request(command: &Command) -> VerbRequest {
                 memory_cap: *memory_cap,
             }),
         },
-    }
+        Command::Verify => unreachable!(
+            "Command::Verify is short-circuited in main() before reaching build_request"
+        ),
+    })
 }
 
 /// Human-readable rendering. Best-effort, not stable for parsing — agents

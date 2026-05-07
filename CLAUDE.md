@@ -9,8 +9,8 @@ orbit is a Claude Code plugin that provides specification-driven workflow skills
 ## Working in This Repo
 
 - **Skills live in** `plugins/orb/skills/<name>/SKILL.md`
-- **Cards describe orbit's own capabilities** in `orbit/cards/`
-- **Specs for orbit changes** live in `orbit/specs/`
+- **Cards describe orbit's own capabilities** in `.orbit/cards/`
+- **Specs for orbit changes** live in `.orbit/specs/`
 - orbit uses itself — cards, specs, and decisions apply to orbit's own development
 
 ## Key Concepts
@@ -25,19 +25,19 @@ Each artefact has one job. Don't invent new names — if something doesn't fit, 
 
 | Artefact    | Where                                                       | What it is                                                                                                                   |
 |-------------|-------------------------------------------------------------|------------------------------------------------------------------------------------------------------------------------------|
-| Card        | `orbit/cards/NNNN-<slug>.yaml`                              | A capability the product provides. Written in user language. Never closed — updated in place as the capability evolves.       |
-| Memo        | `orbit/cards/memos/<date>-<slug>.md`                        | Raw idea awaiting distillation. Freeform markdown. Turned into cards via `/distill`. Deleted after promotion.                |
-| Interview   | `orbit/specs/<date>-<slug>/interview.md`                    | Q&A record from a `/design` or `/discovery` session. Feeds the spec.                                                          |
-| Spec        | `orbit/specs/<date>-<slug>/spec.yaml`                       | A discrete unit of work with numbered acceptance criteria. One card may spawn many specs over time.                          |
-| Progress    | `orbit/specs/<date>-<slug>/progress.md`                     | AC tracker maintained during implementation. The implementation diary.                                                       |
-| Review      | `orbit/specs/<date>-<slug>/review-{spec,pr}-<date>.md`      | Verdict artefact from `/review-spec` or `/review-pr`.                                                                         |
-| Decision    | `orbit/decisions/NNNN-<slug>.md`                            | MADR record of an architectural choice. Referenced by specs that respect it.                                                 |
-| Rally state | `orbit/specs/<date>-<slug>-rally/rally.yaml`                | Durable state for a multi-card rally. Owned by the rally lead. Rally folders live alongside card spec folders — no separate archive.|
-| Drive state | `orbit/specs/<date>-<slug>/drive.yaml`                      | Durable state for a single-card drive. Owned by the drive agent.                                                             |
+| Card        | `.orbit/cards/NNNN-<slug>.yaml`                              | A capability the product provides. Written in user language. Never closed — updated in place as the capability evolves.       |
+| Memo        | `.orbit/cards/memos/<date>-<slug>.md`                        | Raw idea awaiting distillation. Freeform markdown. Turned into cards via `/distill`. Deleted after promotion.                |
+| Interview   | `.orbit/specs/<date>-<slug>/interview.md`                    | Q&A record from a `/design` or `/discovery` session. Feeds the spec.                                                          |
+| Spec        | `.orbit/specs/<date>-<slug>/spec.yaml`                       | A discrete unit of work with numbered acceptance criteria. One card may spawn many specs over time.                          |
+| Progress    | `.orbit/specs/<date>-<slug>/progress.md`                     | AC tracker maintained during implementation. The implementation diary.                                                       |
+| Review      | `.orbit/specs/<date>-<slug>/review-{spec,pr}-<date>.md`      | Verdict artefact from `/review-spec` or `/review-pr`.                                                                         |
+| Decision    | `.orbit/choices/NNNN-<slug>.md`                            | MADR record of an architectural choice. Referenced by specs that respect it.                                                 |
+| Rally state | `.orbit/specs/<date>-<slug>-rally/rally.yaml`                | Durable state for a multi-card rally. Owned by the rally lead. Rally folders live alongside card spec folders — no separate archive.|
+| Drive state | `.orbit/specs/<date>-<slug>/drive.yaml`                      | Durable state for a single-card drive. Owned by the drive agent.                                                             |
 
 **Cards describe *what*, specs describe *work*.** When someone asks to "make a card for X":
 
-- Is X a capability the product provides? → card in `orbit/cards/`.
+- Is X a capability the product provides? → card in `.orbit/cards/`.
 - Is X a discrete piece of work with acceptance criteria? → spec via `/design` + `/spec`.
 - Is X a rough idea you don't want to lose? → memo via `/memo`.
 - Is X a retrospective, options memo, or investigation plan? → none of the above. Retrospectives update the card they're about; options memos become `/discovery` sessions; investigation plans become specs.
@@ -51,25 +51,29 @@ Each artefact has one job. Don't invent new names — if something doesn't fit, 
 The plugin is installed into projects via the Claude Code plugin marketplace. All development happens in this repo — installed copies in other projects receive updates via the marketplace.
 
 
-<!-- BEGIN BEADS INTEGRATION v:1 profile:minimal hash:ca08a54f -->
-## Beads Issue Tracker
+<!-- BEGIN ORBIT-STATE INTEGRATION -->
+## Orbit-state Substrate
 
-This project uses **bd (beads)** for issue tracking. Run `bd prime` to see full workflow context and commands.
+This project uses **orbit-state** as its agent substrate — files-canonical state under `.orbit/` (cards, choices, specs, tasks, memories), with a SQLite index and an MCP server that share the same Rust core. Run `orbit session prime` at session start.
 
 ### Quick Reference
 
 ```bash
-bd ready              # Find available work
-bd show <id>          # View issue details
-bd update <id> --claim  # Claim work
-bd close <id>         # Complete work
+orbit session prime         # Surfaces open specs + recent memories
+orbit task ready            # Claimable work (open, no claim)
+orbit task show <id>        # Inspect a task
+orbit task claim <id>       # Claim a task
+orbit task done <id>        # Complete a task
+orbit spec list             # Open specs
+orbit memory remember "..." # Persist a decision across sessions
+orbit memory search <kw>    # Search prior memories
 ```
 
 ### Rules
 
-- Use `bd` for ALL task tracking — do NOT use TodoWrite, TaskCreate, or markdown TODO lists
-- Run `bd prime` for detailed command reference and session close protocol
-- Use `bd remember` for persistent knowledge — do NOT use MEMORY.md files
+- Use `orbit` verbs for ALL task and spec tracking — do NOT use TodoWrite, TaskCreate, or markdown TODO lists.
+- Run `orbit session prime` at the start of every session.
+- Use `orbit memory remember` for persistent knowledge — do NOT use MEMORY.md files.
 
 ## Session Completion
 
@@ -77,23 +81,22 @@ bd close <id>         # Complete work
 
 **MANDATORY WORKFLOW:**
 
-1. **File issues for remaining work** - Create issues for anything that needs follow-up
-2. **Run quality gates** (if code changed) - Tests, linters, builds
-3. **Update issue status** - Close finished work, update in-progress items
-4. **PUSH TO REMOTE** - This is MANDATORY:
+1. **File tasks for remaining work** — open new tasks under the active spec for anything that needs follow-up.
+2. **Run quality gates** (if code changed) — tests, linters, builds.
+3. **Update task status** — mark finished tasks done; append updates on in-progress items.
+4. **PUSH TO REMOTE** — this is MANDATORY:
    ```bash
    git pull --rebase
-   bd dolt push
    git push
    git status  # MUST show "up to date with origin"
    ```
-5. **Clean up** - Clear stashes, prune remote branches
-6. **Verify** - All changes committed AND pushed
-7. **Hand off** - Provide context for next session
+5. **Clean up** — clear stashes, prune remote branches.
+6. **Verify** — all changes committed AND pushed.
+7. **Hand off** — provide context for next session.
 
 **CRITICAL RULES:**
-- Work is NOT complete until `git push` succeeds
-- NEVER stop before pushing - that leaves work stranded locally
-- NEVER say "ready to push when you are" - YOU must push
-- If push fails, resolve and retry until it succeeds
-<!-- END BEADS INTEGRATION -->
+- Work is NOT complete until `git push` succeeds.
+- NEVER stop before pushing — that leaves work stranded locally.
+- NEVER say "ready to push when you are" — YOU must push.
+- If push fails, resolve and retry until it succeeds.
+<!-- END ORBIT-STATE INTEGRATION -->

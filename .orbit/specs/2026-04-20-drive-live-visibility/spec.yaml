@@ -1,0 +1,144 @@
+goal: "Extend /orb:drive with live-visibility and structured-verdict primitives: a 5-minute one-line heartbeat via recurring CronCreate for full-autonomy drives, a one-shot escalation ping, check-ins that survive --resume via idempotent CronList reconciliation, and a four-option AskUserQuestion verdict prompt at MEDIUM+ severity review gates — without changing shipped drive behaviour."
+
+constraints:
+  - "Check-in cadence is hardcoded at 5 minutes. No configuration surface — no drive.yaml field, no environment variable, no flag."
+  - "Check-in output is strictly one line with the exact format: `drive: iter=<N>/<budget> stage=<status> ac=<id|-> elapsed=<mm:ss>`. No optional second line, no structured block."
+  - "Check-in prompts are read-only: they must not modify drive.yaml and must not launch any Agent. Safe to fire mid-forked-review."
+  - "The `ac` field in the heartbeat renders a literal `-` character whenever no current AC cursor exists (all stages other than Implement, and Implement before the first AC is marked in-progress)."
+  - "Cron task ID for the recurring check-in is `drive-checkin-<spec-slug>`, where `<spec-slug>` is the basename of the current spec directory (e.g. `2026-04-20-drive-live-visibility`)."
+  - "At §2 (drive initialise and every resume), run CronList; if no task with ID `drive-checkin-<spec-slug>` exists, CronCreate it. If one exists, no-op. Never delete-then-recreate."
+  - "Recurring check-in creation is gated on `autonomy == full`. Guided and supervised drives pause interactively at gates and do not schedule the heartbeat."
+  - "At §9 (escalation) and §10 (completion), attempt CronDelete on `drive-checkin-<spec-slug>`. If CronDelete fails (e.g. task already expired), log one line and continue — do not abort escalation or completion."
+  - "At §2 initialise/resume, CronCreate failure for the recurring heartbeat is non-fatal: drive logs one line (`heartbeat unavailable: <reason>`) and continues the pipeline without a heartbeat. The heartbeat never gates stage progression."
+  - "In §9 the cleanup order is fixed: (1) emit escalation summary, (2) CronDelete the recurring heartbeat, (3) schedule the one-shot escalation ping ~30s out. This ordering prevents the recurring heartbeat from firing between summary and ping."
+  - "Escalation ping is a one-shot CronCreate scheduled ~30 seconds after the §9 escalation output renders. Message body: `**DRIVE ESCALATED** on <card-slug> after <iterations> iterations. See prior output for findings and recommendation.` The message must contain the literal `**DRIVE ESCALATED**` bold header."
+  - "Escalation ping is one-shot, not recurring. Drive does not nag."
+  - "The four-option verdict AskUserQuestion fires at review-spec APPROVE gates (supervised mode) and review-pr APPROVE gates (guided and supervised modes) only when the review file reports at least one finding at severity MEDIUM or higher. LOW-only findings retain the existing three-option prompt (where applicable)."
+  - "Four-option labels are exactly: `approve`, `request changes`, `block`, `read full review first` — lower-case, single spaces, no hyphens, no punctuation."
+  - "On selection of `read full review first`, drive waits for the author's next turn, then re-presents the identical four-option prompt verbatim. Drive does not interpret follow-up questions as verdicts."
+  - "Drive never applies the four-option prompt on REQUEST_CHANGES or BLOCK verdicts — those are handled by the existing branch-to-next-cycle or NO-GO paths."
+  - "session-context.sh is not modified by this card. All cron reconciliation is in the agent-side skill body (§2, §9, §10)."
+  - "No changes to shipped drive behaviour outside the four new scenarios: autonomy levels, NO-GO handling, forked reviews, drive.yaml lifecycle, budget semantics, and the existing three-option guided APPROVE path at §7.5 all stay intact."
+  - "Severity classification (LOW / MEDIUM / HIGH) is read from the review file's existing findings table — drive does not re-classify or re-severity-score."
+
+acceptance_criteria:
+  - id: ac-01
+    ac_type: doc
+    description: "SKILL.md §2 documents: after writing drive.yaml, if `autonomy == full`, drive runs CronList and creates `drive-checkin-<spec-slug>` via CronCreate iff it is absent. Interval: 5 minutes, recurring. The cron prompt body (the literal text CronCreate receives) must include: (a) instructions to read drive.yaml and progress.md if present, (b) the exact heartbeat output template, and (c) an explicit read-only contract statement telling the firing agent: do not modify drive.yaml, do not launch any Agent, emit the single heartbeat line and stop."
+    verification: "Read plugins/orb/skills/drive/SKILL.md §2. The CronList/CronCreate step is described in full, with the exact task ID format (`drive-checkin-<spec-slug>`), the 5-minute interval (hardcoded, no configuration knob), and the `autonomy == full` gate. The prompt body template appears verbatim and includes the read-only contract statement (explicit 'do not modify drive.yaml' and 'do not launch any Agent' phrases)."
+
+  - id: ac-02
+    ac_type: doc
+    description: "SKILL.md documents the exact heartbeat format: `drive: iter=<N>/<budget> stage=<status> ac=<id|-> elapsed=<mm:ss>`. The `-` substitution for absent AC is called out in plain text, and the read-only contract (no drive.yaml writes, no Agent launches) is stated."
+    verification: "Grep plugins/orb/skills/drive/SKILL.md for the literal heartbeat format string and for the phrases 'must not modify drive.yaml' and 'must not launch any Agent' in the check-in section."
+
+  - id: ac-03
+    ac_type: doc
+    description: "SKILL.md §11 (Resumption) documents that on every resume, §2's CronList/CronCreate reconciliation runs. If `drive-checkin-<spec-slug>` is present (task restored by Claude Code), it is preserved untouched. If absent (task expired or lost), it is recreated. §11's resumption announcement block lists the cron task state (`cron: active` or `cron: created`)."
+    verification: "Read plugins/orb/skills/drive/SKILL.md §11. The resumption steps reference §2's cron reconciliation explicitly. The resumption announcement template includes the cron-task-state line."
+
+  - id: ac-04
+    ac_type: doc
+    description: "SKILL.md §9 (Escalation) specifies the exact ordering: (1) emit the multi-line escalation summary, (2) CronDelete the recurring heartbeat `drive-checkin-<spec-slug>` (non-fatal on failure per ac-05), (3) schedule a one-shot CronCreate ~30s out with the exact message `**DRIVE ESCALATED** on <card-slug> after <iterations> iterations. See prior output for findings and recommendation.` The bold markdown header is preserved verbatim. The ordering ensures the recurring heartbeat does not fire between the summary and the escalation ping."
+    verification: "Read plugins/orb/skills/drive/SKILL.md §9. The three steps appear in the stated order. The one-shot CronCreate step specifies the ~30s delay, and the literal message shape appears with `**DRIVE ESCALATED**` intact."
+
+  - id: ac-05
+    ac_type: doc
+    description: "SKILL.md §9 and §10 both document the CronDelete step for `drive-checkin-<spec-slug>`. Both state that CronDelete failure is non-fatal: drive logs one line and continues, does not abort escalation or completion."
+    verification: "Grep plugins/orb/skills/drive/SKILL.md §9 and §10 for `CronDelete` and the non-fatal language ('failure is non-fatal' or equivalent explicit wording)."
+
+  - id: ac-06
+    ac_type: doc
+    description: "SKILL.md §7.5 (guided APPROVE gate) and §5a's supervised APPROVE gate are updated so that when any finding in the review file is at MEDIUM or HIGH severity, the AskUserQuestion uses exactly four suggested answers: `approve`, `request changes`, `block`, `read full review first`. When all findings are LOW (or none exist), the existing three-option prompt is used unchanged."
+    verification: "Read plugins/orb/skills/drive/SKILL.md §7.5 and §5a supervised-APPROVE gate. Both document the severity-dispatch rule (MEDIUM+ → four options, LOW-only → three options). The four option labels appear verbatim, lower-case with single spaces."
+
+  - id: ac-07
+    ac_type: doc
+    description: "SKILL.md documents the `read full review first` contract: on selection, drive waits for the author's next turn, then re-presents the same four-option prompt verbatim. Drive does not treat intervening author messages as verdicts."
+    verification: "Grep plugins/orb/skills/drive/SKILL.md for the phrase 'read full review first' and confirm the re-prompt contract is stated in plain text (e.g. 'wait for the author's next turn, then re-present the same four-option prompt verbatim')."
+
+  - id: ac-08
+    ac_type: doc
+    description: "SKILL.md documents a severity-read contract: drive reads severity labels from the review file's existing findings table. Drive does not re-classify findings or invent severities."
+    verification: "Grep plugins/orb/skills/drive/SKILL.md for the severity-read contract. It should explicitly state that drive reads severity from the review file and does not re-classify."
+
+  - id: ac-09
+    ac_type: doc
+    description: "SKILL.md Critical Rules section adds at least one bullet covering live visibility: heartbeat is read-only and opt-out-only-by-autonomy (full mode only), cron tasks are reconciled idempotently, and CronDelete failure is non-fatal at completion/escalation."
+    verification: "Read plugins/orb/skills/drive/SKILL.md Critical Rules section. A bullet (or bullets) on heartbeat read-only semantics and CronDelete non-fatality is present."
+
+  - id: ac-10
+    ac_type: doc
+    description: "SKILL.md explicitly scopes out: session-context.sh is not modified by this change; all cron reconciliation is agent-side. A short note in §2 (or a nearby Scope note) makes this explicit."
+    verification: "Grep plugins/orb/skills/drive/SKILL.md for an explicit scope note that session-context.sh is unchanged and cron reconciliation is agent-side."
+
+  - id: ac-11
+    ac_type: gate
+    description: "No other files in plugins/orb/ are modified by this change. Specifically, session-context.sh, design/SKILL.md, spec/SKILL.md, implement/SKILL.md, review-spec/SKILL.md, review-pr/SKILL.md, and rally/SKILL.md are byte-identical to main."
+    verification: "Run `git diff main -- plugins/orb/scripts/session-context.sh plugins/orb/skills/design/ plugins/orb/skills/spec/ plugins/orb/skills/implement/ plugins/orb/skills/review-spec/ plugins/orb/skills/review-pr/ plugins/orb/skills/rally/` — expect empty diff."
+
+  - id: ac-12
+    ac_type: doc
+    description: "The card (.orbit/cards/0005-drive.yaml) has this spec's path appended to its `specs` array. Card maturity is not changed by the spec stage (maturity changes belong to §10 completion per drive's existing protocol)."
+    verification: "Read .orbit/cards/0005-drive.yaml. The `specs` array contains `.orbit/specs/2026-04-20-drive-live-visibility/spec.yaml`. Maturity still reads `planned`."
+
+  - id: ac-13
+    ac_type: doc
+    description: "SKILL.md §2 documents non-fatal CronCreate failure handling for the recurring heartbeat: if CronCreate fails (unsupported in harness, rate-limited, transient error), drive logs one line (`heartbeat unavailable: <reason>`) and continues the pipeline without the heartbeat. The heartbeat is an observability affordance; its absence must not block design/spec/implement/review."
+    verification: "Grep plugins/orb/skills/drive/SKILL.md §2 for the CronCreate non-fatal language. The log-and-continue behaviour is explicit, and the log-line format (`heartbeat unavailable: <reason>` or an equivalent explicit template) appears."
+
+ontology_schema:
+  name: "DriveLiveVisibility"
+  description: "Models the check-in task lifecycle and verdict prompt dispatch introduced by this card."
+  fields:
+    - name: "heartbeat_task_id"
+      type: "string"
+      description: "Stable cron-task identifier for the recurring heartbeat. Format: `drive-checkin-<spec-slug>` where spec-slug is the basename of current_spec."
+    - name: "heartbeat_interval_minutes"
+      type: "integer"
+      description: "Fixed at 5. Not configurable."
+    - name: "heartbeat_line_format"
+      type: "string"
+      description: "Literal template: `drive: iter=<N>/<budget> stage=<status> ac=<id|-> elapsed=<mm:ss>`."
+    - name: "escalation_ping_task_id"
+      type: "string"
+      description: "Stable identifier for the one-shot escalation ping. Format: `drive-escalation-<spec-slug>`."
+    - name: "escalation_ping_delay_seconds"
+      type: "integer"
+      description: "Fixed at 30. Scheduled after §9 output renders."
+    - name: "escalation_ping_message"
+      type: "string"
+      description: "Literal template: `**DRIVE ESCALATED** on <card-slug> after <iterations> iterations. See prior output for findings and recommendation.`"
+    - name: "verdict_prompt_option_count"
+      type: "integer"
+      description: "4 when review has any MEDIUM+ finding, 3 (existing guided gate) when review is LOW-only or finding-free."
+    - name: "verdict_prompt_labels_v4"
+      type: "list[string]"
+      description: "Exact labels: [`approve`, `request changes`, `block`, `read full review first`]."
+    - name: "cron_delete_on_terminal"
+      type: "boolean"
+      description: "True — attempt CronDelete at §9 and §10. Failure is non-fatal (logged, not propagated)."
+
+evaluation_principles:
+  - principle: "Scenario fidelity — all four new card scenarios are directly and singly addressed."
+    weight: 0.30
+  - principle: "Minimal surface area — no changes outside drive/SKILL.md and card metadata."
+    weight: 0.25
+  - principle: "Honour existing discipline — hardcoded values (5-minute interval, 4 options, 30-second delay) match the card's interview decisions byte-for-byte."
+    weight: 0.20
+  - principle: "Safe-to-fire-mid-fork — the heartbeat cannot mutate drive.yaml or launch Agents, so it is safe during forked reviews."
+    weight: 0.15
+  - principle: "Graceful degradation — CronDelete failure on terminal paths is non-fatal; the drive completes or escalates regardless."
+    weight: 0.10
+
+exit_conditions:
+  - "All 12 ACs are verifiable against the edited SKILL.md and card."
+  - "git diff main shows changes scoped to plugins/orb/skills/drive/SKILL.md, .orbit/cards/0005-drive.yaml, and .orbit/specs/2026-04-20-drive-live-visibility/**."
+  - "review-pr returns APPROVE (or a REQUEST_CHANGES cycle that converges within the 3-cycle budget)."
+
+metadata:
+  version: "1.0"
+  test_prefix: "drvlv"
+  timestamp: "2026-04-20T09:26:00Z"
+  ambiguity_score: 0.10
+  interview_ref: ".orbit/specs/2026-04-20-drive-live-visibility/interview.md"

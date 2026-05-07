@@ -1,129 +1,135 @@
 ---
 name: implement
-description: Pre-flight check + work loop for a beads-tracked bead — surface ACs, enforce gates, escalate detours as sub-beads, close on completion
+description: Pre-flight check + work loop for an orbit-state spec — surface ACs, enforce gates, escalate detours as sub-tasks, close on completion
 ---
 
 # /orb:implement
 
-Drive a single bead from claim to close. This skill is the agent's working
-contract for the duration of an in-flight bead: pre-flight context, AC
+Drive a single spec from claim to close. This skill is the agent's working
+contract for the duration of an in-flight spec: pre-flight context, AC
 tracking, gate enforcement, detour escalation, and close-out are all
-expressed as concrete `bd` and `parse-acceptance.sh` commands.
+expressed as concrete `orbit` and `orbit-acceptance.sh` commands.
 
 ## Why This Exists
 
 Without a pre-flight check, implementing agents treat the codebase as
 ground truth and miss spec-prescribed patterns. This skill forces the
-bead's acceptance criteria into working memory before implementation
-begins, and keeps the bead acceptance field as the single source of truth
-throughout.
+spec's acceptance criteria into working memory before implementation
+begins, and keeps the spec's `acceptance_criteria` field as the single
+source of truth throughout.
 
 > **Reference incident:** an agent treated the codebase as ground truth
 > and missed a spec-prescribed entrypoint pattern.
 
 ## Migration Note
 
-The previous `/orb:implement` mirrored ACs into a `progress.md` file,
-emitted Claude Code tasks via `TaskCreate`, computed a `Spec hash` for
-drift detection, and ran a cancel-then-recreate "resume reconcile" on
-session resume. All of that is now subsumed by beads:
+Earlier `/orb:implement` revisions mirrored ACs into a `progress.md`
+file, emitted Claude Code tasks via `TaskCreate`, computed a `Spec hash`
+for drift detection, and ran a cancel-then-recreate "resume reconcile"
+on session resume. All of that is now subsumed by the orbit-state
+substrate:
 
-- AC list and status — bead `acceptance_criteria` field
-- Live AC visibility — `bd show <id>` and `bd ready`
-- Drift detection — removed; the acceptance field IS the contract
-- Resume — `bd show <id>` is the canonical refresh
-- Detours — sub-beads via `bd create --parent ... --deps "discovered-from:..."`
+- AC list and status — spec `acceptance_criteria` field (structured
+  records with `id`, `description`, `gate`, `checked`).
+- Live AC visibility — `orbit spec show <id>` and `orbit spec list`.
+- Drift detection — removed; the acceptance field IS the contract.
+- Resume — `orbit spec show <id>` is the canonical refresh.
+- Detours — sub-tasks via `orbit task open --spec-id <spec> --body
+  "<detour title>"` with the body capturing the discovered-from
+  provenance.
 
 The mechanisms motivated by cards 0003 (implement-session-visibility)
-and 0009 (mission-resilience) are now provided by beads itself; those
+and 0009 (mission-resilience) are now provided by the substrate; those
 cards are referenced as historical pointers, not as live contracts in
 this skill.
 
 ## Usage
 
 ```
-/orb:implement [bead-id]
+/orb:implement [spec-id]
 ```
 
-If `bead-id` is omitted, the skill resolves the active bead automatically
-(see "Input contract" below).
+If `spec-id` is omitted, the skill resolves the active spec
+automatically (see "Input contract" below).
 
 ## Input contract
 
-The skill operates on exactly one in-progress bead per session. Resolution
+The skill operates on exactly one open spec per session. Resolution
 proceeds in three branches:
 
-1. **Argument provided** — `/orb:implement <bead-id>`. Use it directly.
-   The skill calls `bd show <bead-id>` to validate; if the bead is not
-   in `in_progress` status, the skill asks the agent to claim it first
-   via `bd update <bead-id> --claim`.
+1. **Argument provided** — `/orb:implement <spec-id>`. Use it directly.
+   The skill calls `orbit spec show <spec-id>` to validate; if the spec
+   does not exist, the call returns `spec.show: not-found: ...` and the
+   skill surfaces that error.
 
-2. **No argument** — query for in-progress beads:
+2. **No argument** — query for open specs:
 
    ```bash
-   bd list --status in_progress --json
+   orbit --json spec list --status open
    ```
 
    - **Single match** → use it.
-   - **Zero matches** → halt and instruct the agent: "No bead in progress.
-     Claim one with `bd ready --type task` then `bd update <id> --claim`."
-   - **Multiple matches** → halt and instruct the agent to pass the bead
-     ID explicitly, listing the candidates.
+   - **Zero matches** → halt and instruct the agent: "No open spec.
+     Create one with `/orb:spec` or pick an existing spec with `orbit
+     spec list`."
+   - **Multiple matches** → halt and instruct the agent to pass the
+     spec ID explicitly, listing the candidates.
 
-This skill does not attempt to manage concurrent in-progress beads —
-multi-claim is out of scope. If the agent is juggling multiple beads, it
-must invoke this skill once per bead with the explicit ID.
+This skill does not attempt to manage concurrent in-progress specs —
+multi-claim is out of scope. If the agent is juggling multiple specs,
+it must invoke this skill once per spec with the explicit ID.
 
 ## Pre-flight
 
 Before any code is written, the agent runs the following sequence:
 
-1. **Read the bead.**
+1. **Read the spec.**
 
    ```bash
-   bd show <bead-id>
+   orbit spec show <spec-id>
    ```
 
-   The agent reads the description verbatim (this carries the goal and
-   any constraints written into the bead). Constraints are prose — the
-   agent applies them; there is no parser.
+   The agent reads the `goal` verbatim (this carries the goal and any
+   constraints written into the spec). Constraints are prose embedded
+   in the goal or in linked card files — the agent applies them; there
+   is no parser.
 
 2. **Enumerate ACs.**
 
    ```bash
-   plugins/orb/scripts/parse-acceptance.sh acs <bead-id>
+   plugins/orb/scripts/orbit-acceptance.sh acs <spec-id>
    ```
 
    This emits one tab-separated tuple per AC:
-   `<ac-id>\t<status>\t<description>\t<is_gate>`. The agent surfaces this
-   list in its response so the human-visible context contains the full
-   AC roster.
+   `<ac-id>\t<status>\t<description>\t<is_gate>`. The agent surfaces
+   this list in its response so the human-visible context contains the
+   full AC roster.
 
 3. **Identify the next AC.**
 
    ```bash
-   plugins/orb/scripts/parse-acceptance.sh next-ac <bead-id>
+   plugins/orb/scripts/orbit-acceptance.sh next-ac <spec-id>
    ```
 
    This emits `<ac-id>\t<is_gate>` — the first unchecked AC that is not
-   blocked by an unchecked gate. If output is empty, all ACs are checked
-   and the agent jumps to "Completion" below.
+   blocked by an unchecked gate. If output is empty, all ACs are
+   checked and the agent jumps to "Completion" below.
 
 4. **Run a keyword scan.** Search the project source for keywords drawn
-   from the bead title and AC descriptions before writing code (see
-   `/orb:keyword-scan`). This surfaces existing patterns the work should
-   build on rather than reinvent.
+   from the spec's `goal` and AC descriptions before writing code (see
+   `/orb:keyword-scan`). This surfaces existing patterns the work
+   should build on rather than reinvent.
 
-No checklist file is written. The bead acceptance field is authoritative
-and remains so for the rest of the session.
+No checklist file is written. The spec's `acceptance_criteria` field is
+authoritative and remains so for the rest of the session.
 
 ## Implement loop
 
 For each AC, in `next-ac` order:
 
-1. **Confirm the next AC** with `parse-acceptance.sh next-ac <bead-id>`.
-   This is the authoritative gate — if a gate AC is unchecked, `next-ac`
-   will return that gate; the agent must complete it first.
+1. **Confirm the next AC** with `orbit-acceptance.sh next-ac <spec-id>`.
+   This is the authoritative gate — if a gate AC is unchecked,
+   `next-ac` will return that gate; the agent must complete it first.
 
 2. **Implement the AC.** Write code, edit deliverables, run tests as
    needed.
@@ -131,26 +137,28 @@ For each AC, in `next-ac` order:
 3. **Mark the AC done.**
 
    ```bash
-   plugins/orb/scripts/parse-acceptance.sh check <bead-id> <ac-id>
+   plugins/orb/scripts/orbit-acceptance.sh check <spec-id> <ac-id>
    ```
 
-   This calls `bd update --acceptance` internally, flipping the marker
-   from `[ ]` to `[x]`. The bead's acceptance field is the only place AC
-   status lives.
+   This calls `orbit spec update --ac-check <ac-id>` internally,
+   flipping the AC's `checked` flag from false to true through the
+   canonical writer. The spec's `acceptance_criteria` field is the only
+   place AC status lives.
 
 4. **Loop** — re-run `next-ac` and continue.
 
 ### Gate enforcement
 
-Gate enforcement is delegated entirely to `parse-acceptance.sh next-ac`.
-By convention (see `orbit/conventions/acceptance-field.md`), an unchecked
-`[gate]` AC blocks all subsequent ACs by declaration order. The parser
-implements this — the agent does not re-check gates inline.
+Gate enforcement is delegated entirely to `orbit-acceptance.sh next-ac`.
+By convention (see `.orbit/conventions/acceptance-field.md`), an
+unchecked AC with `gate: true` blocks all subsequent ACs by declaration
+order. The parser implements this — the agent does not re-check gates
+inline.
 
 If the agent suspects a gate is blocking, it can confirm with:
 
 ```bash
-plugins/orb/scripts/parse-acceptance.sh blocking-gate <bead-id>
+plugins/orb/scripts/orbit-acceptance.sh blocking-gate <spec-id>
 ```
 
 This emits the first unchecked gate's `<ac-id>\t<description>` (or
@@ -158,21 +166,20 @@ nothing if no gate is blocking).
 
 ### Working rules during implementation
 
-- **Bead over codebase.** If the bead's description or an AC prescribes
-  a pattern the codebase doesn't have, implement what the bead says. Do
-  not work around missing structure — create what the bead requires.
+- **Spec over codebase.** If the spec's goal or an AC prescribes a
+  pattern the codebase doesn't have, implement what the spec says. Do
+  not work around missing structure — create what the spec requires.
 - **Surface unspecced decisions.** When you encounter a choice not
-  covered by the bead with meaningful consequences, **stop and ask** via
-  `AskUserQuestion`. Present 2–3 options with trade-offs.
-- **Constraints in the bead description are non-negotiable.** If you
-  find yourself about to violate one, stop and flag it. Either the
-  constraint needs updating (re-scope the bead) or the approach needs
-  changing.
+  covered by the spec with meaningful consequences, **stop and ask**
+  via `AskUserQuestion`. Present 2–3 options with trade-offs.
+- **Constraints in the spec are non-negotiable.** If you find yourself
+  about to violate one, stop and flag it. Either the constraint needs
+  updating (re-scope the spec) or the approach needs changing.
 - **Assumption reversals require escalation.** When implementation
   evidence (tests, benchmarks, real data) contradicts a stated
-  assumption, stop. Document the finding (use `bd remember` for
-  durable persistence), name the invalidated assumption, and checkpoint
-  before proceeding.
+  assumption, stop. Document the finding (use `orbit memory remember`
+  for durable persistence), name the invalidated assumption, and
+  checkpoint before proceeding.
 - **Derive from evidence.** When prior research, phase results, or
   benchmarks answer a parameter question, use that data. Only escalate
   when evidence is genuinely silent or contradictory.
@@ -181,46 +188,46 @@ nothing if no gate is blocking).
 
 When unplanned work blocks the current AC — a missing dependency, a bug
 in a foreign module, a malformed dataset — the agent escalates the
-detour as a **sub-bead** with `discovered-from` provenance:
+detour as a **sub-task** under the current spec. The task body captures
+the discovered-from provenance:
 
 ```bash
-bd create "<short title for detour>" \
-  -t task -p 1 \
-  --parent <current-bead-id> \
-  --deps "discovered-from:<current-bead-id>" \
-  -d "<context: what was discovered, what blocks the parent AC>"
+orbit task open \
+  --spec-id <current-spec-id> \
+  --body "detour: <short title> (discovered while implementing <current-ac-id>; blocks the parent AC because <reason>)"
 ```
 
-Then claim and work the sub-bead:
+`orbit task open` returns the task id. Then claim and work it:
 
 ```bash
-bd update <new-sub-bead-id> --claim
+orbit task claim <task-id>
 # ... resolve the detour ...
-bd close <new-sub-bead-id> --reason "<one-line outcome>"
+orbit task done <task-id>
 ```
 
-Resume the parent:
+Resume the parent spec:
 
 ```bash
-bd show <current-bead-id>
-plugins/orb/scripts/parse-acceptance.sh next-ac <current-bead-id>
+orbit spec show <current-spec-id>
+plugins/orb/scripts/orbit-acceptance.sh next-ac <current-spec-id>
 ```
 
-`bd show <parent>` reloads the parent's context; `next-ac` returns the
-AC the agent was working on. No state lives in any file — the bead graph
-is the audit trail.
+`orbit spec show <spec>` reloads the spec context; `next-ac` returns
+the AC the agent was working on. AC state lives in the spec; task state
+lives in the spec's task event stream — the substrate is the audit
+trail.
 
 ## Forward findings — three channels
 
 During implementation the agent will discover work that does not belong
-in the current bead. The skill routes findings into one of three
+in the current spec. The skill routes findings into one of three
 channels:
 
 | Finding kind                                  | Channel                                                                    |
 |-----------------------------------------------|----------------------------------------------------------------------------|
-| Blocking detour (must resolve before this AC) | sub-bead via `bd create --parent <current> --deps "discovered-from:<current>"` (above) |
-| Follow-up work that does NOT block this AC    | top-level bead via `bd create -t task` (no `--parent`)                     |
-| Product-direction question (capability-level) | memo at `orbit/cards/memos/YYYY-MM-DD-<slug>.md` for `/orb:distill` later |
+| Blocking detour (must resolve before this AC) | sub-task under current spec via `orbit task open --spec-id <current>` (above) |
+| Follow-up work that does NOT block this AC    | new spec via `/orb:spec`, or a memory note via `orbit memory remember "<finding>"` |
+| Product-direction question (capability-level) | memo at `.orbit/cards/memos/YYYY-MM-DD-<slug>.md` for `/orb:distill` later |
 
 **Never suggest "open a follow-up card."** Cards describe capabilities,
 not work items. The agent doesn't know whether a finding warrants a new
@@ -284,106 +291,104 @@ the constant and assert the emitted marker matches byte-for-byte.
 
 ## Completion
 
-When all ACs are checked the bead is ready to close.
+When all ACs are checked the spec is ready to close.
 
 ```bash
-plugins/orb/scripts/parse-acceptance.sh has-unchecked <bead-id>
+plugins/orb/scripts/orbit-acceptance.sh has-unchecked <spec-id>
 ```
 
-Exit status 1 means no ACs remain unchecked — the bead is done. The
+Exit status 1 means no ACs remain unchecked — the spec is done. The
 agent then runs:
 
 ```bash
-bd close <bead-id> --reason "<one-line summary of what shipped>"
+orbit spec close <spec-id>
 ```
+
+`spec.close` transactionally appends the spec's path to every linked
+card's `specs` array. It rejects if the spec has any open child tasks —
+those must be done or cancelled first (see ac-06 contract).
 
 After close, the agent suggests the next step:
 
 > Run `/orb:review-pr` to verify the implementation.
 
-If `bd close --suggest-next` is used, beads will surface any newly
-unblocked beads in the same call.
-
 ## NO-GO outcome
 
-Not every bead ships code. Some produce evidence that an approach
+Not every spec ships code. Some produce evidence that an approach
 doesn't work — that's a valid outcome, not a failure. When results
-invalidate the bead's hypothesis:
+invalidate the spec's hypothesis:
 
-1. **Persist the finding.** Use `bd remember` so the insight survives
-   the bead close:
+1. **Persist the finding.** Use `orbit memory remember` so the insight
+   survives the spec close:
 
    ```bash
-   bd remember "<bead-id>: <evidence-backed insight>"
+   orbit memory remember "<spec-id>: <evidence-backed insight>"
    ```
 
-2. **Close with a NO-GO reason.**
+2. **Close with a NO-GO note.** orbit-state's `spec close` has no
+   `--reason` flag (the close is the close — the audit trail lives in
+   the spec note stream and memory). Append a final note before closing:
 
    ```bash
-   bd close <bead-id> --reason "NO-GO: <one-line evidence summary>"
+   orbit spec note <spec-id> "NO-GO: <one-line evidence summary>"
+   orbit spec close <spec-id>
    ```
 
 3. **Card direction-layer updates remain the author's call.** Cards
-   describe capabilities and are never closed; if the NO-GO requires the
-   card's `goal` to narrow or shift, that's a `/orb:distill` task for
-   the author, not an automatic skill action.
+   describe capabilities and are never closed; if the NO-GO requires
+   the card's `goal` to narrow or shift, that's a `/orb:distill` task
+   for the author, not an automatic skill action.
 
-## Worked example — orbit-6da.1
+## Worked example
 
-This is a literal command trace using the bead this very skill was
-written against. Each step is a copy-pasteable command.
+This is a copy-pasteable command trace using a hypothetical spec
+`2026-05-08-foo`.
 
 ```bash
-# 1. Find the bead and claim it
-bd ready --type task                            # see what's claimable
-bd show orbit-6da.1                             # read description + ACs
-bd update orbit-6da.1 --claim                   # atomic claim
+# 1. Find the spec and confirm it exists
+orbit spec list --status open                   # see what's open
+orbit spec show 2026-05-08-foo                  # read goal + ACs
 
 # 2. Pre-flight
-bd show orbit-6da.1
-plugins/orb/scripts/parse-acceptance.sh acs orbit-6da.1
-plugins/orb/scripts/parse-acceptance.sh next-ac orbit-6da.1
+plugins/orb/scripts/orbit-acceptance.sh acs 2026-05-08-foo
+plugins/orb/scripts/orbit-acceptance.sh next-ac 2026-05-08-foo
 # → ac-01    1   (gate, unchecked, must close first)
 
 # 3. Implement loop — close each AC
 # (work the AC, then mark it done)
-plugins/orb/scripts/parse-acceptance.sh check orbit-6da.1 ac-01
-plugins/orb/scripts/parse-acceptance.sh next-ac orbit-6da.1
+plugins/orb/scripts/orbit-acceptance.sh check 2026-05-08-foo ac-01
+plugins/orb/scripts/orbit-acceptance.sh next-ac 2026-05-08-foo
 # → ac-02    0   (now startable — ac-01 gate cleared)
 
 # ... repeat for ac-02, ac-03, ... ac-09 ...
 
 # 4. (If a detour is discovered mid-AC)
-bd create "Fix flaky parse-acceptance.sh test under bash 3.2" \
-  -t task -p 1 \
-  --parent orbit-6da.1 \
-  --deps "discovered-from:orbit-6da.1" \
-  -d "Surfaced while implementing ac-04; test passes on bash 5 but \
-parse-acceptance.sh check fails silently under bash 3.2 (macOS default)."
-bd update <new-id> --claim
+orbit task open \
+  --spec-id 2026-05-08-foo \
+  --body "detour: fix flaky orbit-acceptance.sh test under bash 3.2 \
+(surfaced while implementing ac-04; check fails silently under macOS default bash 3.2)"
+# → orbit task open returns task id, e.g. 0001
+orbit task claim 0001
 # ... fix it ...
-bd close <new-id> --reason "Quoted ac_id in sed expression for bash 3.2 compat"
-bd show orbit-6da.1
-plugins/orb/scripts/parse-acceptance.sh next-ac orbit-6da.1
+orbit task done 0001
+orbit spec show 2026-05-08-foo
+plugins/orb/scripts/orbit-acceptance.sh next-ac 2026-05-08-foo
 
 # 5. Completion
-plugins/orb/scripts/parse-acceptance.sh has-unchecked orbit-6da.1
+plugins/orb/scripts/orbit-acceptance.sh has-unchecked 2026-05-08-foo
 # (exit 1 → all done)
-bd close orbit-6da.1 --reason "Rewrote /orb:implement to read ACs from \
-the bead acceptance field; progress.md / TaskCreate / drift detection / \
-resume reconcile removed; detours escalate as sub-beads with \
-discovered-from provenance."
+orbit spec close 2026-05-08-foo
 ```
 
 ## Integration with other skills
 
-- **`/orb:review-pr`** reads the bead's acceptance field (via
-  `parse-acceptance.sh acs`) to cross-reference AC coverage against the
-  implementation diff. The cold-fork review architecture (decision 0011
-  D2) is preserved — the reviewer reads the bead, not a spec file.
-- **`/orb:review-spec`** runs against `spec.yaml` artefacts at design
-  time; once a spec promotes to a bead via `promote.sh`, this skill
-  takes over.
+- **`/orb:review-pr`** reads the spec's `acceptance_criteria` field
+  (via `orbit-acceptance.sh acs`) to cross-reference AC coverage
+  against the implementation diff. The cold-fork review architecture
+  (decision 0011 D2) is preserved — the reviewer reads the spec, not a
+  legacy file.
+- **`/orb:review-spec`** runs against the spec's structured ACs at
+  design time; once a spec is open, this skill takes over.
 - **`/orb:drive`** invokes `/orb:implement` as one stage of an
   end-to-end pipeline; in non-interactive contexts the
   `FIRST_FAILURE_NONINTERACTIVE_MARKER` exit-2 convention is the
@@ -391,5 +396,5 @@ discovered-from provenance."
 
 ---
 
-**Next step:** after `bd close`, run `/orb:review-pr` to verify the
-implementation against the bead's acceptance criteria.
+**Next step:** after `orbit spec close`, run `/orb:review-pr` to verify
+the implementation against the spec's acceptance criteria.

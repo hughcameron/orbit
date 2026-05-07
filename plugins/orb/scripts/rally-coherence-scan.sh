@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # rally-coherence-scan.sh — enforce rally SKILL.md coherence per spec
-# orbit/specs/2026-04-19-rally-subagent-model/spec.yaml (v1.3), ac-15 + ac-17.
+# .orbit/specs/2026-04-19-rally-subagent-model/spec.yaml (v1.3), ac-15 + ac-17.
 #
 # Two checks:
 #   (1) Keyword scan (ac-15): forbidden phrases absent; required phrases present.

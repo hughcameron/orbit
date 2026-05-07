@@ -11,9 +11,9 @@ Bead-native execution layer — orbit's four-card overhaul (orbit-6da.1–6da.4)
 - **Bead-native cold-fork reviews** (card 0016, orbit-6da.4). `/orb:review-spec` and `/orb:review-pr` read the bead directly via `bd show <bead-id> --json` and `parse-acceptance.sh acs <bead-id>` — the same parser `/orb:implement` uses, so AC interpretation cannot drift between implement and review. The snapshot bridge (`bead-snapshot-<date>.md`) is removed pipeline-wide. Verdict files land at `orbit/reviews/<bead-id>/review-{spec,pr}-<date>.md` for both forked and inline invocations.
 - **End-to-end gate semantics.** Card scenario `gate: true` propagates through `promote.sh` to bead AC `[gate]` marker. `parse-acceptance.sh acs` exposes `is_gate=1` as a parsed column. `/orb:review-spec` Pass-1 deterministic check (non-empty / not-placeholder / ≥20 chars) fires against gate-AC description text — was silently no-op under the snapshot bridge.
 - **Test fixtures for the bead-native review substrate.** `plugins/orb/scripts/tests/test-gate-ac-verification.sh` (parser + 3 deterministic rules) and `test-promote-gate-propagation.sh` (card scenario → promote.sh → bead AC `[gate]` marker).
-- **MADR 0013** — `orbit/decisions/0013-bead-acceptance-field-as-cold-fork-substrate.md`. Documents five design decisions (skill-reads-bead vs drive-prerender; AC-shape mapping; ac_type mapping; gate propagation via promote.sh; hard cutover), the substrate-mapping table, and full consequences including accepted losses (ac_type exemption fidelity; AC commit-provenance; cycle-history `[x]` leak).
+- **MADR 0013** — `.orbit/choices/0013-bead-acceptance-field-as-cold-fork-substrate.md`. Documents five design decisions (skill-reads-bead vs drive-prerender; AC-shape mapping; ac_type mapping; gate propagation via promote.sh; hard cutover), the substrate-mapping table, and full consequences including accepted losses (ac_type exemption fidelity; AC commit-provenance; cycle-history `[x]` leak).
 - **Card 0017** — `/orb:setup` is bead-aware (planned). Folds bd precondition check, orbit plugin version sanity, and `bd-init.sh` invocation into `/orb:setup` so the orbit/ layout and `.beads/` initialise atomically. Until this ships, bead-init runs as a manual operator step.
-- **Beads foundation** (orbit-6da.0). Beads issue tracker initialised in orbit itself. Acceptance-field convention (`orbit/conventions/acceptance-field.md`). Core scripts: `parse-acceptance.sh` (five subcommands for AC enumeration and check-off), `promote.sh` (card → bead with AC generation), `bd-init.sh` (project initialisation), `PRIME.md` (session-start context).
+- **Beads foundation** (orbit-6da.0). Beads issue tracker initialised in orbit itself. Acceptance-field convention (`.orbit/conventions/acceptance-field.md`). Core scripts: `parse-acceptance.sh` (five subcommands for AC enumeration and check-off), `promote.sh` (card → bead with AC generation), `bd-init.sh` (project initialisation), `PRIME.md` (session-start context).
 - **`/orb:implement` rewritten against beads** (orbit-6da.1). Bead acceptance field replaces `progress.md` as the AC source of truth. `TaskCreate`, drift detection (sha256), and resume reconcile removed. Detours escalate as sub-beads via `bd create --parent ... --deps "discovered-from:..."`. Gate enforcement delegated entirely to `parse-acceptance.sh next-ac`.
 - **`/orb:drive` rewritten against beads** (orbit-6da.2). Design + Spec stages collapse into `promote.sh card→bead`. Drive state machine lives in bead metadata (`drive_stage`, `drive_iteration`, `drive_review_*_cycle`). Iteration history tracked via `discovered-from` dependency edges between iteration beads. NO-GO closes current bead and promotes a new iteration bead carrying constraint history in the description.
 - **`/orb:rally` collapses onto the bead dependency graph** (orbit-6da.3). `rally.yaml` removed. Epic bead + child beads IS the rally. `bd ready --type task --parent <epic>` replaces TaskList for in-session card visibility. Rally phase tracking lives in epic bead metadata. Mid-flight parallel→serial conversion is a single `bd dep add` invocation.
@@ -22,7 +22,7 @@ Bead-native execution layer — orbit's four-card overhaul (orbit-6da.1–6da.4)
 
 - **Drive cold-fork brief** — Stage 1 (review-spec) and Stage 3 (review-pr) briefs carry only `<bead-id>`, absolute verdict output path, and verdict-line contract. Snapshot paths gone.
 - **Drive Completion** — commit-1 description and PR-body no longer reference bead snapshots (they no longer exist). Commit 1: `All code changes and the review files`.
-- **Inline-mode verdict paths** in both review skills moved to `orbit/reviews/<bead-id>/review-{spec,pr}-<date>.md` (was `orbit/specs/YYYY-MM-DD-<topic>/...`).
+- **Inline-mode verdict paths** in both review skills moved to `orbit/reviews/<bead-id>/review-{spec,pr}-<date>.md` (was `.orbit/specs/YYYY-MM-DD-<topic>/...`).
 - **Drive SKILL.md section renumbering** — Stage 1: §1.1 is now "Compute the cycle-specific verdict path" (was §1.2; §1.1 "Write the bead snapshot" is gone). Stages 1 and 3 section numbers updated throughout; Resumption table cross-references corrected.
 - **`/orb:review-spec` Step 1** renamed to "Gather the Bead"; takes a bead-id argument; reads `bd show <bead-id> --json` + `parse-acceptance.sh acs <bead-id>`. Spec.yaml lookup, interview_ref lookup removed.
 - **`/orb:review-pr` Phase 1/2** reads bead via `bd show` + `parse-acceptance.sh`; `progress.md` cross-reference removed; `ac_type` / `test_prefix` field references removed; AC coverage check uses bare `ac<NN>` test-name pattern; reviewer contextualises exemptions in the honest-assessment paragraph.
@@ -41,7 +41,7 @@ Bead-native execution layer — orbit's four-card overhaul (orbit-6da.1–6da.4)
 ## [0.3.3] - 2026-04-22
 
 ### Added
-- `/orb:implement` §6a — out-of-scope findings during implementation are forwarded as memos (`orbit/cards/memos/`) with data and provenance. Agents no longer suggest "open a follow-up card" — cards describe capabilities, not work items. Distill handles the structural decision later.
+- `/orb:implement` §6a — out-of-scope findings during implementation are forwarded as memos (`.orbit/cards/memos/`) with data and provenance. Agents no longer suggest "open a follow-up card" — cards describe capabilities, not work items. Distill handles the structural decision later.
 
 ### Changed
 - `/orb:review-pr` — explicit rule: never suggest follow-up cards in findings.
@@ -55,14 +55,14 @@ Bead-native execution layer — orbit's four-card overhaul (orbit-6da.1–6da.4)
 
 ### Added
 - `implementation_notes` field in spec YAML format — means-level leads from the design session. Not constraints; starting context the implementing agent can use or override with evidence. Consumed by `/orb:implement`.
-- `orbit/decisions/0012-design-intent-not-means.md` (originally numbered 0011 at 0.3.2 release; renumbered in 0.4.0 to resolve a numbering collision with `0011-beads-execution-layer.md`)
+- `.orbit/choices/0012-design-intent-not-means.md` (originally numbered 0011 at 0.3.2 release; renumbered in 0.4.0 to resolve a numbering collision with `0011-beads-execution-layer.md`)
 
 ## [0.3.1] - 2026-04-21
 
 ### Changed
-- **Rally state moves into a spec-shaped folder.** `rally.yaml` now lives at `orbit/specs/<date>-<slug>-rally/rally.yaml` instead of a flat `orbit/specs/rally.yaml`. Completed rallies stay where they are — the folder itself is the history record. No sibling `archive/` directory, no archival prompt when the next rally begins.
-- `/orb:rally` §1 scans `orbit/specs/*/rally.yaml` for an active rally (phase != complete); §3 Initialise creates the rally folder before writing `rally.yaml` inside it; §10 Completion and §11 Resumption drop the "awaiting archival" language and the archive prompt. Two or more rallies with `phase != complete` is a state error per §12.
-- `session-context.sh` scans `orbit/specs/*/rally.yaml` instead of checking a fixed path, and the `latest_spec` find excludes `*-rally` folders so the workflow surface never mistakes a rally folder for a spec folder.
+- **Rally state moves into a spec-shaped folder.** `rally.yaml` now lives at `.orbit/specs/<date>-<slug>-rally/rally.yaml` instead of a flat `.orbit/specs/rally.yaml`. Completed rallies stay where they are — the folder itself is the history record. No sibling `archive/` directory, no archival prompt when the next rally begins.
+- `/orb:rally` §1 scans `.orbit/specs/*/rally.yaml` for an active rally (phase != complete); §3 Initialise creates the rally folder before writing `rally.yaml` inside it; §10 Completion and §11 Resumption drop the "awaiting archival" language and the archive prompt. Two or more rallies with `phase != complete` is a state error per §12.
+- `session-context.sh` scans `.orbit/specs/*/rally.yaml` instead of checking a fixed path, and the `latest_spec` find excludes `*-rally` folders so the workflow surface never mistakes a rally folder for a spec folder.
 - CLAUDE.md vocabulary row for Rally state updated to the new folder-per-rally path.
 
 ### Added
@@ -88,15 +88,15 @@ UX uplift rally — four coordinated cards shipped together (PRs #12, #14, #11, 
 ## [0.2.19] - 2026-04-20
 
 ### Added
-- **`/orb:rally`** — new top-level orchestration skill for multi-card sprints. Proposes a rally, runs design/implementation in parallel via nested forked Agents with recursive context separation, and enforces a consolidated decision gate. Coherence is enforced via `plugins/orb/scripts/rally-coherence-scan.sh`. See `orbit/decisions/0003-rally-skill-boundary.md`, `0008-rally-subagent-path-discipline.md`, `0009-rally-parallel-drive-full.md`, `0010-rally-thin-card-guard.md`.
-- `SessionStart` hook now detects an active `orbit/specs/rally.yaml` and surfaces rally goal, phase, autonomy mode, per-card status, and parked constraints. Individual drive states are subordinated to the rally display when a rally is active.
+- **`/orb:rally`** — new top-level orchestration skill for multi-card sprints. Proposes a rally, runs design/implementation in parallel via nested forked Agents with recursive context separation, and enforces a consolidated decision gate. Coherence is enforced via `plugins/orb/scripts/rally-coherence-scan.sh`. See `.orbit/choices/0003-rally-skill-boundary.md`, `0008-rally-subagent-path-discipline.md`, `0009-rally-parallel-drive-full.md`, `0010-rally-thin-card-guard.md`.
+- `SessionStart` hook now detects an active `.orbit/specs/rally.yaml` and surfaces rally goal, phase, autonomy mode, per-card status, and parked constraints. Individual drive states are subordinated to the rally display when a rally is active.
 
 ### Changed
-- **Artefact layout consolidated under `orbit/`.** The four top-level directories (`cards/`, `specs/`, `decisions/`, `discovery/`) have moved to `orbit/cards/`, `orbit/specs/`, `orbit/decisions/`, and `orbit/discovery/`. All skill docs, hooks, examples, and references have been rewritten to point at the new paths. The move was done via `git mv` so history is preserved (`git log --follow` traces every artefact back through the rename).
+- **Artefact layout consolidated under `orbit/`.** The four top-level directories (`cards/`, `specs/`, `decisions/`, `discovery/`) have moved to `.orbit/cards/`, `.orbit/specs/`, `.orbit/choices/`, and `.orbit/discovery/`. All skill docs, hooks, examples, and references have been rewritten to point at the new paths. The move was done via `git mv` so history is preserved (`git log --follow` traces every artefact back through the rename).
 - `/orb:setup` now detects four repo states — **greenfield** (create fresh `orbit/`), **brownfield** (legacy bare dirs present → single all-or-nothing migration prompt), **idempotent** (already migrated, no-op), and **mixed** (refuse with a clear collision report). Brownfield migration runs one `git mv` transaction covering every detected bare dir; untracked residue is reported after the move.
 - `SessionStart` hook (`session-context.sh`) now gates on the presence of `orbit/` and emits a one-line nudge (`orbit: legacy layout detected. Run /orb:setup to migrate.`) when bare-layout dirs are found without `orbit/`. Hardened against partial `orbit/` layouts: `find` pipelines inside the drive and latest-spec scans are guarded with `[[ -d ... ]]` checks plus `|| true`, so the hook survives manually-created `orbit/` directories without `cards/` or `specs/` subdirs.
-- `CLAUDE.md` snippet appended by `/orb:setup` now references `orbit/cards/`, `orbit/specs/`, and `orbit/decisions/`.
-- **`/orb:drive` forks its review stages.** `review-spec` and `review-pr` now run in nested forked Agents with `context: fork` at the architectural root, honouring the context-separation contract that the review skills themselves already declared. Verdict is read from the written artefact rather than the return message. See `orbit/decisions/0005-drive-review-artefact-contract.md`, `0006-drive-cold-re-review.md`, `0007-drive-rerequest-budget.md`.
+- `CLAUDE.md` snippet appended by `/orb:setup` now references `.orbit/cards/`, `.orbit/specs/`, and `.orbit/choices/`.
+- **`/orb:drive` forks its review stages.** `review-spec` and `review-pr` now run in nested forked Agents with `context: fork` at the architectural root, honouring the context-separation contract that the review skills themselves already declared. Verdict is read from the written artefact rather than the return message. See `.orbit/choices/0005-drive-review-artefact-contract.md`, `0006-drive-cold-re-review.md`, `0007-drive-rerequest-budget.md`.
 
 ### Notes
 - Prior review artefacts (e.g. `review-pr-*.md`, `review-spec-*.md`) that quoted old bare paths were rewritten in place during the artefact-folder migration. This is a deliberate evidence-fidelity trade-off in favour of a clean end-state; the migration commit itself is the audit trail for the path change.

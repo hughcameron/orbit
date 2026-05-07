@@ -299,6 +299,136 @@ fn cli_full_spec_lifecycle() {
     );
 }
 
+// ---------------------------------------------------------------------------
+// AC-check flag — `spec update --ac-check / --ac-uncheck` round-trip
+// ---------------------------------------------------------------------------
+
+#[test]
+fn cli_spec_update_ac_check_flips_named_ac() {
+    let dir = tempfile::tempdir().unwrap();
+    let specs = dir.path().join(".orbit/specs");
+    std::fs::create_dir_all(&specs).unwrap();
+    std::fs::write(
+        specs.join("test.yaml"),
+        "id: test\n\
+         goal: smoke\n\
+         cards: []\n\
+         status: open\n\
+         labels: []\n\
+         acceptance_criteria:\n\
+         - id: ac-01\n  description: First\n  gate: true\n  checked: false\n\
+         - id: ac-02\n  description: Second\n  gate: false\n  checked: false\n",
+    )
+    .unwrap();
+
+    let cli = env!("CARGO_BIN_EXE_orbit");
+    let root = dir.path().to_str().unwrap();
+
+    // Check ac-01.
+    let out = Command::new(cli)
+        .args(["--root", root, "spec", "update", "test", "--ac-check", "ac-01"])
+        .stdin(Stdio::null())
+        .output()
+        .unwrap();
+    assert!(
+        out.status.success(),
+        "ac-check failed: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+
+    let yaml = std::fs::read_to_string(specs.join("test.yaml")).unwrap();
+    assert!(yaml.contains("- id: ac-01\n  description: First\n  gate: true\n  checked: true\n"));
+    assert!(yaml.contains("- id: ac-02\n  description: Second\n  gate: false\n  checked: false\n"));
+
+    // Re-checking emits a conflict envelope.
+    let out = Command::new(cli)
+        .args(["--root", root, "--json", "spec", "update", "test", "--ac-check", "ac-01"])
+        .stdin(Stdio::null())
+        .output()
+        .unwrap();
+    assert!(!out.status.success());
+    let stdout = String::from_utf8(out.stdout).unwrap();
+    assert!(stdout.contains(r#""category":"conflict""#), "got: {stdout}");
+    assert!(stdout.contains("ac-01 is already checked"), "got: {stdout}");
+
+    // Uncheck flips it back.
+    let out = Command::new(cli)
+        .args(["--root", root, "spec", "update", "test", "--ac-uncheck", "ac-01"])
+        .stdin(Stdio::null())
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+
+    let yaml = std::fs::read_to_string(specs.join("test.yaml")).unwrap();
+    assert!(yaml.contains("- id: ac-01\n  description: First\n  gate: true\n  checked: false\n"));
+}
+
+#[test]
+fn cli_spec_update_ac_check_missing_ac_emits_not_found() {
+    let dir = tempfile::tempdir().unwrap();
+    let specs = dir.path().join(".orbit/specs");
+    std::fs::create_dir_all(&specs).unwrap();
+    std::fs::write(
+        specs.join("test.yaml"),
+        "id: test\n\
+         goal: smoke\n\
+         cards: []\n\
+         status: open\n\
+         labels: []\n\
+         acceptance_criteria:\n\
+         - id: ac-01\n  description: First\n  gate: false\n  checked: false\n",
+    )
+    .unwrap();
+
+    let cli = env!("CARGO_BIN_EXE_orbit");
+    let root = dir.path().to_str().unwrap();
+
+    let out = Command::new(cli)
+        .args(["--root", root, "--json", "spec", "update", "test", "--ac-check", "ac-99"])
+        .stdin(Stdio::null())
+        .output()
+        .unwrap();
+    assert!(!out.status.success());
+    let stdout = String::from_utf8(out.stdout).unwrap();
+    assert!(stdout.contains(r#""category":"not-found""#), "got: {stdout}");
+}
+
+#[test]
+fn cli_spec_update_both_ac_flags_is_malformed() {
+    let dir = tempfile::tempdir().unwrap();
+    let specs = dir.path().join(".orbit/specs");
+    std::fs::create_dir_all(&specs).unwrap();
+    std::fs::write(
+        specs.join("test.yaml"),
+        "id: test\n\
+         goal: smoke\n\
+         cards: []\n\
+         status: open\n\
+         labels: []\n\
+         acceptance_criteria:\n\
+         - id: ac-01\n  description: First\n  gate: false\n  checked: false\n",
+    )
+    .unwrap();
+
+    let cli = env!("CARGO_BIN_EXE_orbit");
+    let root = dir.path().to_str().unwrap();
+
+    let out = Command::new(cli)
+        .args([
+            "--root", root, "--json",
+            "spec", "update", "test",
+            "--ac-check", "ac-01",
+            "--ac-uncheck", "ac-01",
+        ])
+        .stdin(Stdio::null())
+        .output()
+        .unwrap();
+    assert!(!out.status.success());
+    let stdout = String::from_utf8(out.stdout).unwrap();
+    assert!(stdout.contains(r#""category":"malformed""#), "got: {stdout}");
+    assert!(stdout.contains("mutually exclusive"), "got: {stdout}");
+}
+
 // Helper visible to ensure the test binary depends on the CLI binary.
 #[allow(dead_code)]
 fn _binary_dep_anchor(_p: &Path) {}

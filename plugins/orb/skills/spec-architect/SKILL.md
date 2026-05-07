@@ -61,7 +61,7 @@ metadata:
   test_prefix: "remat"  # short label for this spec — disambiguates ACs across specs
   timestamp: "ISO-8601"
   ambiguity_score: null
-  interview_ref: "orbit/specs/YYYY-MM-DD-<topic>/interview.md"
+  interview_ref: ".orbit/specs/YYYY-MM-DD-<topic>/interview.md"
 ```
 
 ## AC Naming Convention

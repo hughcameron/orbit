@@ -1,0 +1,4 @@
+key: mid-session-autonomy-contract-default-to-action-halt
+body: 'Mid-session autonomy contract: default to action. Halt ONLY on (a) pre-flight halt conditions named in the spec, (b) architectural forks that change system shape and aren''t covered by spec, (c) session close. Never ask ''want me to do X'' when X is the next AC, the next verb in a verb cluster, or a commit/push at its protocol-defined boundary. Use bd note to record rationale-as-you-go instead of asking. The recommendation-discipline rule from user-CLAUDE.md applies during planning forks, not during execution of an authorised spec.'
+timestamp: 1970-01-01T00:00:00Z
+labels: []

@@ -1,0 +1,160 @@
+goal: >
+  Rewrite /orb:implement so that the bead acceptance field is the single source
+  of truth for AC tracking. progress.md, parse-progress.sh, TaskCreate /
+  TaskUpdate, drift detection, and resume reconcile are removed. Detours
+  escalate as sub-beads with discovered-from provenance. Test-execution
+  discipline (Monitor + first-failure marker) is preserved verbatim.
+
+constraints:
+  - parse-acceptance.sh is the only AC parser; SKILL.md never parses ACs inline
+  - The bead acceptance field is the single source of truth — no progress.md, no parallel TaskList state
+  - Detours are sub-beads created via bd create --parent <current> --deps "discovered-from:<current>"; never appended to a file
+  - TaskCreate and TaskUpdate are not used by this skill
+  - Drift detection (Spec hash vs spec.yaml) and resume reconcile (cancel-then-recreate) are removed
+  - Gate enforcement is delegated to parse-acceptance.sh next-ac (declaration-order blocking)
+  - The Monitor-for-tests heuristic and the FIRST_FAILURE_NONINTERACTIVE_MARKER constant are preserved byte-for-byte
+  - Card 0003 and 0009 cross-references are reframed as historical pointers ("capability now provided by beads") — no card edits in this spec
+  - The skill assumes one in-progress bead per agent session; multi-claim is out of scope
+  - The skill does NOT modify session-context.sh — it is already deprecated by the foundation spec
+
+acceptance_criteria:
+  - id: ac-01
+    ac_type: gate
+    description: >
+      Lock the input contract and active-bead resolution. SKILL.md takes an
+      optional bead-id argument. With no argument, the skill resolves the
+      active bead via `bd list --status in_progress` (filtered to the agent's
+      assignee where available); single match → use it; zero matches → halt
+      and instruct the agent to claim from `bd ready --type task`; multiple
+      matches → halt and ask the agent to pass the bead ID explicitly.
+    verification: >
+      SKILL.md "Input contract" section contains the three branches
+      (single / zero / multiple) as concrete bd commands.
+
+  - id: ac-02
+    ac_type: code
+    description: >
+      Pre-flight surface. SKILL.md instructs the agent to run `bd show <id>`
+      (read description and goal verbatim) and `parse-acceptance.sh acs <id>`
+      (enumerate ACs) before touching code. The agent identifies the first
+      startable AC via `parse-acceptance.sh next-ac <id>`. No checklist file
+      is written; no progress.md is created.
+    verification: >
+      Pre-flight section in SKILL.md uses `bd show` and the documented
+      parse-acceptance.sh subcommands. There is no `progress.md` write step.
+
+  - id: ac-03
+    ac_type: code
+    description: >
+      AC tracking and gate enforcement. To start an AC, the agent calls
+      `parse-acceptance.sh next-ac <id>` and treats the result as the
+      authoritative next-step. To mark an AC complete, the agent calls
+      `parse-acceptance.sh check <id> <ac-id>` (which calls bd update
+      --acceptance internally). Gate blocking is delegated to next-ac
+      semantics — if a gate is unchecked, next-ac will refuse to advance
+      past it.
+    verification: >
+      "Implement loop" section in SKILL.md uses next-ac and check by name.
+      Gate-blocking discipline is described as delegated, not re-implemented.
+
+  - id: ac-04
+    ac_type: code
+    description: >
+      Detour escalation as sub-beads. When unplanned work blocks the
+      current AC, the agent creates a sub-bead via:
+        bd create "<title>" -t task -p 1 \
+          --parent <current-bead-id> \
+          --deps "discovered-from:<current-bead-id>"
+      The agent then claims and works the sub-bead, closes it with
+      `bd close <sub-bead> --reason "..."`, and resumes the parent via
+      `bd show <current-bead-id>`. No detour entries are appended to any
+      file.
+    verification: >
+      "Detour escalation" section in SKILL.md contains the literal bd create
+      command with --parent and --deps, and the resume-via-bd-show step.
+      No mention of "## Detours" markdown section.
+
+  - id: ac-05
+    ac_type: code
+    description: >
+      Three-channel forward routing. SKILL.md documents three distinct
+      channels for findings discovered during implementation:
+        (a) blocking detour → sub-bead with --parent + --deps
+            "discovered-from:..." (covered by ac-04);
+        (b) follow-up work that doesn't block the current AC → top-level
+            bead via `bd create -t task` (no --parent);
+        (c) product-direction finding (capability question) → memo at
+            .orbit/cards/memos/YYYY-MM-DD-<slug>.md for /orb:distill to
+            consider later.
+      Each channel names its concrete command or path.
+    verification: >
+      "Forward findings" section in SKILL.md lists all three channels with
+      their commands / paths. The "never suggest open a follow-up card"
+      rule from the old skill is preserved.
+
+  - id: ac-06
+    ac_type: code
+    description: >
+      Test-execution discipline preserved. SKILL.md retains the Monitor
+      heuristic for tests over 60 seconds (or full-suite runs) piped
+      through `grep --line-buffered -E 'FAIL|ERROR|AssertionError|Traceback'`,
+      and the first-failure checkpoint with interactive vs non-interactive
+      branches. The canonical FIRST_FAILURE_NONINTERACTIVE_MARKER constant
+      is preserved byte-for-byte from the old skill.
+    verification: >
+      "Test execution" section in SKILL.md contains the Monitor pattern,
+      the grep filter, and the marker string `orbit: first-failure
+      checkpoint skipped (non-interactive); halting for upstream triage`
+      verbatim.
+
+  - id: ac-07
+    ac_type: code
+    description: >
+      Completion and NO-GO flow. When `parse-acceptance.sh has-unchecked
+      <id>` exits 1 (all ACs checked), the agent runs `bd close <id>
+      --reason "<one-line summary>"` and suggests `/orb:review-pr`. For
+      NO-GO outcomes, the agent uses `bd close <id> --reason "NO-GO:
+      <evidence>"` and `bd remember "<insight>"` to persist the finding;
+      card direction-layer updates remain the author's call.
+    verification: >
+      "Completion" and "NO-GO" sections in SKILL.md use bd close with
+      --reason, parse-acceptance.sh has-unchecked as the gate, and bd
+      remember for NO-GO persistence.
+
+  - id: ac-08
+    ac_type: gate
+    description: >
+      Removal sweep. The new SKILL.md contains zero substantive references
+      to: progress.md, parse-progress.sh, TaskCreate, TaskUpdate,
+      DRIFT_NOTICE, RESUME_REBUILD_WARNING, "Spec hash", drift detection,
+      resume reconcile, or "## Detours" markdown sections. Any historical
+      reference is allowed only as a one-line migration note.
+    verification: >
+      grep of plugins/orb/skills/implement/SKILL.md for each forbidden
+      string returns either zero matches or matches confined to a clearly
+      labelled migration note.
+
+  - id: ac-09
+    ac_type: code
+    description: >
+      Worked example. SKILL.md ends with a copy-pasteable command trace
+      using the rally bead orbit-6da.1 (this very work) as the example:
+      claim → bd show → parse-acceptance.sh acs → next-ac → start AC →
+      check AC → repeat → has-unchecked → bd close. Each step is a literal
+      bd or parse-acceptance.sh command.
+    verification: >
+      "Worked example" section uses orbit-6da.1 commands. Each step is a
+      shell command, not prose.
+
+metadata:
+  bead: orbit-6da.1
+  rally: orbit-6da
+  decision_ref: .orbit/choices/0011-beads-execution-layer.md
+  foundation_spec: .orbit/specs/2026-05-01-beads-foundation/spec.yaml
+  interview_ref: .orbit/specs/2026-05-01-implement-skill-beads-rewrite/interview.md
+
+deliverables:
+  - path: plugins/orb/skills/implement/SKILL.md
+    description: New beads-native /orb:implement skill (replaces in place)
+  - path: plugins/orb/skills/implement/progress.md.template
+    description: Removed — no longer needed; the bead acceptance field is the source of truth

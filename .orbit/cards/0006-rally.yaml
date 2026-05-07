@@ -1,0 +1,82 @@
+feature: Rally — orchestrated parallel drives with fan-out techniques
+as_a: developer
+i_want: to hand a set of specs (or sub-spec ACs) to a rally, have it determine parallelism, spawn drives across fan-out techniques, coordinate results, and surface escalations
+so_that: agent throughput is maximised between the two stages where I need to be involved (tabletop and assurance) — and the fan-out leverage is pushed as far as the work allows
+goal: rally orchestrates parallel drives across six fan-out techniques (map / fork-join / type-fanout / speculative / tree-of-thoughts / cold-fork-review); fan-out leverage is pushed as far as the work allows without compromising review depth
+maturity: planned
+scenarios:
+- name: Rally is the orchestrator, not the implementer
+  given: a set of specs ready for execution
+  when: rally opens
+  then: it determines which specs can run in parallel, spawns one drive per parallel track, coordinates state, and closes when all drives close — implementation happens in drives
+  gate: true
+- name: Map fan-out (independent parallelism)
+  given: N specs with no shared output or coordination need
+  when: rally fans out
+  then: N drives run in parallel; rally collects results; close when all close — the baseline pattern
+  gate: false
+- name: Fork-join (parallel with explicit join)
+  given: N specs that share a common output but can be drafted independently
+  when: rally fans out
+  then: N drives run in parallel; a join drive runs after all complete to integrate results and resolve cross-track conflicts
+  gate: false
+- name: Type-fanout (mixed-type drives on one spec)
+  given: an AC that benefits from parallel role-specialised execution (code + test + doc)
+  when: rally spawns mixed-type drives on the same spec
+  then: each agent has a different role; coordination happens via the shared spec's notes.jsonl
+  gate: false
+- name: Speculative (race-and-pick)
+  given: an approach is uncertain and trying multiple is cheaper than deliberating
+  when: rally fans out N drives attempting the same AC with different approaches
+  then: fastest-to-quality wins; others are archived; a choice file may land documenting why one approach was picked
+  gate: false
+- name: Tree-of-thoughts (mid-drive branching)
+  given: a drive hits a substantive fork during execution
+  when: the drive spawns child drives to explore branches
+  then: the parent drive pauses; child drives explore; results return as data; the parent picks based on evidence — capped at one level (no grandchildren)
+  gate: false
+- name: Cold-fork review (post-rally quality gate)
+  given: a rally with material code changes has just closed
+  when: the assurance gate runs
+  then: fresh-context review drives are spawned that read the work without the original drives' context; failures re-open the spec
+  gate: true
+- name: Goal-scoped rally proposal
+  given: multiple cards or specs ready for the same goal
+  when: I invoke /orb:rally with a goal string
+  then: 'the agent surfaces the candidate set with per-spec rationale and waits for my approval (AskUserQuestion: approve-all / modify-list / decline) before fanning out'
+  gate: false
+- name: Rally state persists across sessions
+  given: a rally in progress and the session dies
+  when: a new session starts
+  then: orbit prime surfaces the rally state; the agent resumes orchestration from where it stopped
+  gate: false
+- name: Single-drive halt does not kill the rally
+  given: one drive in a rally hits a halt condition
+  when: the halt is recorded
+  then: the failed drive is parked with its state snapshot; remaining drives continue; the rally summary names what halted
+  gate: false
+- name: Cross-drive coordination escalates rather than improvises
+  given: two drives hit related issues that need coordination
+  when: the issue is detected
+  then: the rally escalates to me with both drives' state — drives never coordinate directly; if the work needs cross-drive coordination, the rally is wrong
+  gate: false
+specs:
+- .orbit/specs/2026-04-19-rally/spec.yaml
+- .orbit/specs/2026-04-19-rally-subagent-model/spec.yaml
+- .orbit/specs/2026-04-20-rally-approval-prompt/spec.yaml
+relations:
+- card: 0019-tabletop
+  type: depends-on
+  reason: rally consumes the specs tabletop produces — each spec carries its own pre-flight contract that drives consume
+- card: 0005-drive
+  type: feeds
+  reason: rally spawns drives; each drive is one fan-out track within the rally
+- card: 0007-drive-forked-reviews
+  type: depends-on
+  reason: the cold-fork review fan-out is the post-rally quality gate; preserved from v1
+references:
+- '.orbit/cards/memos/2026-05-06-rally-fan-out.md: distillation source — six fan-out techniques and tasks-within-drives'
+- '.orbit/discovery/rally.md: observed pattern from parallel design session'
+- '.orbit/discovery/rally-research.md: precedent analysis across agent frameworks'
+- '.orbit/choices/0003-rally-skill-boundary.md: rally as separate skill from drive'
+notes: []

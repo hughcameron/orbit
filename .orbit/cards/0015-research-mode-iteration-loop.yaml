@@ -1,0 +1,47 @@
+feature: Research-mode iteration loop
+as_a: author
+i_want: a lightweight loop for hypothesis-test research work — hypothesis, params, result, decision — distinct from the full Card → Design → Spec → Implement → Review pipeline
+so_that: experimental iterations in safe environments don't pay engineering-pipeline overhead, and orbit's full ceremony stays reserved for changes with architectural consequences
+goal: research projects iterate at the speed of measurement, not at the speed of orbit's engineering pipeline
+maturity: planned
+scenarios:
+- name: Iteration record is the artefact, not a spec
+  given: a research iteration is run (hypothesis to result)
+  when: the iteration completes
+  then: the artefact is a thin record — hypothesis, params, result, decision — not a card, spec, progress.md, and review cycle
+  gate: false
+- name: Sandbox iterations relax approval gates
+  given: an iteration runs in a sandbox or demo environment
+  when: a change is made
+  then: approval is not required between iterations — approval gates remain for production-affecting changes only
+  gate: false
+- name: Engineering pipeline reserved for architectural changes
+  given: work has architectural or production consequences
+  when: the workflow is selected
+  then: orbit's full Card → Design → Spec → Implement → Review pipeline applies — the research loop is the alternative, not the replacement
+  gate: false
+- name: Hypotheses are first-class, not crammed into cards
+  given: a research project is active
+  when: a belief is recorded
+  then: it is captured as a hypothesis (with evidence) — cards remain for capabilities, not for "we believe X"
+  gate: false
+- name: Operator bottleneck is the optimisation target
+  given: a research project iterates between human sessions
+  when: the loop is designed
+  then: every approval, ceremony, or hand-off is evaluated against operator availability — the bottleneck the loop is trying to remove
+  gate: false
+specs: []
+relations:
+- card: 0010-objective-functions
+  type: depends-on
+  reason: research iterations need a measurable target to evaluate hypotheses against (0010 already covers session-start grounding, infra-drift stop-loss, and merge-on-objective from this memo)
+- card: 0011-cron-driven-execution
+  type: feeds
+  reason: cron-driven runs are a natural carrier for sandbox research iterations between planning sessions
+- card: 0014-default-merge-after-review
+  type: feeds
+  reason: removing merge-approval ceremony has its largest payoff when paired with lighter-weight research iteration
+references:
+- .orbit/cards/memos/2026-04-29-orbit-heavy-for-research.md
+- '.orbit/cards/0010-objective-functions.yaml: already covers session-start grounding, infra-drift stop-loss, and merge-on-objective from this memo''s list'
+notes: []

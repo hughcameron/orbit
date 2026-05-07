@@ -1,0 +1,61 @@
+feature: Mission resilience — drives stay anchored to the spec contract through disruptions
+as_a: author
+i_want: the implementing drive to follow the spec's pre-flight contract (halt conditions, escalation triggers, gate ACs), detect drift, log detours, and re-anchor after unplanned work
+so_that: spec fidelity is maintained through real-world interruptions without me pulling the agent back on track — operationalised by tabletop's pre-committed contract, not by ad-hoc judgement
+goal: drives maintain spec contract fidelity through mid-flight disruptions; halt and escalation discipline is pre-committed at tabletop; re-anchoring is mechanical via orbit prime, not narrative reconstruction
+maturity: emerging
+scenarios:
+- name: Halt conditions are pre-committed at tabletop
+  given: a tabletop session producing a spec
+  when: the spec is written
+  then: halt conditions name measurable triggers and revert paths; drives consume them as kill switches — judgement at execution time is replaced by pre-commitment at tabletop time
+  gate: true
+- name: Escalation triggers carry state snapshots and proposed actions
+  given: a spec with escalation triggers
+  when: a trigger fires during a drive
+  then: the agent escalates with the state snapshot and proposed action specified in the trigger — never an open-ended "I am confused"
+  gate: true
+- name: Mid-flight spec modification is detected
+  given: an implementation in progress against a spec.yaml
+  when: the spec file is modified on disk during the session (git working tree changes)
+  then: orbit prime / file-watcher surfaces "spec modified since drive started, re-review recommended"; the agent checkpoints with the author before continuing
+  gate: false
+- name: Gate ACs block subsequent ACs
+  given: a spec has an AC marked as a gate
+  when: the implementing agent considers later ACs
+  then: the agent refuses to proceed past a gate AC until the gate is marked complete; the blocking AC's ID is surfaced
+  gate: false
+- name: Detours are recorded in notes.jsonl, not improvised
+  given: the implementing agent encounters an unplanned finding
+  when: the detour is resolved
+  then: notes.jsonl records the detour with a "Return to:" field naming the AC to resume; the auto-timestamped event survives session death and re-anchoring
+  gate: false
+- name: Agent re-anchors after detour
+  given: the agent has resolved an unplanned detour
+  when: it chooses what to do next
+  then: it re-reads notes.jsonl and the spec's AC list (via orbit show <spec>); identifies the next AC in sequence; resumes against that AC rather than continuing in the detour's direction
+  gate: false
+- name: Session resume surfaces the next AC and open tasks
+  given: a session is resumed mid-implementation
+  when: orbit prime fires
+  then: it surfaces the next unchecked AC (including any blocking gate AC), the open tasks, and the spec's halt conditions — the resuming agent knows where to restart and what would stop it
+  gate: false
+- name: Mid-run rule prevents drift
+  given: the agent encounters an unexpected state during the drive
+  when: the state is not covered by a pre-committed branch in the spec
+  then: the agent appends a note and continues — does not ask, does not improvise, halts only on conditions named in the spec's halt list
+  gate: false
+specs:
+- .orbit/specs/2026-04-20-mission-resilience/spec.yaml
+relations:
+- card: 0019-tabletop
+  type: depends-on
+  reason: mission resilience operationalises the halt conditions and escalation triggers tabletop pre-commits — without tabletop, mission resilience has no contract to enforce
+- card: 0005-drive
+  type: feeds
+  reason: drives consume the contract this card enforces
+references:
+- .orbit/discovery/mission-resilience.md (historical)
+- '.orbit/cards/memos/2026-05-06-tabletop-the-killer-feature.md: halt conditions and escalation triggers as pre-flight artefacts'
+- https://code.claude.com/docs/en/tools-reference
+notes: []

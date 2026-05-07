@@ -1,0 +1,4 @@
+key: agent-estimate-inflation-guard-agent-authored-effort-estimat
+body: 'agent-estimate-inflation-guard: Agent-authored effort estimates default to conservative-engineering quotes, not Claude-execution reality. Recut at Claude-pace before treating as planning input. Surfaced 2026-05-07 orbit-state v0.1 tabletop — initial estimate 33-43 days inflated; recut to 13-17 days. Pattern: divide mechanical-work estimates by ~3, keep wall-clock dogfood/window estimates as-is.'
+timestamp: 1970-01-01T00:00:00Z
+labels: []

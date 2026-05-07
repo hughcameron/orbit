@@ -1,0 +1,139 @@
+goal: "review-spec and review-pr read the bead acceptance field directly via `bd show <bead-id> --json` and `parse-acceptance.sh`, with rule-coverage parity to the prior spec.yaml-based reviewers — including end-to-end gate-AC parity for beads created via `promote.sh` from cards. Drive's snapshot-bridge artefacts and references are removed pipeline-wide. Verdict files stay at `orbit/reviews/<bead-id>/review-{spec,pr}-<date>.md` for both forked and inline invocations."
+
+constraints:
+  - "Cold-fork architecture preserved: reviewers run as forked general-purpose Agents with no shared conversation history (decision 0011-beads-execution-layer §D2). The Agent brief carries only the bead-id, the absolute output path for the verdict file, and the canonical verdict-line contract — no snapshot path, no AC payload, no spec text."
+  - "Verdict-line contract unchanged: canonical `**Verdict:** APPROVE | REQUEST_CHANGES | BLOCK` matched by drive's strict regex `^\\*\\*Verdict:\\*\\* (APPROVE|REQUEST_CHANGES|BLOCK)\\s*$`. Drive's verdict-parsing logic is not modified by this spec."
+  - "Verdict-file path contract unchanged for forked invocation: `orbit/reviews/<bead-id>/review-{spec,pr}-<date>.md` with `-v2.md` / `-v3.md` cycle suffixes. Inline (human-invoked) default path moves to the same `orbit/reviews/<bead-id>/...` shape so there is one path contract under bead substrate."
+  - "Bead acceptance convention unchanged: `.orbit/conventions/acceptance-field.md` stays one-line-per-AC with optional `[gate]` marker. No new fields, no multi-line per-AC syntax. The card schema and `promote.sh` are extended to propagate gate semantics from card scenarios into the bead's acceptance field — this is the only schema-level change."
+  - "Both review skills use `plugins/orb/scripts/parse-acceptance.sh` for AC enumeration. AC interpretation cannot drift between `/orb:implement` and either review skill."
+  - "Hard cutover: no `review_mode` flag, no dual code paths, no auto-detect logic. In-flight snapshot-bridge drives finish under their start-time skill version. Same migration discipline as the forked-reviews migration shipped earlier."
+  - "No backward-compatibility shim for spec.yaml: review-spec and review-pr no longer accept a spec.yaml path — they expect a bead-id. Inline-mode invocation (a human running `/orb:review-spec` directly) takes a bead-id argument."
+  - "Cold-fork purity is bounded by `acceptance_criteria` snapshotting: under bead substrate the fork sees current `[x]` marks via `parse-acceptance.sh acs`. This means review-spec re-fork after a cycle-1 implement-edit will inherit any AC status the implementer wrote. The leak is bounded by ordering (review-spec runs before implement on the canonical path) and accepted as the substrate cost; documented in MADR 0013's consequences. The brief's `no conversation context` prohibition continues to hold byte-for-byte; this constraint clarifies its scope."
+  - "Decision-numbering: this spec resolves the existing `0011-` collision (`0011-beads-execution-layer.md` and `0011-design-intent-not-means.md`) before adding a new decision record. The renumber step is a prerequisite AC; the new substrate MADR is `0013` (the next free integer after the renumber)."
+
+acceptance_criteria:
+  - id: ac-01
+    ac_type: code
+    description: "Drive's snapshot-write logic is removed from `plugins/orb/skills/drive/SKILL.md` in every location it appears: (a) Stage 1 §1.1 (`Write the bead snapshot`) section deleted; (b) Stage 3 §3.1 (`Write a fresh bead snapshot`) section deleted; (c) the `## Worked example` block at lines ~787-790 has its `SNAPSHOT=...` line, `# write snapshot per §1.1` comment, and `# (mirrors stage 1, brief includes git diff main...HEAD + snapshot path)` comment updated to drop snapshot references; (d) §1.6 REQUEST_CHANGES return path prose updates from `return to §1.1 to write a fresh snapshot and re-fork` to `return to <renumbered §> to re-fork`; (e) §3.4 REQUEST_CHANGES return path prose updates symmetrically; (f) §11 Resumption table cross-reference `(idempotent §1.3 check skips fork if file already valid)` is renumbered to match the new section layout; (g) any other internal `§1.x` / `§3.x` cross-references inside drive SKILL.md are audited and updated post-renumber. Section numbering after deletion is consistent (subsequent sections shift up by one in each stage block). The introductory paragraph at line 31 (`fork now reads a bead snapshot rather than spec.yaml`) is rewritten to describe the direct-read substrate."
+    verification: "Run all of the following greps against `plugins/orb/skills/drive/SKILL.md` and assert each returns zero matches: `git grep -F 'bead-snapshot-' plugins/orb/skills/drive/SKILL.md`; `git grep -F 'Write the bead snapshot' plugins/orb/skills/drive/SKILL.md`; `git grep -F 'Write a fresh bead snapshot' plugins/orb/skills/drive/SKILL.md`; `git grep -F 'snapshot path' plugins/orb/skills/drive/SKILL.md`; `git grep -F 'fresh snapshot' plugins/orb/skills/drive/SKILL.md`; `git grep -F 'reads a bead snapshot' plugins/orb/skills/drive/SKILL.md`. Then run `git grep -nE '§(1|3)\\.[0-9]' plugins/orb/skills/drive/SKILL.md` and visually confirm every cross-reference points to a section that exists post-renumber."
+
+  - id: ac-02
+    ac_type: code
+    description: "Drive's Stage 1 Agent brief example block (formerly §1.4) carries only the bead-id placeholder, the absolute verdict output path, and the verdict-line contract instruction. The brief explicitly instructs the forked Agent to read the bead via `bd show <bead-id> --json` and to parse ACs via `plugins/orb/scripts/parse-acceptance.sh acs <bead-id>`. The `<bead-id>` placeholder syntax is used verbatim (not `$BEAD` style) so downstream literal-string assertions are stable."
+    verification: "Read the brief example block in drive SKILL.md Stage 1 fork-launch section. Assert: (a) the literal string `<absolute snapshot path>` is absent from the example block; (b) the literal string `bd show <bead-id> --json` is present in the example block; (c) the literal string `parse-acceptance.sh acs <bead-id>` is present in the example block; (d) the verdict-line contract `**Verdict:** APPROVE | REQUEST_CHANGES | BLOCK` is preserved verbatim in the example block; (e) the example block does not use `$BEAD` placeholder syntax."
+
+  - id: ac-03
+    ac_type: code
+    description: "Drive's Stage 3 Agent brief example block carries the bead-id placeholder, the diff reference (`git diff main...HEAD` on `<branch_name>`), the absolute verdict output path, and the verdict-line contract. The brief explicitly instructs the forked Agent to read the bead via `bd show <bead-id> --json` and to parse ACs via `parse-acceptance.sh acs <bead-id>` — no snapshot path. `<bead-id>` placeholder syntax used verbatim."
+    verification: "Read the brief example block in drive SKILL.md Stage 3 fork-launch section. Assert: (a) literal string `<absolute snapshot path>` is absent; (b) literal strings `bd show <bead-id> --json` and `parse-acceptance.sh acs <bead-id>` are present; (c) literal string `git diff main...HEAD` is present; (d) the verdict-line contract is preserved verbatim; (e) no `$BEAD` placeholder syntax."
+
+  - id: ac-04
+    ac_type: code
+    description: "`plugins/orb/skills/review-spec/SKILL.md` Step 1 (`Gather the Spec`) is rewritten for the bead substrate. The section header changes to `Gather the Bead`. The argument is now a bead-id. The step instructs running `bd show <bead-id> --json` to read the description and metadata, and `plugins/orb/scripts/parse-acceptance.sh acs <bead-id>` to enumerate the AC list with gate flags. The spec.yaml lookup branch and the `interview_ref` / `metadata.interview_ref` lookup are removed entirely."
+    verification: "Read review-spec SKILL.md §1. Assert: (a) the literal string `spec.yaml` does not appear in §1; (b) `bd show <bead-id> --json` appears in §1; (c) `parse-acceptance.sh acs <bead-id>` appears in §1; (d) the literal string `interview_ref` or `metadata.interview_ref` does not appear in §1; (e) the section header is the literal string `Gather the Bead` (positive-content guard against accidental empty rewrite); (f) the section names a bead-id as the argument shape."
+
+  - id: ac-05
+    ac_type: code
+    description: "review-spec Pass 1's gate-AC verification check (currently item 5 in §2 Pass 1) is rewritten to fire against the AC description text for every row where `parse-acceptance.sh acs` reports `is_gate=1`. The three deterministic rules (non-empty / not-placeholder / minimum-length ≥20 chars) are preserved byte-for-byte; only the substrate that supplies the text changes from the spec.yaml `verification` field to the bead AC's description column. The section explicitly notes the substrate mapping (`is_gate=1` for gate detection, AC description text for the field-under-test)."
+    verification: "Read review-spec SKILL.md §2 Pass 1 step 5. Assert: (a) the three deterministic rules text is preserved (regex-substring match for each: `non-empty`, `not.*placeholder`, `at least 20 characters`); (b) the substrate-mapping note is present (literal-substring match: `is_gate` AND `description`); (c) the literal phrase `ac_type: gate` is removed in favour of the parser-column phrasing; (d) the literal `verification` field reference (in the spec.yaml sense) is replaced with `the AC description text` or equivalent and no orphaned `verification` field reference remains."
+
+  - id: ac-06
+    ac_type: code
+    description: "`plugins/orb/skills/review-pr/SKILL.md` Phase 1 (`Read the Diff`) and Phase 2 (`Run Tests + AC Coverage Check`) are rewritten for the bead substrate. Phase 1 reads the bead via `bd show <bead-id> --json` and parses ACs via `parse-acceptance.sh acs <bead-id>`. The progress.md cross-reference is removed. Phase 2's AC coverage check searches for bare `ac<NN>` test names; the `ac_type: code` exemption logic and `metadata.test_prefix` field references are removed (no equivalent in bead substrate). Coverage findings are reported in the standard table format with the reviewer's honest-assessment paragraph contextualising doc/gate-style ACs (judged from each AC's description) vs genuine test gaps."
+    verification: "Read review-pr SKILL.md §2 and §3. Assert: (a) literal string `spec.yaml` does not appear in §2 or §3; (b) literal string `progress.md` does not appear in §2 or §3; (c) `bd show <bead-id> --json` appears in §2; (d) `parse-acceptance.sh acs <bead-id>` appears in §2 or §3; (e) literal phrase `ac_type` does not appear in §3; (f) literal phrase `test_prefix` does not appear in §3; (g) bare `ac<NN>` (or `ac-NN`) test-name pattern is named in §3."
+
+  - id: ac-07
+    ac_type: code
+    description: "Drive's Completion section is updated. Commit-1's description (currently `All code changes, the bead snapshots, and the review files`) drops the `bead snapshots` reference and lists `All code changes and the review files` (or equivalent). Step 3 PR body line (currently `Body references the bead-id, snapshot path, and review files`) drops the `snapshot path` reference and reads `Body references the bead-id and review files`. The commit message format `feat: <bead title>` and PR title format `drive: <bead title>` are preserved byte-for-byte."
+    verification: "Read drive SKILL.md Completion section. Assert: (a) literal string `bead snapshots` does not appear in commit-1's description; (b) literal string `snapshot path` does not appear in step 3's PR body line; (c) the commit message format `feat: <bead title>` is preserved; (d) the PR title format `drive: <bead title>` is preserved."
+
+  - id: ac-08
+    ac_type: code
+    description: "A short test of the gate-AC verification rule is run against a synthetic bead. The test creates an acceptance field containing one passing-gate AC (`- [ ] ac-01 [gate]: Decide hash algorithm before drift detection`, 51 chars, not placeholder) and one failing-gate AC (`- [ ] ac-02 [gate]: TBD`, 3 chars, placeholder token). `parse-acceptance.sh acs --stdin` emits both rows with `is_gate=1`. A test script exercises the deterministic rule logic against the parsed rows and asserts: ac-01 passes all three rules; ac-02 fails the placeholder rule AND the length rule."
+    verification: "Run the test script (saved at `plugins/orb/scripts/tests/test-gate-ac-verification.sh`). Assert: exit 0, output names ac-01 as PASS and ac-02 as FAIL with both failed rules reported. The test fixture (synthetic acceptance field) is checked into the repo alongside the test script."
+
+  - id: ac-09
+    ac_type: doc
+    description: "MADR decision record written at `.orbit/choices/0013-bead-acceptance-field-as-cold-fork-substrate.md` documenting: (a) the substrate change from spec.yaml to bead acceptance field; (b) the substrate mapping (`ac_type: gate` → `is_gate=1` via `parse-acceptance.sh`; spec.yaml `verification` → bead AC description text; `ac_type: code` → reviewer-judged from description text; card scenario `gate: true` → bead AC `[gate]` marker via promote.sh); (c) the rationale for the hard cutover; (d) the consequences (gate-AC check restored end-to-end, `ac_type` exemption fidelity loss accepted with reviewer-judgement compensation, AC commit-provenance signal lost relative to progress.md, cycle-history `[x]` leak under bead substrate accepted as bounded by stage ordering); (e) explicit supersession notice for decision 0002 (ac-test-prefix) — its status is updated to `superseded by 0013` in the same commit. The MADR uses 0013 (not 0012) because the existing `0011-` namespace has two occupants — see ac-11."
+    verification: "File exists at `.orbit/choices/0013-bead-acceptance-field-as-cold-fork-substrate.md`. Status header is `accepted`. The five lettered points (a–e) are addressed in the Decision Outcome / Consequences sections. Decision 0002's status is updated to `superseded by 0013` (verify with `grep -E '^status:' .orbit/choices/0002-ac-test-prefix.md` returning `status: superseded by 0013`)."
+
+  - id: ac-10
+    ac_type: code
+    description: "Card 0016 (`.orbit/cards/0016-bead-native-cold-fork-reviews.yaml`) has its `specs` array updated to include the path of this spec (`.orbit/specs/2026-05-01-bead-native-cold-fork-reviews/spec.yaml`), and its `maturity` is updated from `planned` to `active` to reflect that work has shipped."
+    verification: "Read card 0016 YAML. Assert: `specs` array contains the literal string `.orbit/specs/2026-05-01-bead-native-cold-fork-reviews/spec.yaml`. `maturity` value is `active`."
+
+  - id: ac-11
+    ac_type: code
+    description: "Gate semantics propagate end-to-end from card scenarios to bead acceptance ACs. (a) The card schema documentation gains an optional `gate: true` field on each scenario — recorded in any project-level card-format documentation if it exists, plus inline as a YAML comment in card 0016 demonstrating the field. (b) `plugins/orb/scripts/promote.sh` is updated so that for each scenario where `gate: true`, the emitted AC line uses `- [ ] ac-NN [gate]:` instead of `- [ ] ac-NN:`. (c) Card 0016's scenario 2 (`Gate-AC verification check fires on parsed acceptance entries`) is annotated with `gate: true` so the bead it would promote to has at least one gate AC, exercising the substrate-parity end to end. (d) A second test fixture (`plugins/orb/scripts/tests/test-promote-gate-propagation.sh`) calls `promote.sh --dry-run` against a synthetic card with one gate scenario and asserts the dry-run output contains a `[gate]` marker for the corresponding AC."
+    verification: "(a) Card 0016 YAML contains the literal `gate: true` on at least one scenario. (b) `git grep -F '[gate]' plugins/orb/scripts/promote.sh` returns ≥1 match (interpolation of the marker). (c) Run `plugins/orb/scripts/promote.sh --dry-run .orbit/cards/0016-bead-native-cold-fork-reviews.yaml` and assert the output contains `[gate]` on the line for ac-02. (d) Run `plugins/orb/scripts/tests/test-promote-gate-propagation.sh`; assert exit 0 and output names the gate AC as PASS."
+
+  - id: ac-12
+    ac_type: code
+    description: "Inline-mode default output paths in both review skills are updated to match the bead-native verdict-path contract. `plugins/orb/skills/review-spec/SKILL.md` 'Output path (invoked inline vs forked)' block changes the inline default from `.orbit/specs/YYYY-MM-DD-<topic>/review-spec-<date>.md` to `orbit/reviews/<bead-id>/review-spec-<date>.md`. `plugins/orb/skills/review-pr/SKILL.md` makes the symmetric change for review-pr."
+    verification: "Run `git grep -F '.orbit/specs/YYYY-MM-DD-<topic>' plugins/orb/skills/review-spec/SKILL.md plugins/orb/skills/review-pr/SKILL.md` and assert zero matches. Run `git grep -F 'orbit/reviews/<bead-id>/review-spec-' plugins/orb/skills/review-spec/SKILL.md` and `git grep -F 'orbit/reviews/<bead-id>/review-pr-' plugins/orb/skills/review-pr/SKILL.md`; both must return ≥1 match."
+
+  - id: ac-13
+    ac_type: code
+    description: "The decision-numbering collision in `.orbit/choices/` is resolved before adding the new MADR. `0011-design-intent-not-means.md` is renamed to `0012-design-intent-not-means.md` (`0011-beads-execution-layer.md` keeps its number — it is the central substrate decision and is referenced by name from card 0016 and from skill files). Any cross-references from other decision files, skill files, or specs that point to `0011-design-intent-not-means.md` are updated to `0012-design-intent-not-means.md`. After this AC closes, the next free decision number is `0013` — that is the number ac-09 uses for the new MADR."
+    verification: "(a) File `.orbit/choices/0011-design-intent-not-means.md` does not exist. (b) File `.orbit/choices/0012-design-intent-not-means.md` exists. (c) `git grep -F '0011-design-intent-not-means' .` returns zero matches. (d) `git grep -F '0012-design-intent-not-means' .` returns ≥1 match (at minimum the file itself, plus any updated cross-refs)."
+
+implementation_notes:
+  - "Snapshot-bridge code in drive SKILL.md is concentrated in §1.1 + §3.1 (bash blocks that pipe `bd show --json` into a markdown render). Both blocks delete cleanly; subsequent sections renumber by -1. The Worked example block at ~lines 787-790 + ~802-803 also writes/refers to a snapshot — must be cleaned up too (covered by ac-01)."
+  - "Drive Stage 1 brief example today: `Run /orb:review-spec on the spec snapshot at <absolute snapshot path>. The snapshot is the authoritative spec for this review.` Replace with: `Run /orb:review-spec on bead <bead-id>. Read the bead via 'bd show <bead-id> --json' and parse ACs via 'plugins/orb/scripts/parse-acceptance.sh acs <bead-id>'.` Use `<bead-id>` placeholder verbatim — not `$BEAD`. The drive SKILL.md elsewhere uses `$BEAD` (Worked example) but the brief's literal-string assertion is stable on `<bead-id>`."
+  - "Drive Stage 3 brief example today: `Run /orb:review-pr against the current branch. Implementation diff is 'git diff main...HEAD' on <branch_name>. Spec snapshot for AC cross-reference is at <absolute snapshot path>.` Replace the snapshot reference with: `Bead acceptance field is at bead-id <bead-id>; read via 'bd show <bead-id> --json' and 'parse-acceptance.sh acs <bead-id>'.`"
+  - "review-spec/SKILL.md §1 today reads `If a spec file path is provided via $ARGUMENTS: read it / If not: look for the most recent .orbit/specs/*/spec.yaml file / Also read the associated interview file (from metadata.interview_ref)`. Rewrite to: `If a bead-id is provided via $ARGUMENTS: use it / If not: report 'no bead-id provided — review-spec requires a bead-id under the bead-native substrate'. Run 'bd show <bead-id> --json' to read the bead's description and metadata. Run 'parse-acceptance.sh acs <bead-id>' to enumerate ACs as tab-separated tuples (ac-id, status, description, is_gate).` Rename the section header to `Gather the Bead`."
+  - "review-spec/SKILL.md §2 Pass 1 step 5 substrate update: rename the section header from `Gate-AC verification check` to `Gate-AC description check`. Body change: `For every AC whose ac_type: gate` → `For every AC where parse-acceptance.sh reports is_gate=1`. `the verification field must pass` → `the AC's description text must pass`. The three deterministic rules (non-empty, not-placeholder, ≥20 chars) and the placeholder-token set are byte-for-byte preserved."
+  - "review-pr/SKILL.md §2 today reads `Run git diff main...HEAD / Read the spec to understand what was intended / If progress.md exists alongside the spec, read it`. Rewrite to: `Run git diff main...HEAD / Read the bead via 'bd show <bead-id> --json' to understand what was intended / Run 'parse-acceptance.sh acs <bead-id>' to get current AC status (the bead acceptance field replaces progress.md as the implementer's tracker)`."
+  - "review-pr/SKILL.md §3 today instructs reading `metadata.test_prefix` and exempting non-`code` ACs. Rewrite to: `Search for bare 'ac<NN>' test names. Cross-reference each AC against discovered tests. Report coverage in the standard table; in the honest-assessment paragraph, contextualise which uncovered ACs are doc/gate-style (judged from each AC's description) vs genuine test gaps`."
+  - "Test fixture for ac-08: `plugins/orb/scripts/tests/test-gate-ac-verification.sh` — bash script that pipes a synthetic acceptance field into `parse-acceptance.sh acs --stdin`, runs the three deterministic rules in awk/python against `is_gate=1` rows, and asserts pass/fail per AC. The fixture is self-contained (no bd dependency) and serves as the regression guard for the parser+rule semantics that the review-spec skill executes conceptually."
+  - "Test fixture for ac-11: `plugins/orb/scripts/tests/test-promote-gate-propagation.sh` — bash script that runs `promote.sh --dry-run` against a synthetic card YAML containing two scenarios (one with `gate: true`, one without) and asserts the dry-run AC output has `[gate]` on the right line. Self-contained (uses `--dry-run` so no `bd create` happens)."
+  - "MADR 0013 sits next to 0011-beads-execution-layer (its parent) and references it as `informs 0011`. The renumbered 0012-design-intent-not-means stays unchanged in content. Decision 0002's frontmatter `status:` field updates to `superseded by 0013`."
+  - "promote.sh AC-line generation today: `lines.append(f'- [ ] {ac_id}: {name} — {then_clause}')`. Updated for ac-11: read each scenario's `gate` field; if truthy, emit `f'- [ ] {ac_id} [gate]: {name} — {then_clause}'`. The card-loader python block already extracts scenario fields by name — add `gate` to the per-scenario dict alongside name/given/when/then, defaulting to False."
+  - "Cross-reference audit for ac-01 (post-renumber): grep `§1\\.[0-9]` and `§3\\.[0-9]` in drive SKILL.md after the deletes. The known stale ones flagged by the cycle-1 review: §1.5 → §1.4, §1.7 → §1.6 (in §1.6 budget gate references), §1.6 → §1.5, §1.4 → §1.3, §1.3 → §1.2, §3.3 → §3.2, §11 Resumption table cell `(idempotent §1.3 check ...)` → §1.2."
+  - "Cycle-history bleed acknowledgement (constraint #8): the substrate cost is that on a cycle-2 review-spec re-fork, the bead's `[x]` marks from a prior implement pass would be visible. Under the canonical drive flow this is rare (review-spec runs before implement) but possible after a NO-GO re-entry. Recorded in MADR 0013 consequences. No additional skill code is required; constraint and MADR carry the documentation."
+  - "The drive cached version (`~/.claude/plugins/cache/orbit/orb/0.3.3/skills/drive/SKILL.md`) is NOT touched — it's the published 0.3.3. All edits are to the source repo at `plugins/orb/skills/...`. The next `/orb:release` (orbit 0.4.0 cut) propagates the changes to the cache."
+
+ontology_schema:
+  name: "BeadNativeReviewSubstrate"
+  description: "The substrate-mapping contract between spec.yaml conventions and bead acceptance-field conventions for cold-fork review skills, plus the gate-propagation pipeline from card to bead."
+  fields:
+    - name: "bead_id"
+      type: "string"
+      description: "The beads identifier (e.g. `orbit-6da.4`) passed to the review skill in place of a spec.yaml file path."
+    - name: "ac_description"
+      type: "string"
+      description: "The AC text after the `ac-NN [gate]:` prefix in the bead acceptance field. Replaces spec.yaml's `description` + `verification` fields under bead substrate."
+    - name: "is_gate"
+      type: "boolean"
+      description: "Parser-emitted flag (column 4 of `parse-acceptance.sh acs` output). Replaces spec.yaml's `ac_type: gate`. Sourced from the `[gate]` marker in the AC line, which is sourced from card scenario `gate: true` via promote.sh."
+    - name: "scenario_gate"
+      type: "boolean"
+      description: "New optional field on card scenarios (default false). When true, promote.sh emits `[gate]` on the resulting AC line. Closes the end-to-end gate semantics from card to bead."
+    - name: "verdict_path"
+      type: "path"
+      description: "Absolute path to the verdict file. For both forked and inline invocations: `orbit/reviews/<bead-id>/review-{spec,pr}-<date>[-vN].md`. The Agent brief's path takes precedence over the inline default when running forked."
+
+evaluation_principles:
+  - principle: "Fork purity — the brief is minimal, conversation context excluded"
+    weight: 0.25
+  - principle: "Substrate parity end-to-end — gate-AC and AC-coverage rules fire under the new substrate, AND gate semantics propagate from card scenario through promote.sh to bead AC"
+    weight: 0.30
+  - principle: "Hard cutover — no dual-mode code paths, snapshot bridge removed pipeline-wide (drive sections, Worked example, REQUEST_CHANGES return paths, Completion PR-body, inline-mode defaults)"
+    weight: 0.25
+  - principle: "Contract preservation — drive's verdict-line regex parser is not modified; verdict-file path contract holds for forked AND inline modes"
+    weight: 0.20
+
+exit_conditions:
+  - "All thirteen ACs check off (parse-acceptance.sh next-ac returns empty)."
+  - "Both test scripts (ac-08 and ac-11(d)) exit 0."
+  - "MADR 0013 is committed and decision 0002's status updated."
+  - "Card 0016 specs array updated, maturity flipped to `active`, and at least one scenario annotated with `gate: true`."
+
+metadata:
+  version: "1.1"
+  test_prefix: "bnr"
+  timestamp: "2026-05-01T05:45:00Z"
+  ambiguity_score: 0.10
+  interview_ref: ".orbit/specs/2026-05-01-bead-native-cold-fork-reviews/interview.md"
+  cycle_1_review_ref: ".orbit/specs/2026-05-01-bead-native-cold-fork-reviews/review-spec-2026-05-01.md"
+  cycle_1_findings_addressed: "HIGH-1 substrate parity (ac-11); MEDIUM 0011 collision (ac-13, ac-09 renumber); MEDIUM Worked example + cross-refs (ac-01 widened); MEDIUM REQUEST_CHANGES return paths (ac-01); MEDIUM PR-body line (ac-07); MEDIUM inline-mode path (ac-12); MEDIUM cycle-history bleed (constraint #8 + MADR consequences); LOW provenance loss (MADR consequences via ac-09); LOW $BEAD vs <bead-id> (implementation_notes + ac-02/ac-03 verification (e)); LOW resumption table cross-ref (ac-01); LOW ac-04 fragility (positive header assertion added); LOW decision 0002 supersession (ac-09)."

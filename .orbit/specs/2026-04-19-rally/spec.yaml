@@ -1,0 +1,241 @@
+goal: "Deliver a /orb:rally skill that coordinates multiple independent cards through the orbit pipeline with fewer human touchpoints per card than serial /orb:drive invocations"
+
+constraints:
+  - "Rally is a separate skill from drive (decision 0003) — rally orchestrates, drive's stage logic handles individual cards"
+  - "Qualification is human — the agent proposes a rally from a goal string, the author approves or edits the card list before anything starts"
+  - "Design stage uses queued decision packs — N sub-agents analyse cards in parallel and produce options/trade-offs/recommendations, the lead agent presents all decisions for author approval, then sub-agents produce interviews from approved decisions"
+  - "rally.yaml in .orbit/specs/rally.yaml is the single source of orchestration state — written at phase transitions, not mid-phase"
+  - "One active rally at a time — if .orbit/specs/rally.yaml exists with a non-complete phase, a new rally is refused"
+  - "Single-strike NO-GO — a card that fails any review is parked immediately, no iteration retries within the rally"
+  - "Disjointness check runs at consolidated design review — definitive symbol/file scan using actual design outputs, not heuristic guesses. The author's approval at the proposal gate is the only pre-design independence check."
+  - "Stacked PRs for serial implementation order — each card's PR targets the previous card's branch, skipping parked cards"
+  - "Parallel implementation uses individual PRs against main with batched diff review"
+  - "rally.yaml is validated on read — malformed files produce a clear error, not silent corruption"
+  - "When rally.yaml is active, session-context.sh presents rally state as primary and subordinates individual drive state displays"
+  - "Task list (TaskCreate/TaskUpdate) provides live in-session visibility; rally.yaml provides durable cross-session state — both are maintained"
+  - "Directory consolidation (orbit/ directory) is out of scope — rally uses current paths"
+  - "Design skill upgrade (executive-ready decision packs) is a prerequisite — separate card"
+
+acceptance_criteria:
+  # --- Invocation & proposal ---
+  - id: ac-01
+    ac_type: code
+    description: "/orb:rally accepts a goal string, scans .orbit/cards/ for cards whose goal, feature, or scenarios relate to the stated goal, and presents a numbered rally proposal with per-card rationale"
+    verification: "Invoke /orb:rally with a goal string in a repo with 5+ cards. Verify the proposal lists relevant cards with rationale. Author gate (ac-02) provides the human check on relevance."
+
+  - id: ac-02
+    ac_type: gate
+    description: "The rally proposal is an interactive gate — the author can approve, remove cards, add cards, or reject the rally before any work begins"
+    verification: "Invoke /orb:rally, modify the proposed card list, verify the rally proceeds with the modified list."
+
+  # --- State initialisation ---
+  - id: ac-03
+    ac_type: code
+    description: "rally.yaml is created in .orbit/specs/ after approval with all required fields from the ontology schema. If .orbit/specs/rally.yaml already exists with a non-complete phase, the rally is refused with a message naming the active rally."
+    verification: "Approve a rally and verify rally.yaml exists at .orbit/specs/rally.yaml with all required fields. Attempt a second rally while the first is active — verify refusal."
+
+  - id: ac-04
+    ac_type: code
+    description: "rally.yaml is validated on read — missing required fields, invalid phase values, or malformed YAML produce a clear error message naming the problem, not silent misbehaviour"
+    verification: "Corrupt rally.yaml (remove a required field). Invoke /orb:rally. Verify it reports the specific validation error."
+
+  # --- Design stage: queued decision packs ---
+  - id: ac-05
+    ac_type: code
+    description: "N design sub-agents are launched in parallel, each briefed with: the card path, the canonical output path (.orbit/specs/YYYY-MM-DD-<slug>/interview.md), and instructions to analyse the card and codebase and produce a decision pack (4-6 decisions, each with options, trade-offs, and a recommendation)"
+    verification: "Rally 3 cards. Verify 3 sub-agents are launched. Verify each agent's brief names the correct output path and requests decision packs, not raw questions."
+
+  - id: ac-06
+    ac_type: code
+    description: "Each design sub-agent's path discipline is trust + post-verify (refined in .orbit/specs/2026-04-19-rally-subagent-model/spec.yaml v1.3, constraint #9 and ac-04). The brief names the assigned .orbit/specs/<card-slug>/ directory as the write target; Claude Code's tools allow-list is NOT the enforcement mechanism. On return, the lead verifies via three primitives: self-report (sub-agent returns a JSON file list), artefact assertion (expected output exists under the assigned dir), and pre-vs-post `git status --porcelain` snapshot diff in the main checkout (unexpected new entries outside the assigned dir and not on the fixed lead-owned allowlist reject the sub-agent's output)."
+    verification: "Simulate a design sub-agent that writes an extra file at plugins/orb/scratch.md outside its assigned spec_dir. Verify the pre-vs-post snapshot diff catches the entry on the lead's return. Verify unexpected writes are detected on return via self-report + artefact assertion + snapshot diff, and the sub-agent output is rejected. First violation triggers a pre-qualification re-brief (not a rally-level strike); second violation parks the card."
+
+  - id: ac-07
+    ac_type: gate
+    description: "After all sub-agents return, the lead agent presents all decision packs grouped by card — each decision shows options, trade-offs, and recommendation. The author approves or overrides each decision."
+    verification: "Complete sub-agent analysis for 3 cards. Verify the lead presents decisions grouped by card. Approve some recommendations, override others. Verify the overrides are recorded."
+
+  - id: ac-08
+    ac_type: code
+    description: "After the author approves decisions, sub-agents resume (or the lead agent produces) interview.md files at each card's canonical spec path, reflecting the approved decisions"
+    verification: "Approve all decisions in a 2-card rally. Verify interview.md exists at both expected paths and reflects the approved decisions, not the original recommendations where overridden."
+
+  # --- Consolidated design review ---
+  - id: ac-09
+    ac_type: gate
+    description: "Consolidated design review presents all N designs in a single session — the author reviews cross-cutting concerns, shared types/traits, and execution order dependencies"
+    verification: "Complete design for 3 cards. Verify the consolidated review surfaces all designs and highlights any shared symbols."
+
+  - id: ac-10
+    ac_type: code
+    description: "Definitive disjointness check runs at consolidated design review — extracts file paths and symbol names from each design, computes the intersection, and reports shared items. Non-empty intersection gates implementation ordering (not advisory)."
+    verification: "Rally 3 cards where two designs name the same trait. Verify the definitive check identifies the shared trait and reports it. Verify the lead proposes a serial order before proceeding."
+
+  - id: ac-11
+    ac_type: code
+    description: "When shared symbols are found, the lead agent proposes a serial implementation order with rationale and updates rally.yaml with implementation_order and order_rationale fields. Author can approve or modify the order."
+    verification: "Trigger shared-symbol detection. Verify rally.yaml is updated with the proposed order and rationale. Modify the order — verify the change is persisted."
+
+  - id: ac-12
+    ac_type: code
+    description: "When no shared symbols are found, implementation proceeds in parallel — rally.yaml records implementation_order as null with order_rationale explaining why parallel is safe"
+    verification: "Rally 2 cards with fully disjoint designs. Verify rally.yaml records null order with rationale."
+
+  # --- Implementation ---
+  - id: ac-13
+    ac_type: code
+    description: "Serial implementation: cards are implemented in the declared order, each following drive's full stage logic (spec -> review-spec -> implement -> review-pr). Card N+1 begins only after card N completes or is parked."
+    verification: "Complete a 2-card serial rally. Verify card 1 completes all stages before card 2 begins."
+
+  - id: ac-14
+    ac_type: code
+    description: "Parallel implementation: cards are implemented concurrently as sub-agents, each in its own git worktree, each following drive's full stage logic independently"
+    verification: "Complete a 2-card parallel rally. Verify both cards are implemented concurrently in separate worktrees."
+
+  - id: ac-15
+    ac_type: code
+    description: "A NO-GO verdict at any stage parks the card immediately — rally.yaml records the card's status as 'parked' with the constraint, and the rally continues with remaining cards"
+    verification: "Trigger a NO-GO on one card in a 3-card rally. Verify the card is parked in rally.yaml with its constraint. Verify remaining cards continue."
+
+  # --- Assurance ---
+  - id: ac-16
+    ac_type: code
+    description: "Serial rallies produce stacked PRs — each card's PR targets the previous non-parked card's branch, creating a reviewable stack. When a card in the middle is parked, subsequent PRs target the last non-parked card's branch."
+    verification: "Complete a 3-card serial rally where card 2 is parked. Verify card 1's PR targets main, card 3's PR targets card 1's branch (not card 2's)."
+
+  - id: ac-17
+    ac_type: code
+    description: "Parallel rallies produce individual PRs against main, presented as a batched diff review — the lead agent presents all N PRs for author review in one session with a summary of each"
+    verification: "Complete a 2-card parallel rally. Verify 2 PRs exist, both targeting main. Verify the lead presents them together with per-PR summaries."
+
+  # --- Visibility & state ---
+  - id: ac-18
+    ac_type: code
+    description: "The lead agent creates a task per card using TaskCreate with dependencies reflecting the implementation order. Task status is updated as cards progress through stages, providing live in-session visibility."
+    verification: "Start a 3-card serial rally. Verify TaskList shows 3 tasks with dependency chain. Verify task statuses update as cards progress."
+
+  - id: ac-19
+    ac_type: code
+    description: "rally.yaml is updated at every phase transition (proposing -> approved -> designing -> design-review -> implementing -> complete) and after every per-card status change"
+    verification: "Run a rally and inspect rally.yaml after each phase. Verify statuses are current at each transition."
+
+  - id: ac-20
+    ac_type: code
+    description: "rally.yaml tracks per-card status at the rally coordination level (proposed, designing, designed, implementing, complete, parked). Per-card drive sub-stage (spec, review-spec, implement, review-pr) is tracked by each card's own drive.yaml."
+    verification: "During a rally, verify rally.yaml shows the coordination status and each card's drive.yaml shows the sub-stage. Verify resumption reads both layers."
+
+  - id: ac-21
+    ac_type: code
+    description: "Session resumption: when /orb:rally is invoked and .orbit/specs/rally.yaml exists, the skill validates it, reads the phase and per-card statuses, and resumes from the correct point. If phase is 'complete', it reports the rally as finished and offers to start a new one (archiving the old rally.yaml)."
+    verification: "Start a rally, kill the session after design completes. Restart and invoke /orb:rally. Verify resumption from the correct phase. Also test with a completed rally — verify it offers a new rally."
+
+  - id: ac-22
+    ac_type: code
+    description: "session-context.sh detects .orbit/specs/rally.yaml and surfaces rally state at session start — goal, card count, current phase, per-card statuses, and any parked cards. When rally.yaml is active, individual drive.yaml states are subordinated (shown as sub-items, not independent status lines)."
+    verification: "Start a new session with an active rally.yaml. Verify rally state is shown as primary context. Verify individual drive states appear as sub-items under their card."
+
+  # --- Completion ---
+  - id: ac-23
+    ac_type: code
+    description: "Rally completion summary reports: cards completed, cards parked (with constraints), implementation order used, links to all PRs, and rally duration (started to completed timestamps)"
+    verification: "Complete a rally with one parked card. Verify the summary includes all fields including duration."
+
+  - id: ac-24
+    ac_type: code
+    description: "On completion, rally.yaml phase is set to 'complete' with a completed timestamp. The file remains at .orbit/specs/rally.yaml until a new rally archives it."
+    verification: "Complete a rally. Verify rally.yaml has phase: complete and a completed timestamp. Start a new rally — verify the old rally.yaml is archived (moved or renamed)."
+
+ontology_schema:
+  name: "RallyState"
+  description: "Durable orchestration state for a multi-card rally, persisted as .orbit/specs/rally.yaml"
+  fields:
+    - name: "rally"
+      type: "string"
+      description: "The goal string the author provided at invocation"
+    - name: "cards"
+      type: "array"
+      description: "Ordered list of cards in the rally, each with path, status, spec_dir, branch, and optional parked_constraint"
+    - name: "cards[].path"
+      type: "string"
+      description: "Path to the card YAML file (e.g. .orbit/cards/0015-execution-resilience.yaml)"
+    - name: "cards[].status"
+      type: "string"
+      description: "Per-card coordination status: proposed | designing | designed | implementing | complete | parked"
+    - name: "cards[].spec_dir"
+      type: "string"
+      description: "Path to the card's spec directory (e.g. .orbit/specs/2026-04-19-execution-resilience/)"
+    - name: "cards[].branch"
+      type: "string"
+      description: "Git branch name for this card's implementation (used for stacked PRs or worktree isolation)"
+    - name: "cards[].worktree"
+      type: "string"
+      description: "Added by .orbit/specs/2026-04-19-rally-subagent-model/spec.yaml v1.3 ac-11. Explicit sentinels: the literal string 'main' for serial cards once launched (the lead's main checkout), an absolute path for parallel cards once launched, null only before launch. Used by the lead on resumption to locate each card's drive.yaml via the path-resolution rule: worktree=='main' → <main-checkout-root>/specs/<spec_dir>/drive.yaml (no worktree prefix); worktree==<absolute> → <worktree>/specs/<spec_dir>/drive.yaml. null-after-launch is a validation error."
+    - name: "cards[].parked_constraint"
+      type: "string"
+      description: "If status is parked, the one-line constraint from the NO-GO verdict. For drive-full escalations inside a parallel sub-agent (per subagent-model ac-14), the constraint is prefixed with a bracketed label (e.g. '[budget] ...', '[review_converged] ...')."
+    - name: "implementation_order"
+      type: "array"
+      description: "Ordered list of card indices for serial implementation, or null for parallel"
+    - name: "order_rationale"
+      type: "string"
+      description: "Why this order was chosen — shared symbols, trait dependencies, or why parallel is safe"
+    - name: "phase"
+      type: "string"
+      description: "Rally-level phase: proposing | approved | designing | design-review | implementing | complete"
+    - name: "autonomy"
+      type: "string"
+      description: "Autonomy level: guided | supervised"
+    - name: "started"
+      type: "string"
+      description: "ISO-8601 timestamp of rally creation"
+    - name: "completed"
+      type: "string"
+      description: "ISO-8601 timestamp of rally completion (null while in progress)"
+
+evaluation_principles:
+  - principle: "Interaction quality — every human touchpoint presents maximum clarity based on the best available evidence. Agent work between gates exists to make the next gate sharper, not just faster."
+    weight: 0.30
+  - principle: "Throughput — fewer human touchpoints per card than serial drives"
+    weight: 0.25
+  - principle: "Resilience — session death, single-card failure, and parallel-to-serial transitions are handled gracefully"
+    weight: 0.20
+  - principle: "Artefact integrity — all outputs land at prescribed paths, rally.yaml is always current, validation catches corruption"
+    weight: 0.15
+  - principle: "Transparency — the author can see rally state via task list (live) and rally.yaml (durable) at every point"
+    weight: 0.10
+
+exit_conditions:
+  - "All cards in the rally reach 'complete' or 'parked' status"
+  - "The rally completion summary has been presented to the author"
+  - "All PRs (stacked or individual) have been created and linked"
+  - "rally.yaml phase is set to 'complete' with a completed timestamp"
+
+metadata:
+  version: "2.0"
+  test_prefix: "rally"
+  timestamp: "2026-04-19T16:00:00Z"
+  ambiguity_score: 0.08
+  interview_ref: ".orbit/specs/2026-04-19-rally/interview.md"
+  review_ref: ".orbit/specs/2026-04-19-rally/review-spec-2026-04-19.md"
+  review_changes: |
+    v2.0 addresses all 15 findings from the spec review:
+    HIGH: PreToolUse hook resolved — trust + post-verify with three-primitive snapshot-diff verification for design sub-agents (refined in .orbit/specs/2026-04-19-rally-subagent-model/spec.yaml v1.3 constraint #9 and ac-04), worktree isolation for parallel implementation (ac-06, ac-14)
+    HIGH: Design sub-agent interactivity resolved — queued decision packs model, sub-agents analyse and recommend, author approves (ac-05, ac-07, ac-08)
+    HIGH: Open questions resolved — all three now explicit in constraints
+    MEDIUM: Path constraint verification made functional, not observational (ac-06)
+    MEDIUM: One-rally-at-a-time constraint added, completed state handling specified (ac-03, ac-21, ac-24)
+    MEDIUM: Card scenario updated to reflect single-stage disjointness (post-design only)
+    MEDIUM: rally.yaml lifecycle specified — completion, archival on new rally (ac-24)
+    MEDIUM: Two-layer state model clarified — rally.yaml coordination, drive.yaml sub-stages (ac-20)
+    MEDIUM: Stacked PR gap-handling for parked cards specified (ac-16)
+    MEDIUM: Parallel implementation fully specified — worktree isolation, individual PRs, batched diff review (ac-12, ac-14, ac-17)
+    LOW: AC-01 verification acknowledges LLM-driven selection with human gate as check
+    LOW: completed timestamp added to ontology schema
+    LOW: session-context priority specified — rally primary, drive subordinated (ac-22)
+    LOW: rally.yaml validation on read added (ac-04)
+    LOW: Rollback is straightforward — rally is additive (new skill, new state file). Remove the skill and clean up rally.yaml.
+    Post-review design changes:
+    Design stage changed from parallel self-answering to queued decision packs (author chose this over sequential interactive)
+    Lightweight disjointness pre-flight dropped — author approval gate is sufficient pre-design check, definitive post-design scan uses best available evidence
+    Task list (TaskCreate/TaskUpdate) added for live in-session visibility (ac-18)
+    Design skill upgrade (executive-ready decision packs) noted as prerequisite — separate card

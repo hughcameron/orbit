@@ -1,0 +1,74 @@
+feature: Drive — autonomous spec implementation
+as_a: developer
+i_want: to hand a spec (output of tabletop) to an agent and have it drive through implementation against the pre-flight contract — opening session-scoped tasks, appending notes, handing off to review at close
+so_that: I collaborate on cards and tabletops while agents handle the implementation pipeline within pre-committed halt and escalation conditions
+goal: drives consume spec contracts and produce shipped work plus a check-in summary, autonomously within pre-committed halt and escalation boundaries; sessions and machines do not interrupt progress
+maturity: planned
+scenarios:
+- name: Drive consumes a spec contract
+  given: a spec with values, trade-offs, ACs, halt conditions, and escalation triggers (output of tabletop)
+  when: I invoke /orb:drive on the spec
+  then: the agent reads the contract, opens tasks decomposing the ACs, and begins implementation autonomously within the contract
+  gate: true
+- name: Tasks track sub-spec progress
+  given: a drive in progress on a substantive AC
+  when: the agent decomposes work
+  then: it calls orbit task.open / claim / update / done for each sub-step; <id>.tasks.jsonl is the persisted TaskList
+  gate: false
+- name: Notes record events
+  given: an agent encounters a noteworthy state during the drive
+  when: it logs the observation
+  then: it appends to <id>.notes.jsonl with auto-timestamp; tasks (intentions with state) and notes (events without state) are kept distinct
+  gate: false
+- name: Mid-run rule applies
+  given: the agent encounters an unexpected state
+  when: the state is not covered by a pre-committed branch in the spec
+  then: it appends a note and continues — does not ask, does not improvise; halts only on conditions named in the spec's halt list
+  gate: true
+- name: Halt conditions trigger graceful stop
+  given: a halt condition from the spec's pre-flight contract is met
+  when: the drive detects it
+  then: the agent stops, surfaces the halt with the named revert path, and escalates to me with a state snapshot
+  gate: false
+- name: Escalation triggers fire with proposed actions
+  given: an escalation trigger from the spec is hit
+  when: the drive detects it
+  then: the agent produces an ask with the state snapshot and proposed action specified in the trigger — never an open-ended "I am confused"
+  gate: false
+- name: Drive state persists across sessions
+  given: a drive in progress that was interrupted (session reset, machine change)
+  when: a new session starts on the same spec
+  then: orbit prime surfaces the open tasks and recent notes; the agent resumes from where it stopped
+  gate: false
+- name: Drive types vary by need
+  given: a spec whose AC fits a non-standard work shape
+  when: the drive type is chosen
+  then: code drive (default), test drive (tests-first), doc drive (documentation), research drive (notes/memo output), or review drive (cold-fork verdict on another drive's output) is selected per the spec's pre-flight intent
+  gate: false
+- name: Drive close hands off to review
+  given: a drive whose tasks are all done and all ACs are met
+  when: the drive closes
+  then: the close-comment captures the check-in summary (what shipped, what's open, what needs Hugh); review (per-drive or cold-fork) takes the verdict
+  gate: false
+- name: Default autonomy follows the spec contract
+  given: a spec with halt conditions and escalation triggers pre-committed
+  when: /orb:drive is invoked
+  then: autonomy level is implicit in the contract — strict halts and narrow escalations enforce the boundary; no separate autonomy parameter is needed
+  gate: false
+specs:
+- .orbit/specs/2026-04-15-drive/spec.yaml
+- .orbit/specs/2026-04-20-drive-live-visibility/spec.yaml
+relations:
+- card: 0019-tabletop
+  type: depends-on
+  reason: drives consume the pre-flight contract that tabletop produces — without the contract, the drive has no halt or escalation discipline
+- card: 0021-tasks
+  type: depends-on
+  reason: tasks are how a drive tracks sub-spec progress; the persisted TaskList equivalent
+- card: 0006-rally
+  type: feeds
+  reason: rallies orchestrate parallel drives — each drive is one fan-out track
+references:
+- '.orbit/cards/memos/2026-05-06-rally-fan-out.md: drive types, the mid-run rule, and the contract-consumption pattern'
+- 'Prior experience: disposition embedded in agent definition + CLAUDE.md proved effective for focus and throughput'
+notes: []

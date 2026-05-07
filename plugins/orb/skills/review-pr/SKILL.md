@@ -12,27 +12,27 @@ Verify an implementation before merge. This skill runs in a **forked context** �
 ## Usage
 
 ```
-/orb:review-pr <bead-id> [branch_or_pr]
+/orb:review-pr <spec-id> [branch_or_pr]
 ```
 
-The skill takes a beads identifier — the bead's acceptance field is the implementation contract. The branch/PR argument is optional; if omitted the current branch is used.
+The skill takes an orbit-state spec id — the spec's `acceptance_criteria` are the implementation contract. The branch/PR argument is optional; if omitted the current branch is used.
 
 ## Instructions
 
 ### 1. Identify What to Review
 
-- The bead-id is required via $ARGUMENTS. If not provided, report `no bead-id provided — review-pr requires a bead-id under the bead-native substrate` and stop.
-- If a branch name or PR number is provided alongside the bead-id: use it.
+- The spec-id is required via $ARGUMENTS. If not provided, report `no spec-id provided — review-pr requires a spec-id under the orbit-state substrate` and stop.
+- If a branch name or PR number is provided alongside the spec-id: use it.
 - If not: use the current branch or most recent PR.
 - Gather the diff: `git diff main...HEAD`.
 
 ### 2. Phase 1: Read the Diff
 
 1. Run `git diff main...HEAD` to see all changes.
-2. Read the bead via `bd show <bead-id> --json` to understand what was intended — the description carries the goal and any prose constraints.
-3. Run `plugins/orb/scripts/parse-acceptance.sh acs <bead-id>` to enumerate the AC list with current check status. The bead acceptance field replaces the earlier `progress.md` tracker — `[x]` marks are the implementer's self-reported AC completions, set by `/orb:implement` via `parse-acceptance.sh check`.
+2. Read the spec via `orbit --json spec show <spec-id>` to understand what was intended — the `goal` field carries the goal and the `acceptance_criteria` array enumerates the contract.
+3. Run `plugins/orb/scripts/orbit-acceptance.sh acs <spec-id>` to enumerate the AC list with current check status. The spec's `acceptance_criteria` field replaces the earlier `progress.md` tracker — `[x]` marks are the implementer's self-reported AC completions, set by `/orb:implement` via `orbit-acceptance.sh check` (which calls `orbit spec update --ac-check`).
 4. Identify which acceptance criteria this implementation claims to satisfy from the parsed `[x]` rows.
-5. Run a keyword scan (see `/orb:keyword-scan`) against `orbit/decisions/` using terms from the bead's description goal and any constraint prose. If relevant decisions exist, verify the implementation respects them. Flag violations as findings.
+5. Run a keyword scan (see `/orb:keyword-scan`) against `.orbit/choices/` using terms from the spec's `goal` and any prose in the linked card files (`orbit card show <id>`). If relevant decisions exist, verify the implementation respects them. Flag violations as findings.
 
 ### 3. Phase 2: Run Tests + AC Coverage Check
 
@@ -54,7 +54,7 @@ Cross-language patterns to search:
 - TypeScript: `test('ac<NN>` or `it('ac<NN>`
 - Bash/general: grep for `ac<NN>` or `ac-<NN>` in test directories
 
-In the honest-assessment paragraph, contextualise which uncovered ACs are doc/gate-style (judged from each AC's description text — e.g. an AC that names a documentation deliverable or a sequencing gate, not a code change) versus genuine test gaps. The bead AC carries description text and a gate flag only; the reviewer reads the description and judges whether a missing test is a real gap or an exempt non-code AC.
+In the honest-assessment paragraph, contextualise which uncovered ACs are doc/gate-style (judged from each AC's description text — e.g. an AC that names a documentation deliverable or a sequencing gate, not a code change) versus genuine test gaps. The orbit-state spec carries description text and a `gate` flag per AC; the reviewer reads the description and judges whether a missing test is a real gap or an exempt non-code AC.
 
 ### 4. Phase 3: Environment Simulation
 
@@ -78,7 +78,7 @@ For changes that touch deployment, infrastructure, scripts, or cron:
 **Date:** <today>
 **Reviewer:** Context-separated agent (fresh session)
 **Branch:** <branch>
-**Bead:** <bead-id>
+**Spec:** <spec-id>
 **Verdict:** APPROVE / REQUEST_CHANGES / BLOCK
 
 ---
@@ -118,7 +118,7 @@ The header line `**Verdict:** APPROVE | REQUEST_CHANGES | BLOCK` is a **contract
 
 ### Output path (invoked inline vs forked)
 
-- **Inline invocation** (a human running `/orb:review-pr <bead-id>` directly): save to the default path `orbit/reviews/<bead-id>/review-pr-<date>.md`.
+- **Inline invocation** (a human running `/orb:review-pr <spec-id>` directly): save to the default path `.orbit/specs/<spec-folder>/review-pr-<date>.md` if the spec is folder-shaped, otherwise `.orbit/reviews/<spec-id>/review-pr-<date>.md`.
 - **Forked-Agent invocation** (e.g. launched by `/orb:drive`): the invoking agent's brief will supply an explicit output path — **use the brief's path verbatim**. It takes precedence over the default. Drive uses cycle-ordinal suffixes (`-v2.md`, `-v3.md`) to disambiguate REQUEST_CHANGES cycles; writing to the default path when the brief specified a cycle-specific path will cause drive to report the review as missing and trigger a retry.
 
 ## Critical Rules

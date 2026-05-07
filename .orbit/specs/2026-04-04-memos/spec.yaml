@@ -1,0 +1,86 @@
+goal: >
+  Provide a lightweight capture mechanism for rough ideas that aren't yet
+  structured enough for a full feature card, keeping them discoverable within
+  the orbit workflow pipeline.
+
+constraints:
+  - Memos MUST be freeform markdown — no required structure or frontmatter
+  - Memos live in .orbit/cards/memos/ and follow YYYY-MM-DD-slug.md naming
+  - The SessionStart hook MUST surface outstanding memos (those not yet
+    referenced by any card)
+  - Memos are never moved or deleted by automation — they stay in place
+    permanently, with git history as the audit trail
+  - Distilled memos are identified by checking whether any card's references
+    field points to them
+
+acceptance_criteria:
+  - id: ac-01
+    description: >
+      A memo saved as .orbit/cards/memos/YYYY-MM-DD-slug.md is valid with any
+      markdown content and no required structure.
+    verification: >
+      Create a memo with only a single sentence. Verify no validation errors
+      and the file is discoverable by the SessionStart hook.
+
+  - id: ac-02
+    description: >
+      The SessionStart hook reports the count of outstanding memos (those
+      not referenced by any card's references field).
+    verification: >
+      Create 3 memos. Create 1 card that references one of them. Start a
+      session. Verify the hook reports "2 outstanding memo(s)".
+
+  - id: ac-03
+    description: >
+      The SessionStart hook output includes memo filenames so the user knows
+      which ideas are pending.
+    verification: >
+      Create 2 memos. Start a session. Verify both filenames appear in the
+      session context output.
+
+  - id: ac-04
+    description: >
+      When a memo is distilled into a card (via /orb:distill), the resulting
+      card's references field includes the path to the source memo.
+    verification: >
+      Distill a memo into a card. Verify the card YAML contains a references
+      entry pointing to the memo's path.
+
+  - id: ac-05
+    description: >
+      After a memo is referenced by a card, the SessionStart hook no longer
+      counts it as outstanding.
+    verification: >
+      Create a memo, distill it, verify the hook count decreases by 1.
+
+deliverables:
+  - path: .orbit/cards/memos/.gitkeep
+    description: >
+      Create the memos directory with a .gitkeep so it exists in fresh clones.
+
+  - path: plugins/orb/scripts/session-context.sh
+    description: >
+      Extend the SessionStart script to scan .orbit/cards/memos/ for .md files,
+      cross-reference against .orbit/cards/*.yaml references fields, and report
+      outstanding memo count and filenames.
+
+evaluation_principles:
+  - principle: "Zero friction — capturing an idea should be instant"
+    weight: 0.4
+  - principle: "Discoverability — memos must surface automatically"
+    weight: 0.35
+  - principle: "Pipeline integration — memos feed into distill and cards"
+    weight: 0.25
+
+exit_conditions:
+  - All 5 ACs pass verification
+  - session-context.sh correctly reports outstanding vs referenced memos
+  - A freeform one-line memo is valid and discoverable
+
+risk_tier: SKIP
+
+metadata:
+  version: "1.0"
+  timestamp: "2026-04-04T00:00:00Z"
+  ambiguity_score: 0.08
+  card_ref: ".orbit/cards/0001-memos.yaml"

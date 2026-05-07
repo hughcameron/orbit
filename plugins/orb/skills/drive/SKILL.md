@@ -1,43 +1,46 @@
 ---
 name: drive
-description: Drive a card or bead through the orbit pipeline — promote → review-spec → implement → review-pr — at a declared autonomy level
+description: Drive a card or spec through the orbit pipeline — promote → review-spec → implement → review-pr — at a declared autonomy level
 ---
 
 # /orb:drive
 
 Take a card and an autonomy level. Drive the pipeline (promote →
-review-spec → implement → review-pr) as a single session. State lives
-in beads; resumption reads bead metadata.
+review-spec → implement → review-pr) as a single session. Drive state
+lives in `.orbit/specs/<spec-folder>/drive.yaml`; resumption reads that
+file. AC state lives in the spec's `acceptance_criteria` field.
 
 ## Migration Note
 
-The previous `/orb:drive` orchestrated a Design → Spec → Review-Spec →
-Implement → Review-PR pipeline with state in `drive.yaml` and per-
-iteration spec dirs (`drive-v2`, `-v3`). All of that is now subsumed by
-beads:
+Earlier `/orb:drive` revisions tracked drive state via bd metadata
+fields (`drive_stage`, `drive_iteration`, `drive_review_*_cycle`,
+`drive_review_*_date`, `drive_card`, `drive_autonomy`) and used the bd
+dep graph for iteration chains. orbit-state v0.1's spec schema is
+strict (`deny_unknown_fields`) and does not carry a metadata bag, so
+drive state has moved into the named `drive.yaml` slot per the orbit
+vocabulary:
 
-- Design + Spec → `promote.sh card→bead` (one step, no interview/spec
-  artefacts produced by drive)
-- Drive state machine → bead `status` + bead metadata fields
-  (`drive_stage`, `drive_iteration`, `drive_review_*_cycle`,
-  `drive_review_*_date`, `drive_card`, `drive_autonomy`)
-- Per-iteration spec dirs → new bead per iteration linked by
-  `discovered-from` edge
-- File-presence stage detection → `drive_stage` metadata read on resume
-- `drive.yaml` resumption refusal → removed; drives initialised under
-  the prior version finish there or restart from the card
+| Old (bd metadata)           | New (orbit-state)                                                     |
+|-----------------------------|------------------------------------------------------------------------|
+| `metadata.drive_stage`      | `drive.yaml: stage`                                                    |
+| `metadata.drive_iteration`  | `drive.yaml: iteration`                                                |
+| `metadata.drive_review_*`   | `drive.yaml: review_spec_cycle`, `review_pr_cycle`, `review_*_date`    |
+| `metadata.drive_card`       | `drive.yaml: card_path`                                                |
+| `metadata.drive_autonomy`   | `drive.yaml: autonomy`                                                 |
+| Iteration dep chain         | `drive.yaml: iteration_history` array of prior spec ids + constraints  |
+| Constraint history          | `orbit memory remember "drive-<card-slug>-iter<N>: <constraint>"`      |
 
 Cold-fork review architecture (decision 0011 D2) is preserved — the
-fork reads the bead directly via `bd show <bead-id> --json` and
-`plugins/orb/scripts/parse-acceptance.sh acs <bead-id>`, with no
-intermediate spec.yaml or rendered snapshot artefact.
+fork reads the spec directly via `orbit spec show <spec-id> --json` and
+`plugins/orb/scripts/orbit-acceptance.sh acs <spec-id>`, with no
+intermediate rendered snapshot artefact.
 
 ## Usage
 
 ```
 /orb:drive <card_path> [full|guided|supervised]   # fresh drive from card
-/orb:drive <bead-id>                              # resume an in-flight drive
-/orb:drive                                        # resume the unique in-progress drive bead, if any
+/orb:drive <spec-id>                              # resume an in-flight drive
+/orb:drive                                        # resume the unique in-progress drive, if any
 ```
 
 ### Autonomy Levels
@@ -50,28 +53,39 @@ intermediate spec.yaml or rendered snapshot artefact.
 
 ## Input contract
 
-The skill operates on exactly one drive bead per session. Resolution
-proceeds in three branches:
+The skill operates on exactly one drive per session. Resolution proceeds
+in three branches:
 
 1. **Card path provided** (`/orb:drive <card_path> [autonomy]`). Run
    the pre-flight thin-card refusal (below), then promote (§Promote).
 
-2. **Bead-id provided** (`/orb:drive <bead-id>`). Validate that the
-   bead has `drive_stage` metadata; if not, halt and instruct the
+2. **Spec-id provided** (`/orb:drive <spec-id>`). Validate that the
+   spec has a `drive.yaml` sidecar; if not, halt and instruct the
    agent to re-invoke with a card path. Otherwise, resume from the
-   stage named in `drive_stage`.
+   stage named in `drive.yaml: stage`.
 
-3. **No argument** — query for in-progress drive beads:
+3. **No argument** — query for open specs that have a `drive.yaml`:
 
    ```bash
-   bd list --status in_progress --json \
-     | python3 -c "import sys,json; print('\n'.join(b['id'] for b in json.load(sys.stdin) if b.get('metadata',{}).get('drive_stage')))"
+   orbit --json spec list --status open \
+     | python3 -c "
+   import sys, json, os
+   env = json.load(sys.stdin)
+   specs = env.get('data',{}).get('result',{}).get('specs', [])
+   matches = []
+   for s in specs:
+       sid = s['id']
+       # spec-folder convention: .orbit/specs/<sid>/drive.yaml
+       if os.path.exists(f'.orbit/specs/{sid}/drive.yaml'):
+           matches.append(sid)
+   print('\n'.join(matches))
+   "
    ```
 
    - **Single match** → resume it.
    - **Zero matches** → halt with usage.
    - **Multiple matches** → halt and instruct the agent to pass the
-     bead id explicitly, listing the candidates.
+     spec id explicitly, listing the candidates.
 
 ## Pre-flight (card path branch only)
 
@@ -95,36 +109,39 @@ proceeds in three branches:
 Promote replaces the old Design + Spec stages.
 
 ```bash
-BEAD_ID=$(plugins/orb/scripts/promote.sh "<card_path>")
+SPEC_ID=$(plugins/orb/scripts/promote.sh "<card_path>")
 ```
 
-Then write orchestration metadata in a single batch:
+`promote.sh` materialises a spec under `.orbit/specs/<spec-id>/spec.yaml`
+(folder layout) seeded from the card's scenarios as ACs. The returned
+`SPEC_ID` is the spec's id (matching the folder name).
+
+Then write the drive sidecar:
 
 ```bash
-bd update "$BEAD_ID" \
-  --set-metadata "drive_card=<absolute card_path>" \
-  --set-metadata "drive_autonomy=<full|guided|supervised>" \
-  --set-metadata "drive_iteration=1" \
-  --set-metadata "drive_stage=review-spec" \
-  --set-metadata "drive_review_spec_cycle=0" \
-  --set-metadata "drive_review_pr_cycle=0"
+cat > ".orbit/specs/$SPEC_ID/drive.yaml" <<EOF
+spec_id: $SPEC_ID
+card_path: <absolute card_path>
+autonomy: <full|guided|supervised>
+iteration: 1
+stage: review-spec
+review_spec_cycle: 0
+review_spec_date: null
+review_pr_cycle: 0
+review_pr_date: null
+iteration_history: []
+EOF
 ```
 
-Claim the bead atomically:
-
-```bash
-bd update "$BEAD_ID" --claim
-```
-
-No `interview.md`, no `spec.yaml`, no `drive.yaml`, no per-iteration
-spec directory. The card → bead promotion IS the spec.
+No `interview.md` artefact, no separate spec-prose document, no per-
+iteration spec directory. The card → spec promotion IS the spec.
 
 After promote, schedule the heartbeat (full autonomy only — see below)
 and proceed to Stage 1.
 
 ## Heartbeat (full autonomy only)
 
-Skip this section entirely when `drive_autonomy != full`.
+Skip this section entirely when `autonomy != full`.
 
 **Reconciliation, not re-creation.** Drive uses CronList-first
 idempotent reconciliation. Drive never delete-then-recreates the
@@ -132,41 +149,43 @@ heartbeat — that would defeat Claude Code's built-in `--resume` task
 restoration.
 
 1. `CronList` — enumerate active cron tasks in the session.
-2. If a task with ID `drive-checkin-<bead-id>` already exists, no-op
+2. If a task with ID `drive-checkin-<spec-id>` already exists, no-op
    (it was restored by the harness or created earlier).
 3. Otherwise, `CronCreate` a recurring task with:
-   - **ID:** `drive-checkin-<bead-id>`.
+   - **ID:** `drive-checkin-<spec-id>`.
    - **Interval:** 5 minutes, recurring. **Hardcoded.**
    - **Prompt body:** the exact text below.
 
 **Heartbeat prompt body (verbatim):**
 
 ```
-This is a drive heartbeat. Run `bd show <bead-id> --json` and read its
-`status` and `metadata.drive_stage`.
+This is a drive heartbeat. Run `orbit --json spec show <spec-id>` and
+read its `status`. Read `.orbit/specs/<spec-id>/drive.yaml` and read
+its `stage`.
 
-If status is `closed` (drive_stage `complete` or `escalated`), call
-CronDelete with ID `drive-checkin-<bead-id>` and emit:
+If status is `closed` (drive stage `complete` or `escalated`), call
+CronDelete with ID `drive-checkin-<spec-id>` and emit:
 
   drive: heartbeat stopped (stage=<drive_stage>)
 
 Then stop. Do not emit a heartbeat line.
 
-Otherwise: run `plugins/orb/scripts/parse-acceptance.sh next-ac
-<bead-id>` to find the current AC (if it returns nothing or drive_stage
-is not `implement`, use `-`). Compute elapsed as mm:ss since the bead's
-`started_at` field. Emit exactly one line in the format:
+Otherwise: run `plugins/orb/scripts/orbit-acceptance.sh next-ac
+<spec-id>` to find the current AC (if it returns nothing or stage is
+not `implement`, use `-`). Compute elapsed as mm:ss since drive.yaml's
+`started_at` field (set on the first heartbeat tick if absent). Emit
+exactly one line in the format:
 
-  drive: bead=<bead-id> stage=<drive_stage> ac=<id|-> elapsed=<mm:ss>
+  drive: spec=<spec-id> stage=<stage> ac=<id|-> elapsed=<mm:ss>
 
-Do not modify the bead. Do not launch any Agent. Emit the single
+Do not modify the spec. Do not launch any Agent. Emit the single
 heartbeat line and stop.
 ```
 
-**Self-termination.** When the bead transitions to `closed`
-(complete or escalated), the heartbeat calls `CronDelete` on itself as
-a defence-in-depth backstop — primary cleanup remains in §Completion
-and §Escalation.
+**Self-termination.** When the spec transitions to `closed` (complete
+or escalated), the heartbeat calls `CronDelete` on itself as a
+defence-in-depth backstop — primary cleanup remains in §Completion and
+§Escalation.
 
 **Non-fatal CronCreate.** If CronCreate fails (harness doesn't
 support cron, rate limit, transient error), drive logs one line
@@ -181,22 +200,22 @@ context, no shared conversation history.
 
 ### 1.1 Compute the cycle-specific verdict path
 
-Read `drive_review_spec_cycle` from bead metadata. Let N = that value
-+ 1 (the cycle ordinal for this fork — 1-indexed).
+Read `review_spec_cycle` from `drive.yaml`. Let N = that value + 1
+(the cycle ordinal for this fork — 1-indexed).
 
 Capture or reuse the date token:
 
-- If `drive_review_spec_date` is unset, set it to today's ISO date and
-  write it back to bead metadata. This is cycle 1's date.
+- If `review_spec_date` is null, set it to today's ISO date and write
+  it back to `drive.yaml`. This is cycle 1's date.
 - Otherwise, reuse the stored value. The date is fixed at cycle 1 for
   the whole stage so long-running drives don't split cycle files
   across date boundaries.
 
 Compute the output path:
 
-- **Cycle 1:** `orbit/reviews/<bead-id>/review-spec-<date>.md`
-- **Cycle 2:** `orbit/reviews/<bead-id>/review-spec-<date>-v2.md`
-- **Cycle 3:** `orbit/reviews/<bead-id>/review-spec-<date>-v3.md`
+- **Cycle 1:** `.orbit/specs/<spec-id>/review-spec-<date>.md`
+- **Cycle 2:** `.orbit/specs/<spec-id>/review-spec-<date>-v2.md`
+- **Cycle 3:** `.orbit/specs/<spec-id>/review-spec-<date>-v3.md`
 
 ### 1.2 Idempotent resumption check
 
@@ -212,7 +231,7 @@ Otherwise, continue to §1.3.
 select:Agent` to load the Agent schema. If ToolSearch returns no
 result, do NOT fall back to inline review — escalate immediately:
 
-- Set `drive_stage=escalated` on the bead.
+- Set `stage: escalated` in `drive.yaml`.
 - Output: `Agent tool unavailable — cannot launch cold-fork review for review-spec`
 - Stop. Inline review violates the cold-fork separation contract.
 
@@ -220,22 +239,24 @@ Invoke the Agent tool with:
 
 - `subagent_type: general-purpose`
 - A brief containing **only**:
-  - The bead-id whose acceptance the reviewer must read
+  - The spec-id whose acceptance the reviewer must read
   - The absolute path where the review must be written (§1.1)
-  - The instruction to read the bead via `bd show <bead-id> --json`,
-    parse ACs via `plugins/orb/scripts/parse-acceptance.sh acs <bead-id>`,
-    follow the `/orb:review-spec` skill, and write the verdict to the
+  - The instruction to read the spec via `orbit --json spec show
+    <spec-id>`, parse ACs via
+    `plugins/orb/scripts/orbit-acceptance.sh acs <spec-id>`, follow
+    the `/orb:review-spec` skill, and write the verdict to the
     specified path using the canonical verdict line format
 
 Example brief:
 
 ```
-Run /orb:review-spec on bead <bead-id>. Read the bead via `bd show <bead-id> --json`
-and parse ACs via `plugins/orb/scripts/parse-acceptance.sh acs <bead-id>` —
-the bead acceptance field is the authoritative spec for this review. Write the
-review to exactly <absolute output path> (this path takes precedence
-over the default path in the skill). Use the canonical verdict line
-format `**Verdict:** APPROVE | REQUEST_CHANGES | BLOCK`.
+Run /orb:review-spec on spec <spec-id>. Read the spec via `orbit --json
+spec show <spec-id>` and parse ACs via
+`plugins/orb/scripts/orbit-acceptance.sh acs <spec-id>` — the spec's
+acceptance_criteria field is the authoritative spec for this review.
+Write the review to exactly <absolute output path> (this path takes
+precedence over the default path in the skill). Use the canonical
+verdict line format `**Verdict:** APPROVE | REQUEST_CHANGES | BLOCK`.
 ```
 
 The brief must NOT include any conversation context, iteration counter,
@@ -255,23 +276,26 @@ zero matches or the file is missing, fall through to the retry.
 
 **Retry on missing verdict (budget: 1).** Launch one retry fork with a
 fresh brief identical to the original. The retry overwrites the same
-path. Retry does NOT increment `drive_review_spec_cycle`. If the retry
+path. Retry does NOT increment `review_spec_cycle`. If the retry
 also produces no parseable verdict, drive escalates with
-`drive_stage=escalated` and the message `review could not be completed
-after 2 forked attempts at review-spec`.
+`stage: escalated` in `drive.yaml` and the message `review could not be
+completed after 2 forked attempts at review-spec`.
 
 ### 1.5 Verdict handling
 
-- **APPROVE:** Set `drive_stage=implement` on the bead. Proceed to
+- **APPROVE:** Set `stage: implement` in `drive.yaml`. Proceed to
   Stage 2.
 
 - **REQUEST_CHANGES:**
-  - Increment `drive_review_spec_cycle` on the bead.
+  - Increment `review_spec_cycle` in `drive.yaml`.
   - Check the budget (§1.6).
   - If the budget allows another cycle: address the findings (edit the
-    bead's acceptance field via `bd update --acceptance` or the bead's
-    description via `bd update --description`), then return to §1.1
-    to recompute the cycle-specific output path and re-fork.
+    spec via `orbit spec update <spec-id> --goal "..."` for goal
+    revisions, or rewrite acceptance_criteria via
+    `orbit spec update --ac-check / --ac-uncheck` for individual AC
+    flips, or `orbit spec note <spec-id> "<context>"` for narrative
+    edits), then return to §1.1 to recompute the cycle-specific output
+    path and re-fork.
 
 - **BLOCK:** Jump to §NO-GO Handling. The block reason becomes the
   NO-GO constraint.
@@ -280,8 +304,8 @@ after 2 forked attempts at review-spec`.
 
 Each stage (review-spec, review-pr) has an **independent budget of 3
 REQUEST_CHANGES cycles per top-level iteration**. The counters live in
-bead metadata (`drive_review_spec_cycle`, `drive_review_pr_cycle`) and
-reset to 0 when a new iteration's bead is created (§NO-GO).
+`drive.yaml` (`review_spec_cycle`, `review_pr_cycle`) and reset to 0
+when a new iteration's spec is created (§NO-GO).
 
 After incrementing the counter on a REQUEST_CHANGES verdict:
 
@@ -297,10 +321,10 @@ After incrementing the counter on a REQUEST_CHANGES verdict:
   verification target. Do not paraphrase. The synthetic BLOCK consumes
   a top-level iteration the same way a real BLOCK does — jump to §NO-GO.
 
-**Resumption case:** If drive resumes with `drive_review_<stage>_cycle ==
-3` and the synthetic BLOCK was not yet written (session died between
-the counter increment and the NO-GO write), synthesise the BLOCK on
-resume — do not launch a 4th fork.
+**Resumption case:** If drive resumes with `review_<stage>_cycle == 3`
+and the synthetic BLOCK was not yet written (session died between the
+counter increment and the NO-GO write), synthesise the BLOCK on resume
+— do not launch a 4th fork.
 
 ### 1.7 Supervised mode gate (review-spec)
 
@@ -317,23 +341,23 @@ If autonomy is `supervised` AND the verdict was APPROVE, pause here.
   / block / read full review first`.
 
 If NO-GO or `block` → §NO-GO. If `request changes` → increment
-`drive_review_spec_cycle` and return to §1.1 (budget-gated).
+`review_spec_cycle` and return to §1.1 (budget-gated).
 
 ## Stage 2: Implement
 
-Drive sets `drive_stage=implement` on the bead and delegates entirely
-to the new beads-native `/orb:implement`:
+Drive sets `stage: implement` in `drive.yaml` and delegates entirely to
+`/orb:implement`:
 
 ```bash
-bd update <bead-id> --set-metadata "drive_stage=implement"
-# invoke /orb:implement with the bead id
+# Edit drive.yaml's stage field, then:
+# (invoke /orb:implement with the spec id)
 ```
 
 Drive does NOT inline AC tracking, detour escalation, or progress
 emission — those are owned by `/orb:implement`. When implement returns
-(the bead's acceptance field has no unchecked ACs — verifiable via
-`parse-acceptance.sh has-unchecked <bead-id>` exiting 1), drive sets
-`drive_stage=review-pr` and proceeds to Stage 3.
+(the spec's acceptance_criteria field has no unchecked ACs — verifiable
+via `orbit-acceptance.sh has-unchecked <spec-id>` exiting 1), drive
+sets `stage: review-pr` in `drive.yaml` and proceeds to Stage 3.
 
 **Supervised mode gate (implement):** If autonomy is `supervised`,
 pause after implement returns:
@@ -348,29 +372,30 @@ If NO-GO → §NO-GO Handling.
 ## Stage 3: Review-PR
 
 Mirrors Stage 1 mechanics with the diff brief. The forked reviewer
-reads the post-implement bead state directly via `bd show <bead-id>
---json` and `parse-acceptance.sh acs <bead-id>` — the acceptance field
-may have been edited during implement, and the live `bd` query gives
-the reviewer the up-to-date state with no intermediate artefact.
+reads the post-implement spec state directly via `orbit --json spec
+show <spec-id>` and `orbit-acceptance.sh acs <spec-id>` — the
+acceptance_criteria field may have been edited during implement, and
+the live `orbit` query gives the reviewer the up-to-date state with no
+intermediate artefact.
 
 ### 3.1 Compute the cycle-specific verdict path
 
-Using `drive_review_pr_cycle` and `drive_review_pr_date`:
+Using `review_pr_cycle` and `review_pr_date` from `drive.yaml`:
 
-- Cycle 1: `orbit/reviews/<bead-id>/review-pr-<date>.md`
-- Cycle 2: `orbit/reviews/<bead-id>/review-pr-<date>-v2.md`
-- Cycle 3: `orbit/reviews/<bead-id>/review-pr-<date>-v3.md`
+- Cycle 1: `.orbit/specs/<spec-id>/review-pr-<date>.md`
+- Cycle 2: `.orbit/specs/<spec-id>/review-pr-<date>-v2.md`
+- Cycle 3: `.orbit/specs/<spec-id>/review-pr-<date>-v3.md`
 
 ### 3.2 Idempotent resumption check, fork launch, verdict parse
 
 As §1.2 / §1.3 / §1.4, with these differences:
 
 - The Agent brief includes the diff reference (`git diff main...HEAD`
-  on the current branch) PLUS the bead-id for AC cross-reference (the
-  reviewer reads the live acceptance field via `bd show` and
-  `parse-acceptance.sh`).
+  on the current branch) PLUS the spec-id for AC cross-reference (the
+  reviewer reads the live acceptance_criteria field via `orbit spec
+  show` and `orbit-acceptance.sh`).
 - Output path uses `review-pr` in place of `review-spec`.
-- Counter / date metadata uses `drive_review_pr_*`.
+- Counter / date fields use `review_pr_*`.
 - Retry escalation message: `review could not be completed after 2
   forked attempts at review-pr`.
 
@@ -378,9 +403,9 @@ Example brief:
 
 ```
 Run /orb:review-pr against the current branch. Implementation diff is
-`git diff main...HEAD` on <branch_name>. Bead acceptance field is at
-bead-id <bead-id>; read via `bd show <bead-id> --json` and
-`plugins/orb/scripts/parse-acceptance.sh acs <bead-id>`. Write the
+`git diff main...HEAD` on <branch_name>. Spec acceptance is on spec-id
+<spec-id>; read via `orbit --json spec show <spec-id>` and
+`plugins/orb/scripts/orbit-acceptance.sh acs <spec-id>`. Write the
 review to exactly <absolute output path> (this path takes precedence
 over the default path in the skill). Use the canonical verdict line
 format `**Verdict:** APPROVE | REQUEST_CHANGES | BLOCK`.
@@ -388,10 +413,10 @@ format `**Verdict:** APPROVE | REQUEST_CHANGES | BLOCK`.
 
 ### 3.3 Verdict handling
 
-- **REQUEST_CHANGES:** Increment `drive_review_pr_cycle`. Check
-  budget (§1.6). If budget remains, address findings (edit the
-  implementation), return to §3.1 for the next cycle. If budget
-  exhausted, synthesise BLOCK.
+- **REQUEST_CHANGES:** Increment `review_pr_cycle`. Check budget
+  (§1.6). If budget remains, address findings (edit the implementation),
+  return to §3.1 for the next cycle. If budget exhausted, synthesise
+  BLOCK.
 
 - **BLOCK (real or synthetic):** Jump to §NO-GO Handling.
 
@@ -403,7 +428,7 @@ format `**Verdict:** APPROVE | REQUEST_CHANGES | BLOCK`.
       ```
       AskUserQuestion: "Drive summary for <card name>:
 
-      Bead: <bead-id> — <title>
+      Spec: <spec-id> — <goal>
       Spec review: <verdict>, <N> findings
       Implementation: <N>/<total> ACs addressed
       PR review: APPROVE — <one-liner>
@@ -450,8 +475,8 @@ read full review first
 - `approve` — terminal verdict. Drive advances to the next stage
   (implement after a spec gate; §Completion after a PR gate).
 - `request changes` — treated as a post-APPROVE REQUEST_CHANGES:
-  drive increments `drive_review_<stage>_cycle`, checks the §1.6
-  budget, and re-enters the review cycle.
+  drive increments `review_<stage>_cycle`, checks the §1.6 budget,
+  and re-enters the review cycle.
 - `block` — drive jumps to §NO-GO Handling. The constraint is
   `author blocked post-APPROVE at MEDIUM+ <review-spec | PR> review`.
 - `read full review first` — **deferral, not a verdict.** Drive waits
@@ -464,7 +489,7 @@ On APPROVE at review-pr (interactive gates per autonomy mode passed):
 
 1. **Stage and commit the implementation** (commit 1):
    - All code changes and the review files
-   - Commit message: `feat: <bead title>`
+   - Commit message: `feat: <spec goal>`
 
 2. **Propose card updates** (commit 2):
    - Update the card's `maturity` if appropriate
@@ -473,96 +498,119 @@ On APPROVE at review-pr (interactive gates per autonomy mode passed):
    - Commit message: `docs: update <card> — maturity and goal after drive`
 
 3. **Create the PR:**
-   - Title: `drive: <bead title>`
-   - Body references the bead-id and review files
+   - Title: `drive: <spec goal>`
+   - Body references the spec-id and review files
 
-4. **Set drive_stage=complete and close the bead:**
+4. **Set drive.yaml stage and close the spec:**
    ```bash
-   bd update <bead-id> --set-metadata "drive_stage=complete"
-   bd close <bead-id> --reason "drive completed: <one-line summary>"
+   # Edit drive.yaml: stage: complete
+   orbit spec note <spec-id> "drive completed: <one-line summary>"
+   orbit spec close <spec-id>
    ```
 
+   `spec.close` transactionally appends the spec's path to every linked
+   card's `specs` array. It rejects if any open child tasks remain;
+   resolve those first.
+
 5. **Heartbeat cleanup (full autonomy only).** Attempt `CronDelete
-   drive-checkin-<bead-id>`. **Failure is non-fatal** — log
-   `heartbeat cleanup skipped: <reason>` and continue. The bead is
+   drive-checkin-<spec-id>`. **Failure is non-fatal** — log
+   `heartbeat cleanup skipped: <reason>` and continue. The spec is
    already closed; the next heartbeat tick (if any) self-terminates
-   on `bead.status == closed`.
+   on `spec.status == closed`.
 
 ## NO-GO Handling
 
 A NO-GO means the current iteration failed a review (real or
 synthetic BLOCK) or was rejected at a supervised gate.
 
-1. **Close the current bead:**
+1. **Note and close the current spec:**
    ```bash
-   bd close <bead-id> --reason "NO-GO: <one-line constraint>"
+   orbit spec note <spec-id> "NO-GO: <one-line constraint>"
+   orbit spec close <spec-id>
    ```
 
-2. **Persist the constraint:**
+   If `spec close` rejects due to open child tasks, mark them done
+   first (`orbit task done <task-id>`) — the NO-GO captures their
+   outcome via the spec note.
+
+2. **Persist the constraint to memory:**
    ```bash
-   bd remember "drive-<card-slug>-iter<N>: <constraint>"
+   orbit memory remember "drive-<card-slug>-iter<N>: <constraint>"
    ```
 
    The key format is stable so iteration ≥2 can list all prior
-   constraints with `bd memories drive-<card-slug>`.
+   constraints with `orbit memory search drive-<card-slug>`.
 
-3. **Check budget:** Read `drive_iteration` from the closed bead's
-   metadata. If `drive_iteration == 3`, jump to §Escalation.
+3. **Check budget:** Read `iteration` from `drive.yaml`. If
+   `iteration == 3`, jump to §Escalation.
 
-4. **Promote a new iteration bead:**
+4. **Promote a new iteration spec:**
    ```bash
-   NEW_BEAD=$(plugins/orb/scripts/promote.sh "<card_path>")
-   bd dep add "$NEW_BEAD" "<closed-bead-id>" --type discovered-from
+   NEW_SPEC=$(plugins/orb/scripts/promote.sh "<card_path>")
    ```
 
-5. **Inject the cumulative constraint history into the new bead's
-   description:**
+5. **Inject the cumulative constraint history into the new spec's
+   goal (or as a leading note):**
    ```bash
-   CONSTRAINTS=$(bd memories "drive-<card-slug>" --format text)
-   bd update "$NEW_BEAD" --description "$(bd show "$NEW_BEAD" --json \
-     | python3 -c "import sys,json;d=json.load(sys.stdin);print((d[0] if isinstance(d,list) else d)['description'])")
-
-## Constraints carried from prior iterations
-
-$CONSTRAINTS"
+   CONSTRAINTS=$(orbit --json memory search "drive-<card-slug>" \
+     | python3 -c "
+   import sys, json
+   env = json.load(sys.stdin)
+   memories = env.get('data',{}).get('result',{}).get('memories',[])
+   for m in memories:
+       print('- ' + m['body'])
+   ")
+   orbit spec note "$NEW_SPEC" "Constraints carried from prior iterations:
+   $CONSTRAINTS"
    ```
 
-6. **Seed the new bead's metadata and claim:**
+6. **Seed the new spec's drive.yaml (incremented iteration, fresh
+   review cycles, prior history populated):**
    ```bash
-   bd update "$NEW_BEAD" \
-     --set-metadata "drive_card=<card_path>" \
-     --set-metadata "drive_autonomy=<level>" \
-     --set-metadata "drive_iteration=$((<N>+1))" \
-     --set-metadata "drive_stage=review-spec" \
-     --set-metadata "drive_review_spec_cycle=0" \
-     --set-metadata "drive_review_pr_cycle=0"
-   bd update "$NEW_BEAD" --claim
+   cat > ".orbit/specs/$NEW_SPEC/drive.yaml" <<EOF
+   spec_id: $NEW_SPEC
+   card_path: <card_path>
+   autonomy: <level>
+   iteration: $((<N>+1))
+   stage: review-spec
+   review_spec_cycle: 0
+   review_spec_date: null
+   review_pr_cycle: 0
+   review_pr_date: null
+   iteration_history:
+     - spec_id: <closed-spec-id>
+       iteration: <N>
+       outcome: NO-GO
+       constraint: <one-line>
+   EOF
    ```
 
-7. **Re-enter at Stage 1** with the new bead. The constraint history
-   is now in its description; the cold-fork reviewer reads it as
-   part of the bead's `bd show <bead-id> --json` description field.
+7. **Re-enter at Stage 1** with the new spec. The constraint history
+   is now in its first spec.note; the cold-fork reviewer reads it as
+   part of the spec's note stream.
 
 ## Escalation
 
 Escalation is triggered by **iteration budget exhaustion**
-(`drive_iteration == 3` and current iteration NO-GO'd) OR by a
-**semantic trigger** from the Disposition section (recurring failure
-mode, contradicted hypothesis, diminishing signal). An honest agent
-may escalate before the budget is spent.
+(`iteration == 3` and current iteration NO-GO'd) OR by a **semantic
+trigger** from the Disposition section (recurring failure mode,
+contradicted hypothesis, diminishing signal). An honest agent may
+escalate before the budget is spent.
 
-1. **Set drive_stage and close:**
+1. **Set drive.yaml stage and close:**
    ```bash
-   bd update <bead-id> --set-metadata "drive_stage=escalated"
-   bd close <bead-id> --reason "ESCALATED: <reason>"
+   # Edit drive.yaml: stage: escalated
+   orbit spec note <spec-id> "ESCALATED: <reason>"
+   orbit spec close <spec-id>
    ```
 
-2. **Output the escalation summary.** Iteration history is computed
-   from the bead dep tree starting at iteration 1's bead:
+2. **Output the escalation summary.** Iteration history is read from
+   the chain of `iteration_history` entries across each iteration's
+   `drive.yaml`:
 
    ```bash
-   ITER1=$(bd dep list <current-bead-id> --type discovered-from --transitive --root)
-   bd dep tree "$ITER1" --type discovered-from
+   # Walk back through iteration_history starting at the current spec.
+   # Each entry names the prior iteration's spec_id and constraint.
    ```
 
    Format:
@@ -574,12 +622,12 @@ may escalate before the budget is spent.
    Goal: <card goal>
 
    Iteration history:
-     1. <bead-id-iter1> — NO-GO: <constraint from bd memories>
-     2. <bead-id-iter2> — NO-GO: <constraint>
-     [3. <bead-id-iter3> — NO-GO: <constraint>]
+     1. <spec-id-iter1> — NO-GO: <constraint from orbit memory search>
+     2. <spec-id-iter2> — NO-GO: <constraint>
+     [3. <spec-id-iter3> — NO-GO: <constraint>]
 
    Accumulated constraints:
-     - <all constraints from bd memories drive-<card-slug>>
+     - <all constraints from orbit memory search drive-<card-slug>>
 
    What would have to be true:
      <For a future attempt to succeed, what assumptions need revisiting?
@@ -591,7 +639,7 @@ may escalate before the budget is spent.
    ```
 
 3. **Heartbeat cleanup (full autonomy only).** Attempt `CronDelete
-   drive-checkin-<bead-id>`. Non-fatal — failure logs `heartbeat
+   drive-checkin-<spec-id>`. Non-fatal — failure logs `heartbeat
    cleanup skipped: <reason>` and continues. This step executes
    **before** the escalation ping so the recurring heartbeat can't
    fire between the summary output and the ping.
@@ -599,7 +647,7 @@ may escalate before the budget is spent.
 4. **One-shot escalation ping (full autonomy only).** Schedule
    `CronCreate` ~30 seconds out:
    - **Delay:** ~30 seconds (one-shot, not recurring).
-   - **Task ID:** `drive-escalation-<bead-id>`.
+   - **Task ID:** `drive-escalation-<spec-id>`.
    - **Prompt body (verbatim):**
 
      ```
@@ -616,46 +664,45 @@ may escalate before the budget is spent.
 
 ## Resumption
 
-When `/orb:drive` is invoked with a bead-id (or detects an in-progress
-drive bead per §Input contract):
+When `/orb:drive` is invoked with a spec-id (or detects an in-progress
+drive per §Input contract):
 
-1. **Read the bead:** `bd show <bead-id> --json`. Extract:
-   - `metadata.drive_stage`
-   - `metadata.drive_iteration`
-   - `metadata.drive_review_spec_cycle`, `drive_review_pr_cycle`
-   - `metadata.drive_review_*_date`
-   - `metadata.drive_card`, `drive_autonomy`
+1. **Read drive.yaml:** `.orbit/specs/<spec-id>/drive.yaml`. Extract:
+   - `stage`
+   - `iteration`
+   - `review_spec_cycle`, `review_pr_cycle`
+   - `review_spec_date`, `review_pr_date`
+   - `card_path`, `autonomy`
 
 2. **Resume at the named stage.** No file-presence detection. The
-   bead is the source of truth.
+   `drive.yaml` is the source of truth.
 
-   | drive_stage   | Resume at                                         |
+   | stage         | Resume at                                         |
    |---------------|---------------------------------------------------|
    | `review-spec` | Stage 1 (idempotent §1.2 check skips fork if file already valid) |
-   | `implement`   | Stage 2 (delegate to /orb:implement <bead-id>)    |
+   | `implement`   | Stage 2 (delegate to /orb:implement <spec-id>)    |
    | `review-pr`   | Stage 3                                           |
    | `complete`    | Already done — report status                      |
    | `escalated`   | Already escalated — report status                 |
 
-3. **Synthetic-BLOCK resumption.** If
-   `drive_review_<stage>_cycle == 3` and the bead is still
-   in_progress (the synthetic BLOCK was not written before the
-   session died), synthesise the BLOCK on resume per §1.6 — do not
-   launch a 4th fork.
+3. **Synthetic-BLOCK resumption.** If `review_<stage>_cycle == 3` and
+   the spec is still open (the synthetic BLOCK was not written before
+   the session died), synthesise the BLOCK on resume per §1.6 — do
+   not launch a 4th fork.
 
 4. **Heartbeat reconciliation (full autonomy only).** Re-run the
-   §Heartbeat CronList-first flow: if `drive-checkin-<bead-id>`
+   §Heartbeat CronList-first flow: if `drive-checkin-<spec-id>`
    exists, leave it; if absent, re-create it. Drive never
    delete-then-recreates, so a surviving task is preserved.
 
 5. **Announce the resumption:**
 
    ```
-   Resuming drive for <bead-id> (<bead title>)
-   Card: <drive_card>
-   Autonomy: <drive_autonomy>
-   Iteration: <drive_iteration> of 3
-   Resuming at: <drive_stage>
+   Resuming drive for <spec-id> (<spec goal>)
+   Card: <card_path>
+   Autonomy: <autonomy>
+   Iteration: <iteration> of 3
+   Resuming at: <stage>
    Review cycles: review-spec=<N>/3, review-pr=<N>/3
    Heartbeat: <active | created | n/a (non-full autonomy) | unavailable>
    ```
@@ -666,8 +713,8 @@ drive bead per §Input contract):
   always in order.
 - **Never silently downgrade autonomy.** If full mode is requested but
   the card is thin, refuse explicitly.
-- **The bead is the single source of orchestration state.** Do not
-  track drive state in any file.
+- **The drive.yaml is the single source of orchestration state.** Do
+  not track drive state in any other file.
 - **Reviews run as forked Agents.** Drive launches each review via the
   Agent tool (`subagent_type: general-purpose`) in a fresh context.
   Verify Agent availability via ToolSearch first; do not fall back to
@@ -684,13 +731,13 @@ drive bead per §Input contract):
   independent 3-cycle budget. The 4th would-be cycle is converted to
   a synthetic BLOCK with the byte-identical canonical constraint
   string.
-- **Iteration is bounded by 3 beads in the discovered-from chain.**
+- **Iteration is bounded by 3 specs in the iteration_history chain.**
   After three NO-GOs, drive escalates. Earlier escalation is
   permitted on semantic triggers.
 - **Live-visibility heartbeat is full-autonomy-only and
   self-terminating.** The cron prompt body has a read-only contract
-  ("do not modify the bead, do not launch any Agent") with one
-  exception: when `bead.status == closed`, the heartbeat
+  ("do not modify the spec, do not launch any Agent") with one
+  exception: when `spec.status == closed`, the heartbeat
   `CronDelete`s itself.
 - **Cron tasks are reconciled idempotently.** CronList-then-CronCreate-
   iff-absent on every initialise and every resume. Drive never
@@ -735,65 +782,70 @@ genuinely narrows the search space.
 
 ## Worked example
 
-A copy-pasteable trace for a card → bead → close happy path. Each
+A copy-pasteable trace for a card → spec → close happy path. Each
 step is a literal command.
 
 ```bash
 # 1. Validate the card (full autonomy requires ≥3 scenarios)
 python3 -c "
 import yaml
-with open('orbit/cards/0005-drive.yaml') as f:
+with open('.orbit/cards/0005-drive.yaml') as f:
     card = yaml.safe_load(f)
 n = len(card.get('scenarios', []))
 assert n >= 3, f'BLOCKED: full autonomy requires ≥3 scenarios; have {n}'
 print(f'OK: {n} scenarios')
 "
 
-# 2. Promote card → bead
-BEAD=$(plugins/orb/scripts/promote.sh orbit/cards/0005-drive.yaml)
-echo "Promoted: $BEAD"
+# 2. Promote card → spec
+SPEC=$(plugins/orb/scripts/promote.sh .orbit/cards/0005-drive.yaml)
+echo "Promoted: $SPEC"
 
-# 3. Seed orchestration metadata + claim
-bd update "$BEAD" \
-  --set-metadata "drive_card=orbit/cards/0005-drive.yaml" \
-  --set-metadata "drive_autonomy=full" \
-  --set-metadata "drive_iteration=1" \
-  --set-metadata "drive_stage=review-spec" \
-  --set-metadata "drive_review_spec_cycle=0" \
-  --set-metadata "drive_review_pr_cycle=0"
-bd update "$BEAD" --claim
+# 3. Seed drive.yaml
+cat > ".orbit/specs/$SPEC/drive.yaml" <<EOF
+spec_id: $SPEC
+card_path: .orbit/cards/0005-drive.yaml
+autonomy: full
+iteration: 1
+stage: review-spec
+review_spec_cycle: 0
+review_spec_date: null
+review_pr_cycle: 0
+review_pr_date: null
+iteration_history: []
+EOF
 
 # 4. Schedule heartbeat (full autonomy)
-# CronList → CronCreate iff absent (drive-checkin-<bead-id>, 5 min recurring)
+# CronList → CronCreate iff absent (drive-checkin-$SPEC, 5 min recurring)
 
-# 5. Stage 1: fork review-spec (reads bead directly via bd show + parse-acceptance.sh)
-mkdir -p "orbit/reviews/$BEAD"
-bd update "$BEAD" --set-metadata "drive_review_spec_date=$(date -I)"
-# Agent({ subagent_type: 'general-purpose', prompt: <brief naming $BEAD + output path; reviewer reads bd show + parse-acceptance.sh> })
-# Parse verdict from orbit/reviews/$BEAD/review-spec-$(date -I).md
-# APPROVE → drive_stage=implement
+# 5. Stage 1: fork review-spec (reads spec directly via orbit spec show + orbit-acceptance.sh)
+mkdir -p ".orbit/specs/$SPEC"
+# Update drive.yaml: review_spec_date=$(date -I)
+# Agent({ subagent_type: 'general-purpose', prompt: <brief naming $SPEC + output path; reviewer reads orbit spec show + orbit-acceptance.sh> })
+# Parse verdict from .orbit/specs/$SPEC/review-spec-$(date -I).md
+# APPROVE → drive.yaml stage=implement
 
 # 6. Stage 2: delegate to /orb:implement
-bd update "$BEAD" --set-metadata "drive_stage=implement"
-# (invoke /orb:implement with $BEAD)
-# When parse-acceptance.sh has-unchecked $BEAD exits 1:
-bd update "$BEAD" --set-metadata "drive_stage=review-pr"
+# Update drive.yaml: stage=implement
+# (invoke /orb:implement with $SPEC)
+# When orbit-acceptance.sh has-unchecked $SPEC exits 1:
+# Update drive.yaml: stage=review-pr
 
 # 7. Stage 3: fork review-pr
-# (mirrors stage 1; brief includes git diff main...HEAD + bead-id for AC cross-reference)
+# (mirrors stage 1; brief includes git diff main...HEAD + spec-id for AC cross-reference)
 
 # 8. APPROVE at review-pr → completion
 git add -A
-git commit -m "feat: $(bd show $BEAD --json | python3 -c "import sys,json;d=json.load(sys.stdin);print((d[0] if isinstance(d,list) else d)['title'])")"
-gh pr create --title "drive: <bead title>" --body "<refs $BEAD and reviews>"
-bd update "$BEAD" --set-metadata "drive_stage=complete"
-bd close "$BEAD" --reason "drive completed: <one-line summary>"
+git commit -m "feat: $(orbit --json spec show $SPEC | python3 -c "import sys,json;print(json.load(sys.stdin)['data']['result']['spec']['goal'])")"
+gh pr create --title "drive: <spec goal>" --body "<refs $SPEC and reviews>"
+# Update drive.yaml: stage=complete
+orbit spec note $SPEC "drive completed: <one-line summary>"
+orbit spec close $SPEC
 
 # 9. Heartbeat cleanup (non-fatal)
-# CronDelete drive-checkin-$BEAD || echo "heartbeat cleanup skipped"
+# CronDelete drive-checkin-$SPEC || echo "heartbeat cleanup skipped"
 ```
 
 ---
 
-**Next step:** after `bd close` at completion, the PR is ready for
-human review and merge.
+**Next step:** after `orbit spec close` at completion, the PR is ready
+for human review and merge.
