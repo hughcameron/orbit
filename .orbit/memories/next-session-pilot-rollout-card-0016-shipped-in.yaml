@@ -1,0 +1,4 @@
+key: next-session-pilot-rollout-card-0016-shipped-in
+body: 'next-session-pilot-rollout: Card 0016 shipped in PR #17 (5de3773); 0.4.0 release blocker cleared. Next milestone is the pilot rollout per 0-4-0-rollout-plan: Arcform first (smallest blast radius), then FineType / Brightfield / Hydrofoil. Each project needs (a) bd 1.0.3+ verified at the same install path used here (/home/hugh/.local/bin/bd on Linux; verify Mac install path before kicking off Mac-side projects), (b) bd init in the project, (c) PRIME.md installed via bd-init.sh, (d) one trial drive against an existing card to validate the full bead-native flow under real workload. After Arcform validates, batch the remaining three.'
+timestamp: 1970-01-01T00:00:00Z
+labels: []

@@ -1,0 +1,56 @@
+feature: Research-mode iteration loop
+as_a: author
+i_want: a lightweight loop for hypothesis-test research work — hypothesis, params, result, decision — distinct from the full Card → Design → Spec → Implement → Review pipeline
+so_that: experimental iterations in safe environments don't pay engineering-pipeline overhead, and orbit's full ceremony stays reserved for changes with architectural consequences
+
+scenarios:
+  - name: Iteration record is the artefact, not a spec
+    given: a research iteration is run (hypothesis to result)
+    when: the iteration completes
+    then: the artefact is a thin record — hypothesis, params, result, decision — not a card, spec, progress.md, and review cycle
+    source_lines: "2026-04-29-orbit-heavy-for-research.md: 'Lightweight iteration records — hypothesis, params, result, decision — not a full card/spec/review cycle per experiment.'"
+
+  - name: Sandbox iterations relax approval gates
+    given: an iteration runs in a sandbox or demo environment
+    when: a change is made
+    then: approval is not required between iterations — approval gates remain for production-affecting changes only
+    source_lines: "2026-04-29-orbit-heavy-for-research.md: 'Relaxed approval gates for sandbox experiments — approval still required for production-affecting changes; not required for experimental iterations in safe environments.'"
+
+  - name: Engineering pipeline reserved for architectural changes
+    given: work has architectural or production consequences
+    when: the workflow is selected
+    then: orbit's full Card → Design → Spec → Implement → Review pipeline applies — the research loop is the alternative, not the replacement
+    source_lines: "2026-04-29-orbit-heavy-for-research.md: 'Decoupled research workflow — reserve orbit''s full ceremony for engineering work. Research gets its own lighter-weight loop.' Also: 'This isn''t a bug in orbit — it''s a scope gap. Orbit was built for engineering specification work and it does that well.'"
+
+  - name: Hypotheses are first-class, not crammed into cards
+    given: a research project is active
+    when: a belief is recorded
+    then: it is captured as a hypothesis (with evidence) — cards remain for capabilities, not for "we believe X"
+    source_lines: "2026-04-29-orbit-heavy-for-research.md: 'Cards describe engineering capabilities, not research hypotheses. The card taxonomy covers plumbing... but has no representation for \"we believe X; here''s the evidence.\"'"
+
+  - name: Operator bottleneck is the optimisation target
+    given: a research project iterates between human sessions
+    when: the loop is designed
+    then: every approval, ceremony, or hand-off is evaluated against operator availability — the bottleneck the loop is trying to remove
+    source_lines: "2026-04-29-orbit-heavy-for-research.md: 'On a demo/sandbox environment, every approval is a delay between iterations. The bottleneck becomes operator availability rather than compute or quality.'"
+
+goal: "research projects iterate at the speed of measurement, not at the speed of orbit's engineering pipeline"
+
+maturity: planned
+
+specs: []
+
+relations:
+  - card: 0010-objective-functions
+    type: depends-on
+    reason: research iterations need a measurable target to evaluate hypotheses against (0010 already covers session-start grounding, infra-drift stop-loss, and merge-on-objective from this memo)
+  - card: 0011-cron-driven-execution
+    type: informs
+    reason: cron-driven runs are a natural carrier for sandbox research iterations between planning sessions
+  - card: 0014-default-merge-after-review
+    type: compounds-with
+    reason: removing merge-approval ceremony has its largest payoff when paired with lighter-weight research iteration
+
+references:
+  - ".orbit/cards/memos/2026-04-29-orbit-heavy-for-research.md"
+  - ".orbit/cards/0010-objective-functions.yaml: already covers session-start grounding, infra-drift stop-loss, and merge-on-objective from this memo's list"

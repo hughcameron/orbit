@@ -1,0 +1,4 @@
+key: cron-firing-harness-gotchas-1-orb-schedule-provisions
+body: 'cron-firing-harness-gotchas: (1) /orb:schedule provisions Anthropic remote agents only — wrong tool for local cron contracts. (2) CronCreate durable:true is silently ignored on this harness — no .claude/scheduled_tasks.json written, dies with REPL. For unattended local scheduling use launchd (macOS) or systemd timers (Linux); see ops/decisions/0030. Always file the next-tabletop prompt as a sibling artefact at <project>/orbit/contracts/<date>-pass<N>-prep-prompt.md regardless of scheduler — the artefact is source of truth, scheduler is convenience. Surfaced 2026-05-03 in FineType pass-2 tabletop (Nightingale scribe).'
+timestamp: 1970-01-01T00:00:00Z
+labels: []

@@ -1,0 +1,66 @@
+feature: Codebase mastery — token-frugal navigation, parsing, and search
+as_a: agent working in any of Hugh's repos
+i_want: rtk-wrapped commands, tree-sitter for AST queries, ripgrep and ast-grep for search — all delivered in token-frugal modes by default
+so_that: I can check the codebase before editing it (Think Before Coding), reuse existing patterns (Simplicity First), edit surgically (Surgical Changes), and write tests-first (Goal-Driven Execution) — without burning the context budget on browsing
+
+scenarios:
+  - name: rtk wraps command interactions by default
+    given: any agent invocation that runs a command (git, find, ls, head, tail)
+    when: the command fires
+    then: it goes through rtk; the output is compressed; agents never spend tokens on noise output
+    gate: true
+
+  - name: tree-sitter answers structural queries
+    given: a question of the form "how many X in this repo?" where X is a structural feature (docstrings, async functions, trait impls)
+    when: the agent reaches for a tool
+    then: tree-sitter (via orbit code stats / orbit code grep-ast in v0.2+) returns an answer — not regex, not file-walking, not browsing
+
+  - name: ripgrep returns focused matches
+    given: a search for an existing pattern ("where is the validation logic?")
+    when: the agent uses the formalised ripgrep skill
+    then: it returns the relevant N matches with surrounding context — not a 200-line dump
+
+  - name: ast-grep handles structural patterns regex cannot express
+    given: a structural query like "find unwrap calls in match arms"
+    when: the agent uses ast-grep
+    then: pattern-based AST search returns the structural matches across the language family without the agent writing custom AST traversal
+
+  - name: Token-frugality is the constraint, not a nice-to-have
+    given: an agent considering a command invocation
+    when: it picks the tool
+    then: the token-frugal variant is the default; the verbose variant is the exception, used only when full output is necessary
+    gate: true
+
+  - name: Karpathy's principles are operable, not aspirational
+    given: an agent about to edit code
+    when: the four principles apply (think before coding, simplicity first, surgical changes, goal-driven execution)
+    then: the tooling supports each — tree-sitter for evidence, ripgrep for finding precedent, ast-grep for orphan detection, rtk to keep all of this token-cheap
+
+  - name: Code-domain verbs join orbit-state in v0.2+
+    given: orbit-state has shipped at v0.1 (state-domain only)
+    when: v0.2 lands
+    then: code-domain verbs (orbit code stats, orbit code grep-ast, orbit code rg) are added to the same MCP server; the verb namespace was reserved at v0.1 design time
+
+goal: "agents check the codebase cheaply enough that they actually check; Karpathy's principles become operable rather than aspirational; token cost of evidence is low enough that evidence is gathered before assumptions are made"
+
+maturity: planned
+
+specs: []
+
+relations:
+  - card: 0019-tabletop
+    type: feeds
+    reason: tabletop's "what's adjacent" question depends on tooling that surfaces adjacency cheaply — codebase-mastery is the substrate for that question
+  - card: 0020-orbit-state
+    type: extends
+    reason: code-domain verbs are added to the same MCP server in v0.2+; the verb namespace is reserved at v0.1 design time
+  - card: 0024-lean-pass
+    type: feeds
+    reason: code-level lean (dead code, stale comments, orphan imports) needs AST awareness; tree-sitter and ast-grep are the substrate
+
+references:
+  - ".orbit/cards/memos/2026-05-06-codebase-mastery.md: distillation source — three pillars and Karpathy's principles mapping"
+  - "ops/RTK.md: rtk reference (token compression layer; already in use via Claude Code hooks)"
+  - "https://github.com/quickwit-oss/tantivy: indexed full-text search (deferred to v0.2+)"
+  - "https://github.com/ast-grep/ast-grep: pattern-based AST search"
+  - "https://github.com/forrestchang/andrej-karpathy-skills: Karpathy's four principles"

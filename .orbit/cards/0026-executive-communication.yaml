@@ -1,0 +1,63 @@
+feature: Executive communication — BLUF-led Decision Brief as agent output contract
+as_a: orbit user receiving agent output
+i_want: every substantive agent response to lead with a one-line TL;DR plus a single concrete recommendation, with reasoning capped at three points and detail listed but not dumped
+so_that: I can act on the response in seconds rather than minutes; agents pay the compression cost so I do not have to — three asymmetries (attention, context, decision) honoured by the agent rather than passed back to me
+
+scenarios:
+  - name: TL;DR leads every substantive response
+    given: an agent producing a substantive response
+    when: it is rendered
+    then: a one-sentence TL;DR opens the response — the answer or recommendation, stated decisively
+    gate: true
+
+  - name: Recommendations are imperative, not hedge-stacked
+    given: a recommendation in an agent response
+    when: it is written
+    then: it uses imperative voice ("Run X on Y") not hedged voice ("It might be worth considering whether perhaps X")
+    gate: true
+
+  - name: Reasoning capped at three points
+    given: a Why section in an agent response
+    when: it is rendered
+    then: it has at most three bullets — three is the ceiling, not the target
+
+  - name: Detail listed, not dumped
+    given: an agent has analysed multiple alternatives or has supporting data
+    when: rendering the response
+    then: the detail goes under "Available on request" as a one-line index, not in the main body
+
+  - name: Confidence stated when relevant
+    given: a recommendation that depends on uncertain inputs
+    when: rendering
+    then: a single-line confidence statement appears (high / medium / low plus key assumptions) — not woven through every sentence as hedge-stacking
+
+  - name: Seven anti-patterns explicitly proscribed
+    given: an agent drafting a response
+    when: it considers the language
+    then: lede-burying, hedge-stacking, pre-emptive detail dump, menu-presenting, undefined jargon, apologetic preambles, restating the question — all rejected
+    gate: true
+
+  - name: Tone contract enforced
+    given: any agent response
+    when: it is rendered
+    then: British English, concise, direct, warm but not chatty — the register is consistent across all of Hugh's agents
+
+  - name: Variants by response type
+    given: a response that is a factual question, status update, decision required, or research output
+    when: the shape is selected
+    then: it follows the matching variant — full template for decisions; status updates use Progress + Blockers + Next step; factual answers compress to TL;DR plus brief context
+
+goal: "agent-to-Hugh prose is always BLUF-led, recommendation-driven, anti-pattern-free, warm-but-not-chatty — Hugh acts on output rather than parsing it"
+
+maturity: planned
+
+specs: []
+
+relations:
+  - card: 0018-two-artefact-contract
+    type: feeds
+    reason: the executive surface (cards + decisions + dashboard) is rendered in this prose discipline; without it, the surface stays bloat-prone
+
+references:
+  - ".orbit/cards/memos/2026-05-06-executive-communication-framework.md: distillation source — full BLUF / Decision Brief framework with anti-patterns and tone contract"
+  - "ops decision 0029 (recommendation discipline): the precursor — this card subsumes and generalises it"

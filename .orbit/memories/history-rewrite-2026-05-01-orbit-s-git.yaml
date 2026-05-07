@@ -1,0 +1,4 @@
+key: history-rewrite-2026-05-01-orbit-s-git
+body: 'history-rewrite-2026-05-01: orbit''s git history was rewritten on 2026-05-01 via git filter-repo to scrub a private project name from blobs and commit messages, and to remove MIGRATION-0.4.0.md from history entirely (moved to private ops repo at playbooks/migration-0.4.0.md). All commit SHAs on main changed. 5 stale remote branches deleted; 10 stale local branches deleted; only main remains. Backup mirror at /tmp/orbit-backup-pre-rewrite-20260501-180000.git (auto-deletes ~2026-05-31). Residual leak: refs/pull/17/* on GitHub still serves the original commits via raw .diff/.patch URLs and gh API; web UI is clean. GitHub Support ticket would close this fully but was not filed — surface deemed limited. Anyone with a pre-2026-05-01 clone has divergent history; reset --hard origin/main is the recovery.'
+timestamp: 1970-01-01T00:00:00Z
+labels: []

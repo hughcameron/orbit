@@ -1,0 +1,60 @@
+feature: Tasks — session-scoped sub-spec units
+as_a: agent working a drive
+i_want: to open, claim, update, and close session-scoped tasks within a spec — persisted across sessions and machines via append-only events
+so_that: the TaskList equivalent survives session resets, syncs across machines, and integrates with the rest of orbit's state — instead of vanishing when the Claude Code session context resets
+
+scenarios:
+  - name: Tasks open during a drive
+    given: an agent claiming a spec for implementation
+    when: it decomposes the AC into substantive sub-steps
+    then: it calls orbit task.open <spec> "<text>" for each; each event is auto-timestamped and appended to .orbit/specs/<id>.tasks.jsonl
+
+  - name: Tasks survive session resets
+    given: a drive's session has reset mid-flight
+    when: a new agent claims the spec
+    then: orbit task.list --spec <id> shows the open tasks from the prior session; the new agent picks up where the prior left off without re-decomposing
+    gate: true
+
+  - name: Task state reconstructs from event stream
+    given: a sequence of open / claim / update / done events in <id>.tasks.jsonl
+    when: the index is queried for current state
+    then: each task's current state is the LAST event for that task_id — no separate state field, the event stream is the authority
+
+  - name: TaskList tool wraps orbit task verbs
+    given: a Claude Code session with the orbit MCP wrapper installed
+    when: an agent uses TaskList via the existing tool surface
+    then: TaskList calls orbit task.* under the hood; the agent keeps its familiar tool while gaining persistence
+    gate: true
+
+  - name: Tasks are append-only, never edited in place
+    given: an agent updating a task's status
+    when: the update happens
+    then: a new event is appended; old events stay; audit shows when each transition occurred — the file grows, but never rewrites
+
+  - name: Trivial drives skip tasks
+    given: a one-AC drive with one obvious step
+    when: the drive runs
+    then: tasks are not opened; the spec's notes.jsonl is the only run record — tasks earn their place when work has substantive subdivisions
+
+  - name: Tasks are intentions; notes are events
+    given: an agent recording work
+    when: it considers task vs note
+    then: tasks are intentions with state (planned → done); notes are events without state (observations, decisions, results) — the heuristic prevents conflation
+
+goal: "tasks are the persistent TaskList equivalent — session-scoped sub-spec subdivisions an agent maintains within a drive, surviving session resets and cross-machine syncs through git"
+
+maturity: planned
+
+specs: []
+
+relations:
+  - card: 0005-drive
+    type: feeds
+    reason: tasks live within drives; they are how a drive agent tracks sub-spec progress through a long-running session
+  - card: 0020-orbit-state
+    type: depends-on
+    reason: tasks are an orbit-state table — append-only JSONL persisted alongside the spec body
+
+references:
+  - ".orbit/cards/memos/2026-05-06-rally-fan-out.md: tasks-within-drives section, mapping to Claude Code TaskList"
+  - "https://code.claude.com/docs/en/tools-reference: Claude Code TaskList tool reference"

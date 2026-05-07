@@ -1,0 +1,61 @@
+feature: Agent-authored skills with curator-managed lifecycle
+as_a: agent encountering a recurring pattern
+i_want: to author and ship a SKILL.md without polluting the curated skill collection — a periodic curator archives stale agent-authored skills while leaving human-authored, bundled, and pinned skills untouched
+so_that: I can generalise patterns freely (without that freedom degrading the skill collection over time), and Hugh's curated skill set stays clean
+
+scenarios:
+  - name: Agent recognises a recurring pattern
+    given: a multi-step procedure that recurred between two specs
+    when: the agent recognises the recurrence
+    then: it opens a spec with label=skill-author capturing the pattern, recurrence evidence (links to two prior specs), and draft scenarios — the workshop is in orbit-state, not on disk yet
+
+  - name: SKILL.md ships with required front-matter
+    given: a skill-author spec is closing
+    when: the SKILL.md ships
+    then: the front-matter includes name, description, and metadata block with created_by (agent or human), created_at, and pinned (false by default); the marker is what makes the curator safe
+    gate: true
+
+  - name: Curator passes leave human-authored skills alone
+    given: a periodic curator pass
+    when: it scans skill front-matter
+    then: only created_by:agent && pinned!=true skills are evaluated; human-authored, bundled, and pinned skills are bypassed entirely
+    gate: true
+
+  - name: Stale agent-authored skills are flagged at thirty days
+    given: an agent-authored skill not touched in thirty days
+    when: the curator runs
+    then: the skill is flagged for review (not yet archived); Hugh decides whether to pin, fix, or let age out
+
+  - name: Very stale skills are archived but recoverable
+    given: an agent-authored skill not touched in ninety days
+    when: the curator runs
+    then: it is git-mv'd to .archive/<slug>/ — never deleted; recoverable by moving it back; the archive is permanent
+    gate: true
+
+  - name: Pinned skills bypass all auto-transitions
+    given: an agent-authored skill marked pinned:true
+    when: the curator runs
+    then: the skill is left untouched regardless of age or invocation history — pinning is the explicit override
+
+  - name: Promotion from memory to skill
+    given: a memory record that keeps surfacing in agent prime
+    when: the agent recognises that reconstruction cost exceeds authoring cost
+    then: it opens a skill-author spec citing the memory as recurrence evidence; the memory may stay (as historical context) or be archived after the skill ships
+
+goal: "agent-authored skills accumulate without bloat — useful patterns get pinned, dead ones get archived, and the curator's invariants (never auto-delete, never touch human-authored or bundled, pinned bypasses) keep the system safe across many iterations"
+
+maturity: planned
+
+specs: []
+
+relations:
+  - card: 0023-memory-loop
+    type: feeds
+    reason: memories that recur with steps promote to skills via the workshop spec
+  - card: 0024-lean-pass
+    type: feeds
+    reason: the curator is one column in the system-wide lean ledger — specifically the skill column
+
+references:
+  - ".orbit/cards/memos/2026-05-06-skill-memory-lifecycle.md: distillation source — artefact-level lifecycle"
+  - ".orbit/cards/memos/2026-05-06-two-artefact-contract-and-curator-lifecycle.md: the original curator pattern, adopted from hermes-agent (NousResearch)"

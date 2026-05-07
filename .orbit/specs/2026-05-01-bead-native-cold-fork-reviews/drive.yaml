@@ -1,0 +1,14 @@
+card: .orbit/cards/0016-bead-native-cold-fork-reviews.yaml
+autonomy: full
+budget: 3
+iteration: 1
+current_spec: .orbit/specs/2026-05-01-bead-native-cold-fork-reviews
+status: complete
+history: []
+started: 2026-05-01T05:27:35Z
+review_cycles:
+  review_spec: 1
+  review_pr: 0
+review_cycle_dates:
+  review_spec: '2026-05-01'
+  review_pr: '2026-05-01'

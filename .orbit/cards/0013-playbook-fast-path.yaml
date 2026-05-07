@@ -1,0 +1,45 @@
+feature: Playbook fast-path for known investigations
+as_a: author
+i_want: an agent with a proven investigation sequence to declare it, present the steps for my approval, and execute mechanically — without running a Socratic interview I no longer have better answers for
+so_that: investigations the agent has run repeatedly skip the Q&A overhead and produce evidence at the speed of measurement, while I retain approve-the-approach control
+
+scenarios:
+  - name: Agent declares a known playbook instead of opening Q&A
+    given: an investigation arrives that the agent has run successfully ≥2 times before with consistent results
+    when: a discovery or design session starts
+    then: the agent surfaces "I have a known playbook for this" with the named sequence of steps and asks for approval before executing rather than asking Socratic clarifying questions
+    source_lines: "2026-04-28-playbooks-reusable-investigation-patterns.md: 'Nightingale's subtype-collapse diagnostic arc — corpus counts → value-shape Jaccard → confident-wrong check → raw softmax top-k — has been run three times with consistent results. By the third run, the agent proposed skipping discovery entirely and going straight to measurement (Option C).'"
+
+  - name: Author role shifts to approve-and-review
+    given: the agent has presented a named playbook for approval
+    when: the author responds
+    then: the author either approves the approach (agent executes mechanically) or rejects/edits it (agent falls back to Socratic discovery) — the author is not asked to answer questions whose answers the agent already knows
+    source_lines: "2026-04-28-playbooks-reusable-investigation-patterns.md: 'The author''s role shifts from \"answer questions\" to \"approve the approach and review the findings\"'"
+
+  - name: Playbook output is evidence that feeds a spec
+    given: a playbook has been approved and executed
+    when: the run completes
+    then: the artefact is the same kind of evidence a discovery interview produces — findings that shape ACs in the subsequent spec — not a finished implementation
+    source_lines: "2026-04-28-playbooks-reusable-investigation-patterns.md: 'A playbook replaces discovery, not spec. The finding still needs ACs, review, and implementation — the playbook just gets you to the finding faster than a Socratic interview.'"
+
+  - name: Playbooks are project-scoped, not orbit-scoped
+    given: a playbook is recognised by an agent
+    when: the playbook is referenced or recorded
+    then: it lives in the project (agent definition or project-level file), not in orbit's shared vocabulary — orbit provides the convention, not the catalogue
+    source_lines: "2026-04-28-playbooks-reusable-investigation-patterns.md: 'Playbooks are project-scoped, not orbit-scoped. FineType''s subtype-collapse arc is meaningless outside FineType. The arcs belong in the project... What orbit provides is the convention.'"
+
+  - name: Promotion threshold is explicit
+    given: an investigation has been run once or with inconsistent results
+    when: the agent considers declaring it as a playbook
+    then: it does not — the threshold is ≥2 runs with consistent results, and below that the agent uses Socratic discovery
+    source_lines: "2026-04-28-playbooks-reusable-investigation-patterns.md: 'The steps are proven (run ≥2 times with consistent results)'"
+
+goal: "agents with proven investigation sequences skip Socratic Q&A; the author approves the approach instead of answering questions whose answers the agent already knows"
+
+maturity: planned
+
+specs: []
+
+references:
+  - ".orbit/cards/memos/2026-04-28-playbooks-reusable-investigation-patterns.md"
+  - "Nightingale subtype-collapse arc: corpus counts → value-shape Jaccard → confident-wrong check → raw softmax top-k"

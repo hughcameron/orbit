@@ -1,0 +1,4 @@
+key: orbit-state-v0-1-session-end-checkpoint-2026
+body: 'orbit-state v0.1 session-end checkpoint 2026-05-07: 11 of 22 ACs done (ac-01..11). Full verb surface (23 verbs across spec/task/memory/card/choice/session) with 124 tests passing, both CLI and MCP surfaces parity-verified at the byte-equal envelope level and (for spec.note) at the byte-equal on-disk JSONL level. Architecture: typed VerbRequest/VerbResponse + single execute() in core; CLI parses argv to VerbRequest, MCP parses JSON-RPC tools/call to VerbRequest. Envelope helpers shared via core. Remaining work (ac-12..22) is migration A/B, skill rewrites, CI gates, dogfood window, ship — orchestration not core code. Autonomy contract held: zero check-ins between turn 1 (spec.list scaffold) and turn N (full verb surface). Pattern works.'
+timestamp: 1970-01-01T00:00:00Z
+labels: []
