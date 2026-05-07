@@ -52,11 +52,11 @@ acceptance_criteria:
 - id: ac-12
   description: Migration A (layout) — orbit/ → .orbit/, decisions/ → choices/, MD → YAML; worktree-validated; verbatim grep returns no matches; idempotent
   gate: true
-  checked: false
+  checked: true
 - id: ac-13
   description: Migration B (substrate) — bd issues/notes/memories → orbit-state files; full-coverage hash-set comparison (no spot-checking); .beads/ → .beads-archive/ gitignored
   gate: false
-  checked: false
+  checked: true
 - id: ac-14
   description: 'Six substantive skill rewrites — drive/implement/rally/review-spec/review-pr/audit; differentiated parity bar (state-mutating: byte-identical state; judgement-emitting: verdict + HIGH-finding equality); ALL six ship before dogfood opens'
   gate: false
@@ -64,15 +64,15 @@ acceptance_criteria:
 - id: ac-15
   description: Path-only skill updates (8 skills) + CLAUDE.md bd→orbit replacement (deterministic grep) + README early-release notice verbatim
   gate: false
-  checked: false
+  checked: true
 - id: ac-16
   description: CI round-trip gate — covers specs/cards/choices/memories/schema-version on every commit; tasks excluded (append-only); blocks merge on schema drift
   gate: true
-  checked: false
+  checked: true
 - id: ac-17
   description: CI orbit verify gate — index-rebuild verification on every commit; blocks merge on drift
   gate: false
-  checked: false
+  checked: true
 - id: ac-18
   description: ≥1 week dogfood window in orbit repo — strict no-fallback to bd; restartable on verb breakage
   gate: true
@@ -84,7 +84,7 @@ acceptance_criteria:
 - id: ac-20
   description: .orbit/.gitignore ships with contracted ignore set (state.db/schema-version/locks/ ignored; cards/choices/specs/memories tracked); README install instructions for both platforms
   gate: false
-  checked: false
+  checked: true
 - id: ac-21
   description: Week-1 cross-compile gate — skeleton binary builds on mac + beelink; MUST link SQLite (rusqlite); nm/otool verifies SQLite symbols
   gate: true
