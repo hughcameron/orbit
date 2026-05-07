@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # test-gate-ac-verification.sh — exercise review-spec Pass 1's gate-AC description check
 #
-# Pipes a synthetic acceptance field (one passing gate AC + one failing gate AC)
-# into parse-acceptance.sh acs --stdin, then runs the three deterministic rules
-# (non-empty / not-placeholder / minimum-length ≥20 chars) against each is_gate=1 row.
+# Pipes a synthetic acceptance_criteria JSON array (one passing gate AC + one
+# failing gate AC) into orbit-acceptance.sh acs --stdin, then runs the three
+# deterministic rules (non-empty / not-placeholder / minimum-length ≥20 chars)
+# against each is_gate=1 row.
 #
 # This is the regression guard for the parser+rule semantics that the review-spec
 # skill executes conceptually. The skill itself has no inline test code — this
@@ -13,19 +14,24 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../../../.." && pwd)"
-PARSE="$REPO_ROOT/plugins/orb/scripts/parse-acceptance.sh"
+PARSE="$REPO_ROOT/plugins/orb/scripts/orbit-acceptance.sh"
 
 if [[ ! -x "$PARSE" ]]; then
-  echo "FAIL: parse-acceptance.sh not found or not executable at $PARSE" >&2
+  echo "FAIL: orbit-acceptance.sh not found or not executable at $PARSE" >&2
   exit 1
 fi
 
-# Synthetic acceptance field:
+# Synthetic acceptance_criteria array (the shape orbit spec show --json emits
+# under data.result.spec.acceptance_criteria):
 #   ac-01 — gate, 51 chars, not placeholder → PASS all three rules
 #   ac-02 — gate, 3 chars, "TBD"            → FAIL placeholder + length rules
-SYNTH=$(printf '%s\n' \
-  '- [ ] ac-01 [gate]: Decide hash algorithm before drift detection' \
-  '- [ ] ac-02 [gate]: TBD')
+SYNTH=$(cat <<'EOF'
+[
+  {"id": "ac-01", "description": "Decide hash algorithm before drift detection", "gate": true, "checked": false},
+  {"id": "ac-02", "description": "TBD", "gate": true, "checked": false}
+]
+EOF
+)
 
 # Deterministic-rule predicates — bash implementation of review-spec Pass 1 step 5
 PLACEHOLDER_TOKENS_REGEX='^(TBD|TODO|FIXME|PLACEHOLDER|XXX|\?\?\?)$'
@@ -61,11 +67,12 @@ check_rules() {
   printf '%s\n' "${results[@]}"
 }
 
-# Parse the synthetic field via parse-acceptance.sh
+# Parse the synthetic field via orbit-acceptance.sh (stdin mode bypasses the
+# orbit binary and reads the raw JSON array directly).
 PARSED=$(printf '%s' "$SYNTH" | "$PARSE" acs --stdin)
 
 if [[ -z "$PARSED" ]]; then
-  echo "FAIL: parse-acceptance.sh produced no output" >&2
+  echo "FAIL: orbit-acceptance.sh produced no output" >&2
   exit 1
 fi
 
