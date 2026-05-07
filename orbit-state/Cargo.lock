@@ -341,7 +341,9 @@ dependencies = [
  "anyhow",
  "clap",
  "orbit-state-core",
+ "serde",
  "serde_json",
+ "serde_yaml",
  "tempfile",
 ]
 
