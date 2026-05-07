@@ -21,8 +21,8 @@
 use clap::{Parser, Subcommand};
 use orbit_state_core::layout::OrbitLayout;
 use orbit_state_core::{
-    envelope_err_string, envelope_ok_string, execute, SpecListArgs, SpecListResult, VerbRequest,
-    VerbResponse,
+    envelope_err_string, envelope_ok_string, execute, SpecListArgs, SpecListResult, SpecNoteArgs,
+    SpecNoteResult, SpecShowArgs, SpecShowResult, VerbRequest, VerbResponse,
 };
 use std::path::PathBuf;
 use std::process::ExitCode;
@@ -62,6 +62,25 @@ enum SpecAction {
         /// Filter by status (`open` or `closed`).
         #[arg(long)]
         status: Option<String>,
+    },
+    /// Show a single spec by id.
+    Show {
+        /// Spec identifier (e.g. `2026-05-07-orbit-state-v0.1` or `0001`).
+        id: String,
+    },
+    /// Append a timestamped note to a spec.
+    Note {
+        /// Spec identifier.
+        id: String,
+        /// Note body. Use `-` to read from stdin (not yet implemented).
+        body: String,
+        /// Free-text labels (repeatable).
+        #[arg(long = "label")]
+        labels: Vec<String>,
+        /// Override the substrate timestamp. Primarily for migration tools
+        /// porting historical timestamps; production callers omit this.
+        #[arg(long)]
+        timestamp: Option<String>,
     },
 }
 
@@ -123,6 +142,18 @@ fn build_request(command: &Command) -> VerbRequest {
             SpecAction::List { status } => VerbRequest::SpecList(SpecListArgs {
                 status: status.clone(),
             }),
+            SpecAction::Show { id } => VerbRequest::SpecShow(SpecShowArgs { id: id.clone() }),
+            SpecAction::Note {
+                id,
+                body,
+                labels,
+                timestamp,
+            } => VerbRequest::SpecNote(SpecNoteArgs {
+                id: id.clone(),
+                body: body.clone(),
+                labels: labels.clone(),
+                timestamp: timestamp.clone(),
+            }),
         },
     }
 }
@@ -132,7 +163,16 @@ fn build_request(command: &Command) -> VerbRequest {
 fn render_human(response: &VerbResponse) {
     match response {
         VerbResponse::SpecList(result) => render_spec_list(result),
+        VerbResponse::SpecShow(result) => render_spec_show(result),
+        VerbResponse::SpecNote(result) => render_spec_note(result),
     }
+}
+
+fn render_spec_note(result: &SpecNoteResult) {
+    println!(
+        "noted on {}: {} ({})",
+        result.note.spec_id, result.note.body, result.note.timestamp
+    );
 }
 
 fn render_spec_list(result: &SpecListResult) {
@@ -143,5 +183,30 @@ fn render_spec_list(result: &SpecListResult) {
     // Tab-separated for cheap eyeballing. id, status, goal.
     for s in &result.specs {
         println!("{}\t{}\t{}", s.id, s.status, s.goal);
+    }
+}
+
+fn render_spec_show(result: &SpecShowResult) {
+    let s = &result.spec;
+    let status = match s.status {
+        orbit_state_core::schema::SpecStatus::Open => "open",
+        orbit_state_core::schema::SpecStatus::Closed => "closed",
+    };
+    println!("id:     {}", s.id);
+    println!("status: {status}");
+    println!("goal:   {}", s.goal);
+    if !s.cards.is_empty() {
+        println!("cards:  {}", s.cards.join(", "));
+    }
+    if !s.labels.is_empty() {
+        println!("labels: {}", s.labels.join(", "));
+    }
+    if !s.acceptance_criteria.is_empty() {
+        println!("acceptance:");
+        for ac in &s.acceptance_criteria {
+            let check = if ac.checked { "x" } else { " " };
+            let gate = if ac.gate { " [gate]" } else { "" };
+            println!("  [{check}] {}{gate}: {}", ac.id, ac.description);
+        }
     }
 }

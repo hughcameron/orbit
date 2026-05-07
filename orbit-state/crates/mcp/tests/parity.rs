@@ -49,7 +49,7 @@ fn spec_list_mcp_invalid_status_returns_error_envelope_with_is_error() {
 }
 
 #[test]
-fn tools_list_advertises_spec_list() {
+fn tools_list_advertises_spec_verbs() {
     let dir = tempfile::tempdir().unwrap();
     let mcp_bin = env!("CARGO_BIN_EXE_orbit-mcp");
 
@@ -69,6 +69,72 @@ fn tools_list_advertises_spec_list() {
         .filter_map(|t| t.get("name").and_then(Value::as_str))
         .collect();
     assert!(names.contains(&"spec.list"), "spec.list missing: {names:?}");
+    assert!(names.contains(&"spec.show"), "spec.show missing: {names:?}");
+}
+
+#[test]
+fn spec_show_mcp_envelope_matches_canonical_envelope() {
+    let dir = tempfile::tempdir().unwrap();
+    common::populate_two_specs(dir.path());
+
+    let inner = run_mcp_tools_call(
+        dir.path(),
+        json!({ "name": "spec.show", "arguments": { "id": "0001" } }),
+    );
+    let envelope = inner_envelope_text(&inner);
+    assert_eq!(envelope, common::expected_envelope_for_spec_show_0001());
+}
+
+// ---------------------------------------------------------------------------
+// State-mutation parity (ac-05 core gate) — spec.note
+// ---------------------------------------------------------------------------
+
+#[test]
+fn spec_note_mcp_writes_byte_identical_jsonl_and_envelope() {
+    let dir = tempfile::tempdir().unwrap();
+    common::populate_two_specs(dir.path());
+
+    let note = common::fixture_note();
+    let inner = run_mcp_tools_call(
+        dir.path(),
+        json!({
+            "name": "spec.note",
+            "arguments": {
+                "id": note.spec_id,
+                "body": note.body,
+                "labels": note.labels,
+                "timestamp": note.timestamp,
+            }
+        }),
+    );
+
+    // Envelope parity: MCP content[].text matches the canonical envelope.
+    let envelope = inner_envelope_text(&inner);
+    assert_eq!(envelope, common::expected_envelope_for_fixture_note());
+
+    // State parity: same on-disk bytes as the CLI surface produces, by
+    // transitivity (both surfaces compared to the same library reference).
+    let stream_path = dir.path().join(".orbit/specs/0001.notes.jsonl");
+    let actual = std::fs::read_to_string(&stream_path).unwrap();
+    assert_eq!(actual, common::expected_notes_jsonl_for_fixture_note());
+}
+
+#[test]
+fn spec_show_mcp_missing_id_returns_error_envelope() {
+    let dir = tempfile::tempdir().unwrap();
+    common::populate_two_specs(dir.path());
+
+    let inner = run_mcp_tools_call(
+        dir.path(),
+        json!({ "name": "spec.show", "arguments": { "id": "0099" } }),
+    );
+    let result = inner.get("result").expect("has result");
+    assert_eq!(result.get("isError").and_then(Value::as_bool), Some(true));
+    let envelope = inner_envelope_text(&inner);
+    assert_eq!(
+        envelope,
+        common::expected_envelope_for_spec_show_missing(dir.path())
+    );
 }
 
 // ---------------------------------------------------------------------------

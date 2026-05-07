@@ -62,6 +62,10 @@ impl OrbitLayout {
         self.specs_dir().join(format!("{spec_id}.tasks.jsonl"))
     }
 
+    pub fn notes_stream(&self, spec_id: &str) -> PathBuf {
+        self.specs_dir().join(format!("{spec_id}.notes.jsonl"))
+    }
+
     pub fn cards_dir(&self) -> PathBuf {
         self.root.join("cards")
     }

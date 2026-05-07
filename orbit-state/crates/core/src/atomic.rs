@@ -72,6 +72,58 @@ pub fn write_atomic(path: impl AsRef<Path>, contents: &[u8]) -> Result<()> {
     Ok(())
 }
 
+/// Append a single line to a JSONL stream, creating the file if it doesn't
+/// exist.
+///
+/// Per `task` / `note` event-stream design: append-only streams aren't
+/// rewritten in place, so the temp+rename pattern doesn't apply. Instead we
+/// rely on POSIX `O_APPEND` semantics: a single `write(2)` call with the
+/// O_APPEND flag is atomic relative to other appends, even concurrent ones,
+/// for writes ≤ `PIPE_BUF` (≥4096 bytes on Linux/macOS). All reasonable JSONL
+/// lines are well under that bound.
+///
+/// The caller should also hold the spec-level lock (via [`crate::locks`])
+/// when appending — this protects against logical races (two writers both
+/// reading state, both appending) even though the byte-level append itself
+/// is atomic.
+///
+/// `line` MUST end with a newline; the function does not add one. The
+/// `serialise_json_line` helper in [`crate::canonical`] produces correctly-
+/// terminated lines.
+pub fn append_jsonl_line(path: impl AsRef<Path>, line: &str) -> Result<()> {
+    let path = path.as_ref();
+    debug_assert!(line.ends_with('\n'), "JSONL append line must end with \\n");
+
+    let parent = path.parent().ok_or_else(|| {
+        Error::malformed("atomic.append", format!("path has no parent: {}", path.display()))
+    })?;
+    if !parent.exists() {
+        return Err(Error::unavailable(
+            "atomic.append",
+            format!("parent directory does not exist: {}", parent.display()),
+        ));
+    }
+
+    let mut file = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(path)
+        .map_err(|e| {
+            Error::unavailable(
+                "atomic.append",
+                format!("open append failed for {}: {e}", path.display()),
+            )
+            .with_source(e)
+        })?;
+    file.write_all(line.as_bytes()).map_err(|e| {
+        Error::unavailable("atomic.append", format!("write failed: {e}")).with_source(e)
+    })?;
+    file.sync_all().map_err(|e| {
+        Error::unavailable("atomic.append", format!("sync failed: {e}")).with_source(e)
+    })?;
+    Ok(())
+}
+
 /// Read `path` to a `String`. Returns [`Category::NotFound`] when the file
 /// does not exist; [`Category::Unavailable`] for other I/O errors.
 pub fn read_to_string(path: impl AsRef<Path>) -> Result<String> {

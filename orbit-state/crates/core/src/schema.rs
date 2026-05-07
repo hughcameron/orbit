@@ -118,6 +118,32 @@ pub enum TaskEventKind {
 }
 
 // ============================================================================
+// Spec note (append-only event)
+// ============================================================================
+
+/// One note appended to a spec via `spec.note`. Lives in the same
+/// append-only family as [`TaskEvent`] — JSONL stream, ordered by
+/// position-in-file, never rewritten in place.
+///
+/// Layout: `.orbit/specs/<spec_id>.notes.jsonl`. Excluded from the CI
+/// round-trip gate (ac-16) for the same reason tasks are: append-only
+/// streams aren't round-trippable as a unit.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct NoteEvent {
+    /// Spec this note attaches to.
+    pub spec_id: String,
+    /// Free-text body. Multi-line strings are escaped per JSON rules.
+    pub body: String,
+    /// Free-text labels (e.g. `migrated-from-bd`).
+    #[serde(default)]
+    pub labels: Vec<String>,
+    /// ISO-8601 / RFC 3339 timestamp written by the substrate at append time.
+    /// Migration tools may pre-supply this when porting historical notes.
+    pub timestamp: String,
+}
+
+// ============================================================================
 // Card (human-written; CI-validated)
 // ============================================================================
 

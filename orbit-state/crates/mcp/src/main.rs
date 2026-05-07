@@ -111,21 +111,60 @@ fn dispatch(layout: &OrbitLayout, id: &Value, method: &str, params: &Value) -> V
 /// MCP tool descriptors. Mirrors the [`VerbRequest`] surface — adding a verb
 /// means adding a descriptor here.
 fn tool_descriptors() -> Vec<Value> {
-    vec![json!({
-        "name": "spec.list",
-        "description": "List specs in the .orbit/ folder, sorted by id.",
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "status": {
-                    "type": "string",
-                    "enum": ["open", "closed"],
-                    "description": "Filter by status."
-                }
-            },
-            "additionalProperties": false
-        }
-    })]
+    vec![
+        json!({
+            "name": "spec.list",
+            "description": "List specs in the .orbit/ folder, sorted by id.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "status": {
+                        "type": "string",
+                        "enum": ["open", "closed"],
+                        "description": "Filter by status."
+                    }
+                },
+                "additionalProperties": false
+            }
+        }),
+        json!({
+            "name": "spec.show",
+            "description": "Read a single spec by id and return its full contents.",
+            "inputSchema": {
+                "type": "object",
+                "required": ["id"],
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "description": "Spec id (slug-shaped; no path separators)."
+                    }
+                },
+                "additionalProperties": false
+            }
+        }),
+        json!({
+            "name": "spec.note",
+            "description": "Append a timestamped note to a spec's notes JSONL stream.",
+            "inputSchema": {
+                "type": "object",
+                "required": ["id", "body"],
+                "properties": {
+                    "id":   { "type": "string", "description": "Spec id." },
+                    "body": { "type": "string", "description": "Note body (free text)." },
+                    "labels": {
+                        "type": "array",
+                        "items": { "type": "string" },
+                        "description": "Optional free-text labels."
+                    },
+                    "timestamp": {
+                        "type": "string",
+                        "description": "Override substrate timestamp (RFC 3339). Primarily for migration tools."
+                    }
+                },
+                "additionalProperties": false
+            }
+        }),
+    ]
 }
 
 fn handle_tool_call(layout: &OrbitLayout, id: &Value, params: &Value) -> Value {

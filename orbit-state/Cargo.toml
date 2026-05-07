@@ -33,6 +33,9 @@ clap = { version = "4.5", features = ["derive"] }
 # Async + MCP (added when needed)
 tokio = { version = "1.40", features = ["rt-multi-thread", "macros", "io-std"] }
 
+# Timestamps — RFC 3339 / ISO-8601 formatting for substrate-written events.
+time = { version = "0.3", features = ["formatting", "macros"] }
+
 # Test utilities
 tempfile = "3.10"
 
