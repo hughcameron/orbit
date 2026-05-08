@@ -2,33 +2,33 @@ feature: Four pillars — the load-bearing user outcomes orbit exists to deliver
 as_a: orbit author / contributor / agent
 i_want: a named, single-source articulation of the four user outcomes orbit optimises for, with every card citing which pillar(s) it serves
 so_that: cards, skills, and design choices are evaluated against an explicit why-test rather than argued in isolation — and new contributors / future agents inherit the framework that has been held implicitly
-goal: every card carries a pillar field naming at least one pillar; cards that move no pillar are re-scoped or retired; distill / design cannot pass without a pillar claim
-maturity: planned
+goal: orbit's four user outcomes are documented in CLAUDE.md and README.md, and the relations graph that pillar-defining cards form (each pillar has cards that operationalise it) is the framework's structural wire; cards may declare pillar contribution via existing relations:feeds edges, optional and emergent at distill time
+maturity: emerging
 scenarios:
 - name: The four pillars are named in canonical text
   given: a contributor or agent reading the project for the first time
   when: they read CLAUDE.md or README.md
   then: they encounter the four pillars as a top-level section — executive-level interaction, agent self-learning, agent state-persistence, long-running R&D — stated as user outcomes, not mechanisms
   gate: true
-- name: Every card cites at least one pillar
+- name: Cards may declare pillar contribution via the relations graph
   given: a card is being drafted, distilled, or audited
   when: the card is reviewed
-  then: it carries a pillar field with at least one pillar id and a one-line claim about how it moves that pillar — cards that cannot make the claim are re-scoped or merged
+  then: 'cards may declare pillar contribution via an existing `relations: feeds` edge to a pillar-defining card (one of those 0028 itself names — 0026, 0023, 0022, 0009, 0020, 0006) — optional and emergent at distill time, not a required schema field; cards that cannot make the claim are not blocked, but the question may surface during retrospective curation'
   gate: true
 - name: Existing cards are audited and annotated
   given: this card is filed
   when: a one-time audit pass runs across .orbit/cards/
   then: every existing card has a pillar field added; cards serving no pillar after honest examination are re-scoped, merged, or retired
   gate: false
-- name: Distill asks the pillar question
+- name: Distill is silently pillar-aware
   given: a memo being distilled into a card
   when: the agent drafts the card
-  then: it surfaces which pillar the candidate card claims to move, before the card is presented for approval — the pillar test runs at the front gate, not retroactively
+  then: 'the agent reads card 0028''s pillar-defining cards as context and may propose a `relations: feeds` entry in the draft if the candidate aligns with a pillar mechanism — pillar awareness informs shaping silently; the pillar question is not surfaced to the author as an interview question'
   gate: false
-- name: Design and review surface the parent's pillar
-  given: a card with declared pillar(s) enters /orb:design or /orb:review-spec
+- name: Design and review-spec read parent's pillar relations as context
+  given: 'a card with `relations: feeds` edges to a pillar-defining card enters /orb:design or /orb:review-spec'
   when: the spec is being shaped or reviewed
-  then: the parent card's pillar(s) are surfaced so the spec inherits the why, and reviewers can flag drift
+  then: the agent reads the parent's pillar relations as agent-side context — informing question selection in design and drift detection in review-spec — without surfacing the pillar to the author as a mid-flow question
   gate: false
 - name: Pillar theatre is rejected
   given: a card claiming to serve all four pillars
@@ -43,9 +43,10 @@ scenarios:
 - name: Wired into the framework
   given: this card declares the four pillars as the why-test
   when: enforcement is examined
-  then: CLAUDE.md and README.md name the pillars at top level, the card schema carries a pillar field, distill / design / review-spec SKILL.md cite the pillar test, and /orb:audit flags cards with no pillar claim — without these wires the card describes intent but the framework does not enforce it
+  then: CLAUDE.md and README.md name the pillars at top level, and the relations graph that pillar-defining cards form is intact — each pillar has at least one card that operationalises it (executive interaction → 0026; self-learning → 0023, 0022; state-persistence → 0009, 0020; long-running R&D → 0006), and each `feeds` edge's reason text names the pillar served, so the graph is self-describing; without these wires the card describes intent but the framework does not surface it
   gate: true
-specs: []
+specs:
+- .orbit/specs/2026-05-08-four-pillars-wires.yaml
 relations:
 - card: 0026-executive-communication
   type: feeds
@@ -66,5 +67,5 @@ relations:
   type: feeds
   reason: defines pillar 4 (long-running R&D) — 0006 operationalises it via fan-out across drives
 references:
-- '.orbit/cards/memos/2026-05-08-four-pillars.md: distillation source — the four pillars verbatim from author framing, with the audit-existing-cards path'
+- 'historical: 2026-05-08 distillation memo (four-pillars) — deleted after promotion per orbit convention; original distillation captured the four pillars verbatim from author framing, with the audit-existing-cards path'
 notes: []
