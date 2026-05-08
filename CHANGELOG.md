@@ -2,6 +2,26 @@
 
 All notable changes to orbit are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [Unreleased]
+
+orbit is moving to `meridian-online/orbit` to share the meridian release pipeline with `finetype` and `arcform`. End-users will install the orbit binary via `brew install meridian-online/tap/orbit` (or a documented linux install path) instead of `cargo install --path orbit-state/crates/cli`. See decision `0018-orbit-distribution-via-meridian` and spec `orbit-distro` for the migration plan; card `0027-brew-installable` is the capability being delivered.
+
+### Migration notes for orb plugin users
+
+Existing installations of `orb@orbit` against `hughcameron/orbit` will need to re-add the marketplace from the new home once the transfer lands:
+
+```
+/plugin marketplace remove orbit
+/plugin marketplace add meridian-online/orbit
+/plugin install orb@orbit
+```
+
+GitHub auto-redirects the old clone URL, so existing `git clone` of the substrate repo continues to work, but the Claude Code plugin marketplace metadata pins the original org/repo and needs to be refreshed manually.
+
+### Added
+
+- **`orbit` binary distribution** — pinned tar.gz archives for x86_64 and aarch64 on macOS and linux, sha256-stamped, published to GitHub Releases on every tag. The release pipeline auto-updates `meridian-online/homebrew-tap`'s `Formula/orbit.rb` so `brew upgrade orbit` is the upgrade path for end-users. Cargo-install remains supported for contributors building from source.
+
 ## [0.4.1] - 2026-05-08
 
 orbit-state v0.1 substrate adoption — the six core skills now read and write the files-canonical orbit-state substrate (`.orbit/cards`, `.orbit/specs`, `.orbit/choices`, `.orbit/memories`) via the `orbit` CLI instead of `bd`. Verdict-line contracts, deterministic gate checks, and the cold-fork architecture are preserved verbatim; the underlying file format and tool surface have changed.
