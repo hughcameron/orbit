@@ -1,0 +1,72 @@
+feature: Fan-out as a first-class substrate concept across spec / drive / research levels
+as_a: orbit author / agent
+i_want: fan-out treated as a substrate primitive that any skill or drive can invoke — not a rally-internal pattern — with three named levels (spec-level / drive-internal / research-mode) and a sequential default
+so_that: long-running R&D (pillar 4) is delivered by depth × breadth × durable state, not by a single agent running longer; rally becomes one consumer of the primitive, not the only path to parallelism
+goal: drives, research-mode skills, and rally all consume the same fan-out primitive; specs declare fan-out potential at design time; default is sequential and fan-out is opt-in justified by named criteria
+maturity: planned
+scenarios:
+- name: Fan-out is a substrate concept, not a rally feature
+  given: any skill or drive that can benefit from parallelism
+  when: it considers fan-out
+  then: it consumes a shared fan-out primitive — rally is the spec-level consumer; drives can fan out internally; research-mode skills (/researcher, /discovery, /distill) can fan out across investigation streams
+  gate: true
+- name: Drive-internal fan-out (within one spec)
+  given: a drive with independent ACs, parallelisable investigations, or speculative implementations
+  when: the drive consumes the fan-out primitive
+  then: it spawns sub-agents (per-AC, per investigation angle, or per speculative approach), receives structured returns, and synthesises — without escalating to a rally
+  gate: true
+- name: Research-mode fan-out
+  given: a research / discovery / distill session with a body of source material or multiple investigation angles
+  when: the skill fans out
+  then: parallel sub-agents return structured briefs in a fixed schema; the orchestrator merges into a single comparative output
+  gate: false
+- name: Spec-level fan-out delegates to rally
+  given: N specs with no shared output
+  when: spec-level fan-out is invoked
+  then: rally is the orchestrator — this card defines the primitive; the rally card defines the orchestration pattern at the spec level
+  gate: false
+- name: Default is sequential; fan-out is opt-in
+  given: a spec or drive without an explicit fan-out declaration
+  when: implementation begins
+  then: it runs single-agent — fan-out is declared at design time via a fan_out field on the spec, justified by named criteria (>=N independent ACs, >=3 investigation angles, or speculative race-and-pick cheaper than deliberation)
+  gate: true
+- name: Sub-agents that write files use worktree isolation
+  given: fan-out where sub-agents may write files
+  when: the orchestrator launches them
+  then: each runs in worktree isolation — shared-state fan-out without isolation is the most common conflict source
+  gate: false
+- name: Sub-agent returns are constrained
+  given: fan-out sub-agents reporting back
+  when: each one composes its return
+  then: it returns at most N words / a fixed schema — verbose returns consume orchestrator context and eat the fan-out savings
+  gate: false
+- name: Escalations are triaged before surfacing to the author
+  given: fan-out producing N escalation candidates
+  when: the orchestrator processes returns
+  then: it triages — only escalations that genuinely need the author's judgement surface; the rest are resolved in-orchestrator
+  gate: false
+- name: Fan-out theatre is rejected
+  given: a fan-out plan that does not pass the named bar
+  when: review evaluates it
+  then: the plan is converted to sequential — three sub-agents doing one agent's work fails on overhead (orchestrator context, return synthesis, rate limits)
+  gate: false
+- name: Sequential dependencies block fan-out
+  given: ACs or sub-tasks where B depends on A's output
+  when: fan-out is considered
+  then: it is rejected — parallelism only applies when work is genuinely independent; the design step declares sequential or parallelisable explicitly
+  gate: false
+specs: []
+relations:
+- card: 0006-rally
+  type: feeds
+  reason: rally is the spec-level consumer of this primitive; the cards split orchestration (rally) from primitive (this card)
+- card: 0007-drive-forked-reviews
+  type: feeds
+  reason: cold-fork review is the review-time fan-out pattern; preserved under this card's umbrella
+- card: 0005-drive
+  type: feeds
+  reason: drives consume the primitive directly — drive-internal fan-out is the level this card adds beyond rally
+references:
+- '.orbit/cards/memos/2026-05-08-fan-out-first-class.md: distillation source — three levels, anti-patterns, coupling to the four pillars'
+- '/home/hugh/reference/agentic/fan-out.md: technical reference — six fan-out mechanisms (sub-agent / custom-agent / fork / worktree / agent-team / headless), composition patterns'
+notes: []

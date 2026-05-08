@@ -1,0 +1,65 @@
+feature: Four pillars — the load-bearing user outcomes orbit exists to deliver
+as_a: orbit author / contributor / agent
+i_want: a named, single-source articulation of the four user outcomes orbit optimises for, with every card citing which pillar(s) it serves
+so_that: cards, skills, and design choices are evaluated against an explicit why-test rather than argued in isolation — and new contributors / future agents inherit the framework that has been held implicitly
+goal: every card carries a pillar field naming at least one pillar; cards that move no pillar are re-scoped or retired; distill / design cannot pass without a pillar claim
+maturity: planned
+scenarios:
+- name: The four pillars are named in canonical text
+  given: a contributor or agent reading the project for the first time
+  when: they read CLAUDE.md or README.md
+  then: they encounter the four pillars as a top-level section — executive-level interaction, agent self-learning, agent state-persistence, long-running R&D — stated as user outcomes, not mechanisms
+  gate: true
+- name: Every card cites at least one pillar
+  given: a card is being drafted, distilled, or audited
+  when: the card is reviewed
+  then: it carries a pillar field with at least one pillar id and a one-line claim about how it moves that pillar — cards that cannot make the claim are re-scoped or merged
+  gate: true
+- name: Existing cards are audited and annotated
+  given: this card is filed
+  when: a one-time audit pass runs across .orbit/cards/
+  then: every existing card has a pillar field added; cards serving no pillar after honest examination are re-scoped, merged, or retired
+  gate: false
+- name: Distill asks the pillar question
+  given: a memo being distilled into a card
+  when: the agent drafts the card
+  then: it surfaces which pillar the candidate card claims to move, before the card is presented for approval — the pillar test runs at the front gate, not retroactively
+  gate: false
+- name: Design and review surface the parent's pillar
+  given: a card with declared pillar(s) enters /orb:design or /orb:review-spec
+  when: the spec is being shaped or reviewed
+  then: the parent card's pillar(s) are surfaced so the spec inherits the why, and reviewers can flag drift
+  gate: false
+- name: Pillar theatre is rejected
+  given: a card claiming to serve all four pillars
+  when: review evaluates the claim
+  then: the card is split or its pillar list is reduced — the test is exclusion, not inclusion; cards claiming more than two pillars are split
+  gate: false
+- name: The four pillars do not grow by accretion
+  given: a candidate capability that doesn't fit any of the four pillars
+  when: someone proposes adding a fifth pillar
+  then: the proposal is rejected at the pillar level — the candidate is examined for whether it is truly a user outcome of orbit, not whether to grow the framework
+  gate: false
+specs: []
+relations:
+- card: 0026-executive-communication
+  type: feeds
+  reason: defines pillar 1 (executive interaction) — 0026 operationalises it via BLUF / Decision Brief discipline
+- card: 0023-memory-loop
+  type: feeds
+  reason: defines pillar 2 (self-learning) — 0023 operationalises it via accreted memories surfaced at prime
+- card: 0022-skill-curator
+  type: feeds
+  reason: defines pillar 2 (self-learning) — 0022 operationalises it via promotion of recurring procedures to skills
+- card: 0009-mission-resilience
+  type: feeds
+  reason: defines pillar 3 (state-persistence) — 0009 operationalises it via spec contract + notes.jsonl keeping drives anchored through disruption
+- card: 0020-orbit-state
+  type: feeds
+  reason: defines pillar 3 (state-persistence) — 0020 is the substrate (cards / specs / tasks / memories / decisions) agents serve from
+- card: 0006-rally
+  type: feeds
+  reason: defines pillar 4 (long-running R&D) — 0006 operationalises it via fan-out across drives
+references:
+- '.orbit/cards/memos/2026-05-08-four-pillars.md: distillation source — the four pillars verbatim from author framing, with the audit-existing-cards path'
+notes: []
