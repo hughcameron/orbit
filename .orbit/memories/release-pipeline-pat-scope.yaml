@@ -1,0 +1,4 @@
+key: release-pipeline-pat-scope
+body: 'HOMEBREW_TAP_TOKEN secret on meridian-online/orbit needs a fine-grained PAT with ''Contents: Read and write'' on meridian-online/homebrew-tap (Metadata: Read-only is implicit). Initial setup tripped over this — a PAT scoped to a different repo (e.g. only finetype) returns ''Bad credentials'' at the Checkout homebrew-tap step. Symptom in the run log: build/release jobs succeed, only update-homebrew fails. Fix: regenerate PAT with the right repo scope, gh secret set HOMEBREW_TAP_TOKEN -R meridian-online/orbit, then gh run rerun <id> --failed (no need to bump version). Same pattern likely applies to INSTALL_SITE_TOKEN if/when we add an install.meridian.online dispatch.'
+timestamp: 2026-05-08T05:23:01.114091884Z
+labels: []
