@@ -2,6 +2,35 @@
 
 All notable changes to orbit are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.4.1] - 2026-05-08
+
+orbit-state v0.1 substrate adoption — the six core skills now read and write the files-canonical orbit-state substrate (`.orbit/cards`, `.orbit/specs`, `.orbit/choices`, `.orbit/memories`) via the `orbit` CLI instead of `bd`. Verdict-line contracts, deterministic gate checks, and the cold-fork architecture are preserved verbatim; the underlying file format and tool surface have changed.
+
+This is a substrate-shaped patch release. The skills assume the host repo has migrated to orbit-state per the playbook at `~/github/hughcameron/ops/playbooks/migration-orbit-state-v0.1.md`. Pre-migration repos should pin to 0.4.0 or migrate before upgrading.
+
+### Added
+
+- **`orbit-acceptance.sh`** — orbit-state-shaped sibling of `parse-acceptance.sh`. Same five subcommands (`acs`, `next-ac`, `blocking-gate`, `has-unchecked`, `check`) and same tab-separated tuple contract, but reads via `orbit spec show <id> --json` and writes via `orbit spec update --ac-check` instead of bd's `--acceptance` field.
+
+### Changed
+
+- **`/orb:implement`** rewritten against orbit-state. Spec-id input (was bead-id). AC list read from the spec's `acceptance_criteria` array (`{id, description, gate, checked}`). AC flips through `orbit-acceptance.sh check` → `orbit spec update --ac-check`. Detours become sub-tasks under the current spec via `orbit task open --spec-id <current>`; the bd `discovered-from` dep edge has no orbit-state v0.1 equivalent and is captured in the task body text. NO-GO close uses `orbit spec note` + `orbit spec close` (no `--reason` flag in orbit-state).
+- **`/orb:drive`** rewritten against orbit-state. Drive state migrates from bd metadata fields (`drive_stage`, `drive_iteration`, `drive_review_*_cycle`) to `.orbit/specs/<spec>/drive.yaml` — the named slot in the orbit vocabulary. Iteration chains move from the bd dep tree to a `drive.yaml.iteration_history` array. Review output paths move from `orbit/reviews/<bead-id>/` to `.orbit/specs/<spec-id>/`. Verdict-line regex contract preserved verbatim.
+- **`/orb:rally`** rewritten against orbit-state. Epic bead + child bead graph + dep edges all collapse into `.orbit/specs/<rally-folder>/rally.yaml`. The claimable-set rule (open + all `dep_predecessors` closed/parked) replaces `bd ready --type task --parent <epic>`. Six-token reason_label vocabulary preserved.
+- **`/orb:review-spec`** rewritten against orbit-state. Spec-id input; reads via `orbit spec show <id> --json` + `orbit-acceptance.sh acs <id>`. Verdict-line contract preserved verbatim. Output paths support both flat (`.orbit/specs/<id>.yaml`) and folder-shaped (`.orbit/specs/<folder>/spec.yaml`) specs.
+- **`/orb:review-pr`** rewritten against orbit-state. Same parser + verb shift as review-spec; AC coverage check now reads from the spec's `acceptance_criteria` array.
+- **`/orb:audit`** rewritten against orbit-state. Locates specs via `orbit spec list` (was filesystem glob). Drops the deprecated `ac_type` field — orbit-state's strict schema stores ACs uniformly with `{id, description, gate, checked}`. Non-code classification is now made from description text plus gate flag at audit time.
+- **Path-only updates** across the remaining skills (`card`, `design`, `discovery`, `distill`, `keyword-scan`, `memo`, `setup`, `spec`, `spec-architect`) and the gate-AC verification regression test — all `bd` references swapped for `orbit` verbs; `orbit/` → `.orbit/` paths.
+
+### Removed
+
+- **`parse-acceptance.sh`** — bd-era markdown AC parser. Its only live consumer (the gate-AC verification regression test) was ported to `orbit-acceptance.sh`'s JSON-array stdin shape.
+
+### Notes
+
+- Skills assume host-repo migration via the orbit-state v0.1 playbook. Mixing this plugin version with a bd-era host repo produces parse errors.
+- The `orbit-state` Rust binary is a separate distribution (not bundled with this plugin). See the migration playbook for build instructions.
+
 ## [0.4.0] - 2026-05-01
 
 Bead-native execution layer — orbit's four-card overhaul (orbit-6da.1–6da.4) makes beads the canonical substrate for AC tracking, drive orchestration, and rally state. The snapshot bridge between drive and the cold-fork reviewers is removed; reviewers read beads directly. `drive.yaml`, `progress.md`, and `rally.yaml` are gone. The bead graph IS the workflow.
