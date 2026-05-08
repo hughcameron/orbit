@@ -56,6 +56,6 @@ relations:
   type: feeds
   reason: the executive surface (cards + decisions + dashboard) is rendered in this prose discipline; without it, the surface stays bloat-prone
 references:
-- '.orbit/cards/memos/2026-05-06-executive-communication-framework.md: distillation source — full BLUF / Decision Brief framework with anti-patterns and tone contract'
+- 'historical: 2026-05-06 distillation memo (executive-communication-framework) — deleted after promotion per orbit convention; original distillation captured the full BLUF / Decision Brief framework, anti-patterns, and tone contract that this card now owns'
 - 'ops decision 0029 (recommendation discipline): the precursor — this card subsumes and generalises it'
 notes: []
