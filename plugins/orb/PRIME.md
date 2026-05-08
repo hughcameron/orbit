@@ -3,27 +3,30 @@
 ## Start
 
 ```bash
-bd ready --type task   # Claimable work (use bd ready unfiltered during planning)
-bd memories            # Prior decisions and context
+orbit session prime    # Open specs + recent memories (bounded)
+orbit task ready       # Claimable work (open, no claim)
 ```
 
 ## Work Loop
 
 ```bash
-bd show <id>                # Read acceptance criteria before starting
-bd update <id> --claim      # Claim (atomic, prevents races)
-# ... implement against acceptance criteria ...
-bd update <id> --acceptance "$(new_checked_state)"  # Check off ACs
-bd close <id> --reason "what shipped"               # Complete
+orbit task show <spec-id> <task-id>     # Read task before starting
+orbit task claim <spec-id> <task-id>    # Claim (atomic, prevents races)
+# ... implement against acceptance criteria on the parent spec ...
+orbit spec update <spec-id> --ac-check ac-NN   # Flip an AC to checked
+orbit task done <spec-id> <task-id> --body "what shipped"
 ```
+
+ACs live on the spec, not the task. Use `orbit spec show <spec-id>` to read them.
 
 ## Decisions
 
 ```bash
-bd remember "insight"       # Persists across sessions
-bd memories <keyword>       # Search prior decisions
+orbit memory remember "insight"     # Persists across sessions
+orbit memory search <keyword>       # Search prior decisions
 ```
 
 ## Session Close
 
-Before finishing: `bd close <id1> <id2> ...` for all completed work.
+Before finishing: `orbit task done <spec-id> <task-id>` for every completed task,
+then `orbit spec update <spec-id> --ac-check ac-NN` for any ACs the work satisfied.
