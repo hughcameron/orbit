@@ -22,15 +22,15 @@ use clap::{Parser, Subcommand};
 use orbit_state_core::layout::OrbitLayout;
 use orbit_state_core::Error as OrbitError;
 use orbit_state_core::{
-    envelope_err_string, envelope_ok_string, execute, CardListArgs, CardSearchArgs, CardShowArgs,
-    CardShowResult, ChoiceListArgs, ChoiceListResult, ChoiceSearchArgs, ChoiceShowArgs,
-    ChoiceShowResult, MemoryListArgs, MemoryListResult, MemoryRememberArgs, MemoryRememberResult,
-    MemorySearchArgs, SessionPrimeArgs, SessionPrimeResult, SpecCloseArgs, SpecCloseResult,
-    SpecCreateArgs,
-    SpecCreateResult, SpecListArgs, SpecListResult, SpecNoteArgs, SpecNoteResult, SpecShowArgs,
-    SpecShowResult, SpecUpdateArgs, SpecUpdateResult, TaskClaimArgs, TaskDoneArgs, TaskEventResult,
-    TaskListArgs, TaskListResult, TaskOpenArgs, TaskOpenResult, TaskReadyArgs, TaskShowArgs,
-    TaskShowResult, TaskUpdateArgs, VerbRequest, VerbResponse,
+    canonicalise_all, envelope_err_string, envelope_ok_string, execute, CanonicaliseReport,
+    CardListArgs, CardSearchArgs, CardShowArgs, CardShowResult, ChoiceListArgs, ChoiceListResult,
+    ChoiceSearchArgs, ChoiceShowArgs, ChoiceShowResult, MemoryListArgs, MemoryListResult,
+    MemoryRememberArgs, MemoryRememberResult, MemorySearchArgs, SessionPrimeArgs,
+    SessionPrimeResult, SpecCloseArgs, SpecCloseResult, SpecCreateArgs, SpecCreateResult,
+    SpecListArgs, SpecListResult, SpecNoteArgs, SpecNoteResult, SpecShowArgs, SpecShowResult,
+    SpecUpdateArgs, SpecUpdateResult, TaskClaimArgs, TaskDoneArgs, TaskEventResult, TaskListArgs,
+    TaskListResult, TaskOpenArgs, TaskOpenResult, TaskReadyArgs, TaskShowArgs, TaskShowResult,
+    TaskUpdateArgs, VerbRequest, VerbResponse,
 };
 use std::path::PathBuf;
 use std::process::ExitCode;
@@ -90,6 +90,14 @@ enum Command {
     /// rebuild the index from files (ac-17). Exits non-zero on any drift.
     /// CI invokes this once per commit as the merge gate.
     Verify,
+    /// Rewrite every canonical YAML through the canonical writer, fixing
+    /// byte-drift in place. Use after hand-editing a card or choice when
+    /// `orbit verify` reports `not_byte_identical`.
+    Canonicalise {
+        /// Parse and reserialise without writing — preview what would change.
+        #[arg(long)]
+        dry_run: bool,
+    },
 }
 
 #[derive(Debug, Subcommand)]
@@ -293,12 +301,15 @@ fn main() -> ExitCode {
     };
     let layout = OrbitLayout::at(&root);
 
-    // `verify` is a hygiene/admin command, not a verb — it doesn't go through
-    // execute(). Handle it directly so its output shape (per-failure path
-    // listings, exit code = drift presence) stays separate from the verb
-    // envelope.
+    // `verify` and `canonicalise` are hygiene/admin commands, not verbs — they
+    // don't go through execute(). Handle them directly so their output shape
+    // (per-file path listings, exit code = drift/failure presence) stays
+    // separate from the verb envelope.
     if matches!(cli.command, Command::Verify) {
         return run_verify(&layout, cli.json);
+    }
+    if let Command::Canonicalise { dry_run } = cli.command {
+        return run_canonicalise(&layout, dry_run, cli.json);
     }
 
     let request = match build_request(&layout, &cli.command) {
@@ -393,8 +404,7 @@ fn run_verify(layout: &OrbitLayout, json: bool) -> ExitCode {
                     format!("parse failed: {msg}")
                 }
                 orbit_state_core::RoundTripFailureKind::NotByteIdentical => {
-                    "not byte-identical (run a verb that touches the file to canonicalise it)"
-                        .into()
+                    "not byte-identical (run `orbit canonicalise` to fix in place)".into()
                 }
             };
             eprintln!("  {} — {kind}", f.path.display());
@@ -407,6 +417,55 @@ fn run_verify(layout: &OrbitLayout, json: bool) -> ExitCode {
     }
 
     if outcome.has_failures() {
+        ExitCode::FAILURE
+    } else {
+        ExitCode::SUCCESS
+    }
+}
+
+/// Walk every canonical YAML and rewrite drifted files through the canonical
+/// writer. Mirrors `run_verify`'s output shape: human mode prints a one-line
+/// summary plus per-failure paths; JSON mode emits a single envelope-shaped
+/// line for tooling. Exits non-zero only on parse failures — drift fixed in
+/// place is success.
+fn run_canonicalise(layout: &OrbitLayout, dry_run: bool, json: bool) -> ExitCode {
+    let report: CanonicaliseReport = canonicalise_all(layout, dry_run);
+
+    if json {
+        let mut out = String::from("{\"ok\":");
+        out.push_str(if report.has_failures() { "false" } else { "true" });
+        out.push_str(",\"dry_run\":");
+        out.push_str(if dry_run { "true" } else { "false" });
+        out.push_str(&format!(
+            ",\"rewrote\":{},\"unchanged\":{},\"parse_failed\":[",
+            report.rewrote, report.unchanged
+        ));
+        for (i, (path, msg)) in report.parse_failed.iter().enumerate() {
+            if i > 0 {
+                out.push(',');
+            }
+            out.push_str(&format!(
+                "{{\"path\":{:?},\"error\":{:?}}}",
+                path.display().to_string(),
+                msg
+            ));
+        }
+        out.push_str("]}");
+        println!("{out}");
+    } else {
+        let verb = if dry_run { "would rewrite" } else { "rewrote" };
+        println!(
+            "orbit canonicalise: {verb} {} file(s), {} unchanged, {} parse-failed",
+            report.rewrote,
+            report.unchanged,
+            report.parse_failed.len()
+        );
+        for (path, msg) in &report.parse_failed {
+            eprintln!("  parse failed: {} — {msg}", path.display());
+        }
+    }
+
+    if report.has_failures() {
         ExitCode::FAILURE
     } else {
         ExitCode::SUCCESS
@@ -616,6 +675,9 @@ fn build_request(layout: &OrbitLayout, command: &Command) -> Result<VerbRequest,
         },
         Command::Verify => unreachable!(
             "Command::Verify is short-circuited in main() before reaching build_request"
+        ),
+        Command::Canonicalise { .. } => unreachable!(
+            "Command::Canonicalise is short-circuited in main() before reaching build_request"
         ),
     })
 }

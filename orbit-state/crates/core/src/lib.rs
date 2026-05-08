@@ -10,6 +10,7 @@
 
 pub mod atomic;
 pub mod canonical;
+pub mod canonicalise;
 pub mod error;
 pub mod index;
 pub mod layout;
@@ -20,6 +21,7 @@ pub mod sqlite_link;
 pub mod verbs;
 pub mod verify;
 
+pub use canonicalise::{canonicalise_all, CanonicaliseReport};
 pub use error::{Category, Error, Result};
 pub use sqlite_link::{link_sanity_check, sqlite_version};
 pub use verify::{verify_all, RoundTripFailure, RoundTripFailureKind, VerifyOutcome};

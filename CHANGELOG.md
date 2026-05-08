@@ -2,6 +2,18 @@
 
 All notable changes to orbit are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.4.3] - 2026-05-08
+
+`orbit canonicalise` is now a first-class subcommand of the main `orbit` binary. Hand-edited cards and choices that drift from the canonical writer's output (whitespace, field order, trailing newlines) used to fail `orbit verify` with `not_byte_identical` and no in-toolbox fixer — the brew binary shipped only `verify`, and the standalone `orbit-canonicalise` repair tool wasn't packaged. Surfaced when a downstream session got stuck adding a new MADR with no path forward short of building from source.
+
+### Added
+
+- **`orbit canonicalise [--dry-run] [--json]`** — walks `.orbit/{specs,cards,choices,memories}`, parses each file, reserialises through the canonical writer, and rewrites any drift in place. Mirrors `orbit verify`'s output shape; exits non-zero only on parse failures (drift fixed in place is success). The shared logic now lives in `orbit_state_core::canonicalise`, callable from both the main CLI subcommand and the standalone `orbit-canonicalise` binary.
+
+### Changed
+
+- **`orbit verify` error message** for `NotByteIdentical` now points at `orbit canonicalise` as the fixer, replacing the prior advice to "run a verb that touches the file" — a workflow that didn't exist for `Choice` (read-only verbs only).
+
 ## [0.4.2] - 2026-05-08
 
 orbit now lives at `meridian-online/orbit` and shares the meridian release pipeline with `finetype` and `arcform`. End-users install the orbit binary via `brew install meridian-online/tap/orbit` (Homebrew on macOS, Linuxbrew on linux) instead of `cargo install --path orbit-state/crates/cli`. Plugin and binary versions are aligned from this release onward; both move in lockstep. See decision `0018-orbit-distribution-via-meridian` and spec `orbit-distro` for the migration plan; card `0027-brew-installable` is the capability being delivered.
