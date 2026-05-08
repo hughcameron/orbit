@@ -17,7 +17,7 @@ acceptance_criteria:
 - id: ac-03
   description: Release workflow updates meridian-online/homebrew-tap with Formula/orbit.rb on every release tag; formula mirrors finetype.rb shape (homepage, license, version, mac/linux arm/x86 urls + sha256s, install stanza, test stanza that asserts `orbit --version` exits zero)
   gate: false
-  checked: false
+  checked: true
 - id: ac-04
   description: On a fresh macOS box, `brew tap meridian-online/tap && brew install orbit` installs the orbit binary to PATH; `orbit --version` prints the released version; `orbit session prime` succeeds in any /setup'd project
   gate: true
