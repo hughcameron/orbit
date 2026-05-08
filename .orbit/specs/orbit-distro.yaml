@@ -37,11 +37,11 @@ acceptance_criteria:
 - id: ac-08
   description: CLAUDE.md (project) and AGENTS.md updated — hughcameron→meridian-online URL references switched, the "Orbit-state Substrate" quick-reference still works verbatim against a brew-installed orbit binary, and the install pointer in CLAUDE.md (if any) reflects the brew path
   gate: false
-  checked: false
+  checked: true
 - id: ac-09
   description: CHANGELOG.md migration note tells existing orb plugin users to remove the old marketplace entry and re-add it from meridian-online/orbit; entry also flags the new binary distribution channel and the version that first ships through it
   gate: false
-  checked: false
+  checked: true
 - id: ac-10
   description: End-to-end smoke pass — first release tag pushed from meridian-online/orbit cuts cleanly through the pipeline (binaries built, GitHub release created, homebrew-tap updated, install-script updated if used); a fresh macOS box AND a fresh linux box each install via the documented path and run `orbit session prime` cleanly in a freshly-/setup'd project
   gate: true
