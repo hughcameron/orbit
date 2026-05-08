@@ -2,13 +2,13 @@
 
 All notable changes to orbit are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/).
 
-## [Unreleased]
+## [0.4.2] - 2026-05-08
 
-orbit is moving to `meridian-online/orbit` to share the meridian release pipeline with `finetype` and `arcform`. End-users will install the orbit binary via `brew install meridian-online/tap/orbit` (or a documented linux install path) instead of `cargo install --path orbit-state/crates/cli`. See decision `0018-orbit-distribution-via-meridian` and spec `orbit-distro` for the migration plan; card `0027-brew-installable` is the capability being delivered.
+orbit now lives at `meridian-online/orbit` and shares the meridian release pipeline with `finetype` and `arcform`. End-users install the orbit binary via `brew install meridian-online/tap/orbit` (Homebrew on macOS, Linuxbrew on linux) instead of `cargo install --path orbit-state/crates/cli`. Plugin and binary versions are aligned from this release onward; both move in lockstep. See decision `0018-orbit-distribution-via-meridian` and spec `orbit-distro` for the migration plan; card `0027-brew-installable` is the capability being delivered.
 
 ### Migration notes for orb plugin users
 
-Existing installations of `orb@orbit` against `hughcameron/orbit` will need to re-add the marketplace from the new home once the transfer lands:
+Existing installations of `orb@orbit` against `hughcameron/orbit` need to re-add the marketplace from the new home:
 
 ```
 /plugin marketplace remove orbit
@@ -21,6 +21,10 @@ GitHub auto-redirects the old clone URL, so existing `git clone` of the substrat
 ### Added
 
 - **`orbit` binary distribution** — pinned tar.gz archives for x86_64 and aarch64 on macOS and linux, sha256-stamped, published to GitHub Releases on every tag. The release pipeline auto-updates `meridian-online/homebrew-tap`'s `Formula/orbit.rb` so `brew upgrade orbit` is the upgrade path for end-users. Cargo-install remains supported for contributors building from source.
+
+### Changed
+
+- **Plugin and binary versions aligned at 0.4.2.** `plugins/orb/.claude-plugin/plugin.json` and `orbit-state/Cargo.toml` workspace version are now synchronised; releases bump both in lockstep. The orbit-state binary moves from its `0.1.0-dev` development version to the unified release line — this is an alignment jump, not a semver claim about the binary's API.
 
 ## [0.4.1] - 2026-05-08
 

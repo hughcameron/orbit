@@ -1,0 +1,4 @@
+key: versioning-prefer-patch
+body: 'Prefer patch bumps (0.4.1 → 0.4.2) over minor (→ 0.5.0) for distribution/plumbing changes that don''t add user-facing features. Reasoning: minor bumps burn version-number runway — ''we''ll suddenly find ourselves at 1.0 when nowhere near ready.'' Reserve minor for genuine feature increments. Applied to orbit-distro release version (chose 0.4.2 to align plugin + binary; declined 0.5.0).'
+timestamp: 2026-05-08T04:28:03.246489997Z
+labels: []
