@@ -1,0 +1,37 @@
+id: 2026-05-08-four-pillars-wires
+goal: Document orbit's four pillars in README.md and amend card 0028's gate scenarios to align with documentation-only wiring — no schema field, no audit pillar-check, no SKILL.md instruction; pillars stay as a design heuristic surfaced via the relations graph
+cards:
+- 0028-four-pillars
+status: open
+labels:
+- spec
+- drive
+acceptance_criteria:
+- id: ac-01
+  description: README.md's existing public-pillars section (currently H2 "What orbit optimises for", lines 13-22) is renamed to "Four pillars" — adopting the canonical name from CLAUDE.md and card 0028. Existing prose is preserved or lightly edited for tone; no content is duplicated and no parallel section is added. CLAUDE.md remains the working contract; README is the public face.
+  gate: true
+  checked: true
+- id: ac-02
+  description: 'Card 0028 gate scenario 2 ("Every card cites at least one pillar") is amended. The schema-field requirement is dropped; the mandate that each card "carries a pillar field with at least one pillar id and a one-line claim" is removed. Reframed so cards may declare pillar contribution via the existing `relations: feeds` edge to a pillar-defining card — optional and emergent at distill time, not a required schema field.'
+  gate: true
+  checked: true
+- id: ac-03
+  description: Card 0028 gate scenario 8 ("Wired into the framework") is amended. The wires list drops "card schema carries a pillar field" and "/orb:audit flags cards with no pillar claim". Remaining wires named are CLAUDE.md naming (already live), README.md naming (delivered by ac-01), and the relations graph that pillar-defining cards form (each pillar has cards that operationalise it; the graph is the wire). Skill citations are not part of the realised wires shape.
+  gate: true
+  checked: true
+- id: ac-04
+  description: 'Card 0028 non-gate scenarios 4 ("Distill asks the pillar question") and 5 ("Design and review surface the parent''s pillar") are amended for consistency with the realised wiring. Specifically: scenario 4''s `then` clause no longer mandates surfacing the pillar question to the author at distill time; scenario 5''s `then` clause no longer mandates surfacing the parent card''s pillar to the author at design or review-spec time. Both reframe to silent agent-side awareness via the relations graph — pillars inform agent shaping, not interview questions.'
+  gate: false
+  checked: true
+- id: ac-05
+  description: 'Card 0028''s stale memo reference (`.orbit/cards/memos/2026-05-08-four-pillars.md`, deleted post-distill as part of the normal distill flow) is annotated as historical in the card''s `references:` list — mirroring card 0026''s precedent (its references entry begins `historical: 2026-05-06 distillation memo ...`). The reference is preserved as a `historical:`-prefixed entry rather than removed.'
+  gate: false
+  checked: true
+- id: ac-06
+  description: '`orbit verify` passes after all changes (canonical round-trip clean for card 0028 and the spec). `orbit spec close 2026-05-08-four-pillars-wires` succeeds at drive completion — transactionally appending this spec''s id to card 0028''s `specs:` array. Choice 0019''s aspirational-card audit signal flips for card 0028 from aspirational (specs: []) to wired (specs: contains this spec).'
+  gate: true
+  checked: true
+- id: ac-07
+  description: Card 0028's `relations:` block carries `feeds` edges to at least one pillar-defining card per pillar — executive-level interaction (e.g. 0026), agent self-learning (e.g. 0023 or 0022), agent state-persistence (e.g. 0009 or 0020), and long-running R&D (e.g. 0006). Each `feeds` edge's `reason` text names the pillar it operationalises, so the relations graph is self-describing for AC-03's wires claim. This anchors scenario 8's realised wire — without it, the wire is named in prose but not verified against the graph.
+  gate: true
+  checked: true

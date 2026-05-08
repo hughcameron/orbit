@@ -10,7 +10,7 @@ Agents have gravity. Context windows fill, sessions end, and there's a constant 
 
 Orbit is scaffolding that works *with* that gravity rather than against it. It keeps work moving forward without letting it sail off into space. The trick is artefacts: every stage produces a small, durable file (a card, an interview, a spec, a progress tracker) that survives context loss and hands cleanly to the next step. When a session ends mid-implementation, the next one picks up from the artefact, not from memory.
 
-## What orbit optimises for
+## Four pillars
 
 Orbit is built around four user outcomes. Everything else is means.
 
