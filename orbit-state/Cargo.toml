@@ -11,7 +11,8 @@ version = "0.1.0-dev"
 edition = "2021"
 license = "MIT"
 authors = ["Hugh Cameron"]
-repository = "https://github.com/hughcameron/orbit"
+repository = "https://github.com/meridian-online/orbit"
+homepage = "https://meridian.online/projects/orbit/"
 description = "orbit-state — files-canonical agent substrate (Rust + SQLite + MCP)"
 
 [workspace.dependencies]

@@ -260,44 +260,53 @@ orbit builds on well-established ideas from the agile and software engineering c
 
 ## Install
 
-Install the plugin:
+orbit ships in two pieces: the `orb` plugin (the skills you invoke from Claude Code) and the `orbit` binary (the files-canonical substrate every orb skill calls into). Both live in this repo; install the plugin from the marketplace and the binary from the meridian-online tap.
+
+### 1. Install the plugin
 
 ```
-/plugin marketplace add hughcameron/orbit
+/plugin marketplace add meridian-online/orbit
 /plugin install orb@orbit
 ```
 
-Build the `orbit` binary — orbit's files-canonical agent substrate. Required in every project that uses the orb skills, since `orbit session prime`, `orbit task ready`, etc. are how the workflow tracks state.
+### 2. Install the orbit binary
 
-**macOS:**
+The orbit binary is required in every project that uses the orb skills — `orbit session prime`, `orbit task ready`, and the rest of the workflow tracking depend on it.
+
+**macOS and linux (Homebrew / Linuxbrew):**
 
 ```
-brew install rust            # provides cargo
-git clone https://github.com/hughcameron/orbit
-cd orbit
-cargo install --path orbit-state/crates/cli
+brew tap meridian-online/tap
+brew install orbit
 orbit --version              # verify
 ```
 
-On Apple Silicon, note that `/opt/homebrew/bin` and `~/.cargo/bin` aren't on the default cron PATH — if you plan to run orbit's autonomous workflows from cron, export PATH explicitly in the cron job.
+`brew upgrade orbit` is the upgrade path; releases are pinned per arch (x86_64 and aarch64 on both platforms) and sha256-stamped against the `meridian-online/orbit` GitHub release.
 
-**Linux (beelink and others):**
+On Apple Silicon, `/opt/homebrew/bin` isn't on the default cron PATH — if you plan to run orbit's autonomous workflows from cron, export PATH explicitly in the cron job.
 
-```
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-git clone https://github.com/hughcameron/orbit
-cd orbit
-cargo install --path orbit-state/crates/cli
-orbit --version              # verify
-```
+### 3. Set up a project
 
-Then in any project:
+In any project that should use orbit:
 
 ```
 /setup
 ```
 
 This creates the directory structure (`.orbit/cards/`, `.orbit/specs/`, `.orbit/choices/`), adds a workflow snippet to your `CLAUDE.md`, and walks you through writing your first feature card. Verify the install end-to-end with `orbit session prime` from the project root — it returns open specs and recent memories.
+
+### Build from source (contributors)
+
+Building locally is only needed if you're developing orbit itself or want to test an unreleased change. End-users should use the brew install above.
+
+```
+git clone https://github.com/meridian-online/orbit
+cd orbit
+cargo install --path orbit-state/crates/cli
+orbit --version              # verify
+```
+
+A locally built `orbit` on `~/.cargo/bin/orbit` takes precedence on PATH over the brew-installed binary, so the contributor flow does not regress when both are present.
 
 ## License
 
