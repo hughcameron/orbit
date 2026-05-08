@@ -10,6 +10,17 @@ Agents have gravity. Context windows fill, sessions end, and there's a constant 
 
 Orbit is scaffolding that works *with* that gravity rather than against it. It keeps work moving forward without letting it sail off into space. The trick is artefacts: every stage produces a small, durable file (a card, an interview, a spec, a progress tracker) that survives context loss and hands cleanly to the next step. When a session ends mid-implementation, the next one picks up from the artefact, not from memory.
 
+## What orbit optimises for
+
+Orbit is built around four user outcomes. Everything else is means.
+
+- **Executive-level interaction.** You have a clear vision but are managing multiple things. You don't have time to digest each artefact. Orbit's output is concise and actionable; agents pay the compression cost so you don't.
+- **Agent self-learning.** Agents save their own memory and grow their skillset. Facts discovered in one session are available in the next. Recurring procedures accrete into skills.
+- **Agent state-persistence.** Durable state keeps agents on track through context loss, session death, and parallel work. You won't read most of it — its job is to serve the agent so the agent can serve you.
+- **Long-running R&D.** Agents do a full session's work before checking in. You get time to dive deep when you check in, rather than course-correcting every few minutes. Start/stop is what kills progress.
+
+These four are the test. If a feature doesn't move at least one of them, it doesn't belong in orbit.
+
 ## You decide, orbit executes
 
 Orbit draws a clear line between the parts that need your judgement and the parts an agent should work out for itself.

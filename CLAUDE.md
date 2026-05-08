@@ -6,6 +6,17 @@ This repo is the orbit workflow plugin for Claude Code. Sessions here are about 
 
 orbit is a Claude Code plugin that provides specification-driven workflow skills (`/orb:card`, `/orb:distill`, `/orb:design`, `/orb:spec`, `/orb:implement`, `/orb:review-pr`, etc.). The skills, hooks, and card format are the product.
 
+## The four pillars
+
+orbit exists to deliver four user outcomes. Every card, skill, and design choice in this repo is justified by moving at least one of them. When work doesn't move a pillar, question whether it belongs in orbit at all.
+
+1. **Executive-level interaction** — the author has clear vision but is managing multiple things and has no time to digest each artefact. Orbit's output is concise and actionable; agents pay the compression cost so the author doesn't.
+2. **Agent self-learning** — agents save their own memory and grow their skillset across sessions. Discovered facts and recurring procedures accrete into the substrate so future sessions don't re-discover them.
+3. **Agent state-persistence** — durable state keeps agents on track through context loss, session death, and fan-out. The author won't read most of it; its job is to serve the agent.
+4. **Long-running R&D** — agents do a full session's work before checking in. Start/stop kills progress; the author wants depth between check-ins so each check-in is a real review, not a course-correction.
+
+These are the load-bearing why-test. They are not interchangeable with "things orbit happens to do." Cards that claim a pillar should be able to defend the claim with a measurable mechanism.
+
 ## Working in This Repo
 
 - **Skills live in** `plugins/orb/skills/<name>/SKILL.md`
