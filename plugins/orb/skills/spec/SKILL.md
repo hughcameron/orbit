@@ -17,9 +17,13 @@ Generate a validated specification from interview results or conversation contex
 
 ### 1. Gather Interview Context
 
-- If an interview file path is provided: Read it
-- If no file path: Check conversation history for a recent `/orb:design` or `/orb:discovery` session
+The input artefact may be a full **interview** (`interview.md`) from an open or partial design space, or a short **design note** (`design-note.md`) from a closed design space. Both are valid inputs — `/orb:spec` does not require a Q&A record. The closed-space path produces a design note instead of an interview, and that design note is a sufficient handoff (see `/orb:design` §3–§4).
+
+- If an interview or design-note file path is provided: Read it
+- If no file path: Check conversation history for a recent `/orb:design` or `/orb:discovery` session — and look in `.orbit/specs/YYYY-MM-DD-<topic-slug>/` for either `interview.md` or `design-note.md`
 - If neither: Ask the author what to crystallise
+
+**Cite the user-voice paragraph as the intent contract.** Both the interview template and the design-note template carry a top-of-file **What good looks like** paragraph — written from the user's seat, in the author's idiom. When this paragraph is present in the input artefact, the generated spec quotes or directly references it as the intent contract — not only the structured Q&A or the deferred-items list. Concretely: the paragraph appears in the spec's `goal` (if it compresses to one sentence) or in `notes` / a leading note (if it doesn't), so the implementing agent reads prose-level user intent, not just answers to questions.
 
 ### 2. Assess Ambiguity
 
@@ -83,7 +87,7 @@ metadata:
   test_prefix: "remat"  # short label for this spec — disambiguates ACs across specs
   timestamp: "YYYY-MM-DDTHH:MM:SSZ"
   ambiguity_score: 0.15
-  interview_ref: ".orbit/specs/YYYY-MM-DD-<topic>/interview.md"
+  interview_ref: ".orbit/specs/YYYY-MM-DD-<topic>/interview.md"  # or design-note.md for closed-space inputs
 ```
 
 ### 4. Save the Spec
@@ -94,9 +98,9 @@ If the interview file exists in a spec directory, save alongside it.
 
 ### 5. Update the Card's Specs Array
 
-The spec references a card (from the interview's `Card:` line). After saving `spec.yaml`, append its path to the card's `specs` array so the work trail stays complete.
+The spec references a card (from the interview's or design note's `Card:` line). After saving `spec.yaml`, append its path to the card's `specs` array so the work trail stays complete.
 
-1. Parse the card path from the interview record (the `**Card:**` line) or from conversation context
+1. Parse the card path from the input artefact (the `**Card:**` line in either `interview.md` or `design-note.md`) or from conversation context
 2. If no card is identified, skip this step — not all specs originate from a card
 3. Read the card YAML
 4. Append the new spec path (e.g. `.orbit/specs/2026-04-12-topic/spec.yaml`) to the `specs` array
