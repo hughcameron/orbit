@@ -28,7 +28,7 @@ vocabulary:
 | `metadata.drive_card`       | `drive.yaml: card_path`                                                |
 | `metadata.drive_autonomy`   | `drive.yaml: autonomy`                                                 |
 | Iteration dep chain         | `drive.yaml: iteration_history` array of prior spec ids + constraints  |
-| Constraint history          | `orbit memory remember "drive-<card-slug>-iter<N>: <constraint>"`      |
+| Constraint history          | `orbit memory remember drive-<card-slug>-iter<N> "<constraint>"`       |
 
 Cold-fork review architecture (decision 0011 D2) is preserved — the
 fork reads the spec directly via `orbit spec show <spec-id> --json` and
@@ -533,9 +533,11 @@ synthetic BLOCK) or was rejected at a supervised gate.
    first (`orbit task done <task-id>`) — the NO-GO captures their
    outcome via the spec note.
 
-2. **Persist the constraint to memory:**
+2. **Persist the constraint to memory:** the CLI takes the key and body
+   as separate positional args.
+
    ```bash
-   orbit memory remember "drive-<card-slug>-iter<N>: <constraint>"
+   orbit memory remember drive-<card-slug>-iter<N> "<constraint>"
    ```
 
    The key format is stable so iteration ≥2 can list all prior

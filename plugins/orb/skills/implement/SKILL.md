@@ -226,7 +226,7 @@ channels:
 | Finding kind                                  | Channel                                                                    |
 |-----------------------------------------------|----------------------------------------------------------------------------|
 | Blocking detour (must resolve before this AC) | sub-task under current spec via `orbit task open --spec-id <current>` (above) |
-| Follow-up work that does NOT block this AC    | new spec via `/orb:spec`, or a memory note via `orbit memory remember "<finding>"` |
+| Follow-up work that does NOT block this AC    | new spec via `/orb:spec`, or a memory note via `orbit memory remember <key> "<finding>"` |
 | Product-direction question (capability-level) | memo at `.orbit/cards/memos/YYYY-MM-DD-<slug>.md` for `/orb:distill` later |
 
 **Never suggest "open a follow-up card."** Cards describe capabilities,
@@ -319,10 +319,12 @@ doesn't work — that's a valid outcome, not a failure. When results
 invalidate the spec's hypothesis:
 
 1. **Persist the finding.** Use `orbit memory remember` so the insight
-   survives the spec close:
+   survives the spec close. The CLI takes a key and a body as separate
+   positional args — the key is a short stable identifier (re-using it
+   upserts):
 
    ```bash
-   orbit memory remember "<spec-id>: <evidence-backed insight>"
+   orbit memory remember <spec-id>-no-go "<evidence-backed insight>"
    ```
 
 2. **Close with a NO-GO note.** orbit-state's `spec close` has no

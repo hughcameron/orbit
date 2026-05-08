@@ -22,8 +22,8 @@ ACs live on the spec, not the task. Use `orbit spec show <spec-id>` to read them
 ## Decisions
 
 ```bash
-orbit memory remember "insight"     # Persists across sessions
-orbit memory search <keyword>       # Search prior decisions
+orbit memory remember <key> "<body>"   # Persists across sessions (key is a short stable id)
+orbit memory search <keyword>           # Search prior decisions
 ```
 
 ## Session Close

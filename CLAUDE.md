@@ -76,7 +76,7 @@ orbit task show <id>        # Inspect a task
 orbit task claim <id>       # Claim a task
 orbit task done <id>        # Complete a task
 orbit spec list             # Open specs
-orbit memory remember "..." # Persist a decision across sessions
+orbit memory remember <key> "<body>"  # Persist a decision across sessions (key is a short stable id)
 orbit memory search <kw>    # Search prior memories
 ```
 
