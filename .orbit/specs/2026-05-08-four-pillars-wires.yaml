@@ -2,7 +2,7 @@ id: 2026-05-08-four-pillars-wires
 goal: Document orbit's four pillars in README.md and amend card 0028's gate scenarios to align with documentation-only wiring — no schema field, no audit pillar-check, no SKILL.md instruction; pillars stay as a design heuristic surfaced via the relations graph
 cards:
 - 0028-four-pillars
-status: open
+status: closed
 labels:
 - spec
 - drive

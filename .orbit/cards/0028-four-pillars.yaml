@@ -2,8 +2,8 @@ feature: Four pillars — the load-bearing user outcomes orbit exists to deliver
 as_a: orbit author / contributor / agent
 i_want: a named, single-source articulation of the four user outcomes orbit optimises for, with every card citing which pillar(s) it serves
 so_that: cards, skills, and design choices are evaluated against an explicit why-test rather than argued in isolation — and new contributors / future agents inherit the framework that has been held implicitly
-goal: every card carries a pillar field naming at least one pillar; cards that move no pillar are re-scoped or retired; distill / design cannot pass without a pillar claim
-maturity: planned
+goal: orbit's four user outcomes are documented in CLAUDE.md and README.md, and the relations graph that pillar-defining cards form (each pillar has cards that operationalise it) is the framework's structural wire; cards may declare pillar contribution via existing relations:feeds edges, optional and emergent at distill time
+maturity: emerging
 scenarios:
 - name: The four pillars are named in canonical text
   given: a contributor or agent reading the project for the first time
@@ -45,7 +45,8 @@ scenarios:
   when: enforcement is examined
   then: CLAUDE.md and README.md name the pillars at top level, and the relations graph that pillar-defining cards form is intact — each pillar has at least one card that operationalises it (executive interaction → 0026; self-learning → 0023, 0022; state-persistence → 0009, 0020; long-running R&D → 0006), and each `feeds` edge's reason text names the pillar served, so the graph is self-describing; without these wires the card describes intent but the framework does not surface it
   gate: true
-specs: []
+specs:
+- .orbit/specs/2026-05-08-four-pillars-wires.yaml
 relations:
 - card: 0026-executive-communication
   type: feeds
