@@ -1,0 +1,4 @@
+key: card-0028-i-want-drift-followup
+body: 'Card 0028''s i_want field (line 3) still says ''with every card citing which pillar(s) it serves'' — same schema-field framing the spec amended out of goal/scenarios. Drive 2026-05-08-four-pillars-wires fixed goal but left i_want; cold-fork review-pr flagged only goal as LOW. Follow-up: amend i_want to reflect documentation-only wiring (e.g., ''with the relations graph as the structural wire''). Low priority — non-load-bearing prose; can roll into the existing-cards backfill spec.'
+timestamp: 2026-05-08T12:51:48.056914935Z
+labels: []
