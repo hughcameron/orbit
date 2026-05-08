@@ -2,8 +2,8 @@ feature: Design sessions stay in user-language; closed-decision-space cards skip
 as_a: orbit author
 i_want: /orb:design to recognise when a card has no real design space, produce a short design note instead of a forced interview, and apply an implementation-question filter to whatever questions it does ask
 so_that: my time isn't burned on questions disguised as preference, and design output is grounded in user experience rather than agent-manufactured Q&A
-goal: /orb:design has three modes (open / closed / partial); every question passes the "would the author need codebase context to answer this?" filter; user-voice prose is a first-class output of the design session, not just an extracted answer
-maturity: planned
+goal: /orb:design has three modes (open / closed / partial); every question passes the four-signal implementation-question filter (codebase context, schema knowledge, metric vocabulary, evaluation tooling); user-voice prose is a first-class output of the design session, not just an extracted answer
+maturity: emerging
 scenarios:
 - name: Design-space pre-flight gate
   given: a card entering /orb:design
@@ -50,7 +50,8 @@ scenarios:
   when: enforcement is examined
   then: /orb:design SKILL.md encodes the pre-flight design-space gate, the implementation-question filter is named as a question-generation test the skill applies, the interview.md template includes a top-of-file user-voice paragraph slot, and /orb:spec accepts short design notes alongside full interviews — without these wires the card is aspirational
   gate: true
-specs: []
+specs:
+- .orbit/specs/2026-05-09-design-session-user-language.yaml
 relations:
 - card: 0026-executive-communication
   type: feeds

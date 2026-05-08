@@ -2,7 +2,7 @@ id: 2026-05-09-design-session-user-language
 goal: /orb:design recognises closed design spaces and skips the interview, applies an implementation-question filter to questions it asks, and treats the user-voice prose paragraph as a first-class output rather than something extracted via Q&A
 cards:
 - 0031-design-session-user-language
-status: open
+status: closed
 labels:
 - spec
 - drive
