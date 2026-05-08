@@ -30,7 +30,7 @@ If no argument is given, default to `patch`.
 
 ### 1. Pre-flight Checks
 
-Run these checks in the orbit repo at `~/github/hughcameron/orbit`:
+Run these checks from the orbit repo's working tree (the skill expects to be invoked from inside the orbit repo — confirm `git rev-parse --show-toplevel` resolves and the basename is `orbit`):
 
 1. `git status` — must be clean (no uncommitted changes). If dirty, stop and tell the user to commit first.
 2. `git log --oneline -5` — show recent commits so the user can verify what's being released.
@@ -61,7 +61,6 @@ Update `plugins/orb/.claude-plugin/plugin.json` with the new version.
 ### 4. Commit and Push
 
 ```bash
-cd ~/github/hughcameron/orbit
 git add plugins/orb/.claude-plugin/plugin.json CHANGELOG.md
 git commit -m "Bump version to <new_version>"
 git push origin main
