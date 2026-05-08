@@ -1,0 +1,34 @@
+id: '0018'
+title: Distribute orbit via meridian-online
+status: accepted
+date_created: 2026-05-08
+date_modified: 2026-05-08
+body: |
+  # 0018. Distribute orbit via meridian-online
+
+  ## Context and Problem Statement
+
+  orbit currently lives at `hughcameron/orbit` and is distributed only as a Claude Code plugin (the `orb` package). The orbit binary that backs `orbit session prime`, `orbit task ready`, and the rest of the substrate is *not* shipped — every machine that uses orbit has to clone the repo and run `cargo install --path orbit-state/crates/cli`. A fresh macOS session this week tripped over the gap: the agent ran `orbit session prime` per the project CLAUDE.md, the binary wasn't on PATH, and the workflow stalled before the first verb.
+
+  meridian-online already runs a release pipeline for `finetype`: tagged release → cross-target binary build (mac arm/x86, linux arm/x86, windows) → GitHub release artefacts → automated formula update in `meridian-online/homebrew-tap` → install-script update at `install.meridian.online`. That pipeline is in production, observed-clean, and parameterised enough that adding a second binary (orbit) is a one-formula, one-install-script extension rather than new infrastructure.
+
+  ## Considered Options
+
+  - **A. Stay at `hughcameron/orbit`, build a release pipeline locally.** Direct, but duplicates infrastructure: a separate homebrew tap, a separate install host, separate release secrets. Single-author repo continues to feel personal rather than part of a tooling family.
+  - **B. Move to `meridian-online/orbit` and reuse the meridian distribution pipeline.** Same release/tap/install pattern as finetype. Costs: history transfer (or fresh push), marketplace path change for the `orb` plugin, doc/skill references to the old path, redirect for any existing clones.
+  - **C. Mirror in both places.** Confusing source of truth, doubles maintenance, no upside.
+
+  ## Decision Outcome
+
+  Chosen option: **B — move to `meridian-online/orbit` and reuse the meridian distribution pipeline.** Distribution friction is load-bearing: a workflow that can't be installed on a fresh box is a workflow that doesn't get used, and the `command not found` failure mode is exactly the kind of silent abandonment that erodes adoption. meridian-online has already paid the infrastructure cost for finetype. A second formula in the existing tap is cheaper than standing up a new tap, and an install entry alongside finetype's is cheaper than a parallel install site. Co-locating with arcform, finetype, and the rest also positions orbit as part of a tooling family rather than a personal side-project.
+
+  ### Consequences
+
+  - Good, because `brew install meridian-online/tap/orbit` becomes the one-line install on macOS — no Rust toolchain required for end-users.
+  - Good, because the orbit binary ships pinned and signed for mac arm/x86 and linux arm/x86, matching finetype's coverage; cross-machine sessions stop discovering missing binaries.
+  - Good, because orbit gets a real homepage at `meridian.online/projects/orbit/` next to finetype/arcform, presented as part of meridian's tooling rather than a personal repo.
+  - Good, because the release pipeline pattern (tag → release → tap update → install dispatch) is already understood; the diff against finetype's `release.yml` is small.
+  - Bad, because the GitHub repo transfer breaks every absolute clone URL referencing `hughcameron/orbit`, including README install instructions, the `/plugin marketplace add` invocation, and the release skill's hard-coded paths.
+  - Bad, because Claude Code plugin marketplace metadata (`installPath`, etc.) and any user who installed `orb@orbit` against `hughcameron/orbit` will need to re-add the marketplace from the new path.
+  - Neutral, because GitHub auto-redirects the old path for git clones and most API calls — the breakage is real for documented URLs but invisible for casual git operations.
+references: []

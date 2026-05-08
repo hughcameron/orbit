@@ -1,0 +1,51 @@
+feature: orbit is brew-installable — one-line install on macOS and linux, no Rust toolchain
+as_a: someone trying orbit for the first time, or moving to a new machine
+i_want: to install orbit (the binary substrate plus the orb plugin path) in a single command, without needing rustup, cargo, or a clone of the orbit repo
+so_that: the path from "I want to try orbit" to "orbit session prime returns context" is one minute, not thirty; missing-binary failures stop being the first experience on a fresh box
+goal: orbit ships pinned binaries through meridian-online's release pipeline (homebrew tap + install script) so end-users never compile from source; cargo-install remains the contributor path, not the user path
+maturity: planned
+scenarios:
+- name: Fresh macOS — brew install, single command
+  given: a macOS laptop with no Rust toolchain
+  when: the user runs `brew tap meridian-online/tap && brew install orbit`
+  then: the orbit binary is on PATH; `orbit --version` prints the released version; `orbit session prime` works in any /setup'd project — no cargo, no clone, no PATH gymnastics
+  gate: true
+- name: Fresh linux — documented install path works
+  given: a linux box (apple silicon or x86) with no Rust toolchain
+  when: the user runs the documented install command (Linuxbrew via the same tap, or `curl -sSL install.meridian.online/orbit | sh`)
+  then: the orbit binary is on PATH; `orbit --version` succeeds; the install path is the same one in README.md, not a separate undocumented branch
+  gate: true
+- name: Pinned, signed, multi-target binaries
+  given: an orbit release tag pushed to meridian-online/orbit
+  when: the release pipeline runs
+  then: tar.gz archives ship for x86_64-unknown-linux-gnu, aarch64-unknown-linux-gnu, x86_64-apple-darwin, aarch64-apple-darwin, each with sha256; the homebrew formula references those exact artefacts
+  gate: true
+- name: Brew upgrade is the upgrade path
+  given: a user already running a brew-installed orbit
+  when: a new release ships and they run `brew upgrade orbit`
+  then: they get the new binary; no manual reinstall, no cargo rebuild, no version drift between mac and linux fleets
+  gate: false
+- name: Build-from-source still works for contributors
+  given: a contributor wanting to test a local change
+  when: they run `cargo install --path orbit-state/crates/cli` from a clone
+  then: the local binary takes precedence on PATH and works exactly as before; the brew distribution does not regress the contributor flow
+  gate: false
+- name: Plugin path lives at the same home
+  given: orbit's repo at meridian-online/orbit
+  when: a Claude Code user runs `/plugin marketplace add meridian-online/orbit`
+  then: the orb plugin loads from the same repo that publishes the binary; binary version and plugin version evolve in lockstep; users have one install source, not two
+  gate: false
+specs:
+- .orbit/specs/orbit-distro.yaml
+relations:
+- card: 0020-orbit-state
+  type: depends-on
+  reason: brew-installable is meaningful only because the orbit-state binary is what's being shipped; the substrate (0020) is the artefact, distribution is the channel
+- card: 0017-setup-is-bead-aware
+  type: feeds
+  reason: /setup assumes orbit is on PATH; brew-installable removes the silent precondition
+references:
+- '.orbit/choices/0018-orbit-distribution-via-meridian.yaml: the architectural pick — meridian-online org as the distribution channel'
+- 'https://github.com/meridian-online/finetype: pattern repo (release.yml + homebrew-tap update flow)'
+- 'https://github.com/meridian-online/homebrew-tap: target tap that orbit.rb will land in'
+notes: []

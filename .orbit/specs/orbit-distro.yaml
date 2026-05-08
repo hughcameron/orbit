@@ -1,0 +1,48 @@
+id: orbit-distro
+goal: Move orbit from hughcameron/orbit to meridian-online/orbit and onboard it to the meridian distribution pipeline so the orbit binary is installable in one step (brew/install-script) on a fresh mac or linux box, no Rust toolchain required
+cards:
+- 0027-brew-installable
+status: open
+labels:
+- spec
+acceptance_criteria:
+- id: ac-01
+  description: Repository transferred to github.com/meridian-online/orbit with full git history preserved; hughcameron/orbit auto-redirects (clone, fetch, push, web URL) via GitHub's repo-rename redirect; default branch and tags carry over unchanged
+  gate: true
+  checked: false
+- id: ac-02
+  description: Release workflow at .github/workflows/release.yml builds the orbit binary on tag push for x86_64-unknown-linux-gnu, aarch64-unknown-linux-gnu, x86_64-apple-darwin, aarch64-apple-darwin; uploads tar.gz and sha256 artefacts; creates a GitHub release. Pattern mirrors meridian-online/finetype's release.yml.
+  gate: false
+  checked: false
+- id: ac-03
+  description: Release workflow updates meridian-online/homebrew-tap with Formula/orbit.rb on every release tag; formula mirrors finetype.rb shape (homepage, license, version, mac/linux arm/x86 urls + sha256s, install stanza, test stanza that asserts `orbit --version` exits zero)
+  gate: false
+  checked: false
+- id: ac-04
+  description: On a fresh macOS box, `brew tap meridian-online/tap && brew install orbit` installs the orbit binary to PATH; `orbit --version` prints the released version; `orbit session prime` succeeds in any /setup'd project
+  gate: true
+  checked: false
+- id: ac-05
+  description: Linux install path documented and working — either Linuxbrew via the same tap, or an install script (e.g. `curl -sSL install.meridian.online/orbit | sh`) that downloads the matching release archive and places `orbit` on PATH. Whichever channel ships is documented as the primary linux path in README.md.
+  gate: false
+  checked: false
+- id: ac-06
+  description: README.md install instructions rewritten — brew/install-script is the primary path for both macOS and linux; cargo-install retained only under a "Build from source (contributors)" subsection. The `/plugin marketplace add` invocation points at meridian-online/orbit.
+  gate: false
+  checked: false
+- id: ac-07
+  description: plugins/orb/skills/release/SKILL.md and any other skill or script that hard-codes ~/github/hughcameron/orbit is updated to ~/github/meridian-online/orbit or made path-agnostic; verbatim grep for "hughcameron/orbit" returns no matches outside CHANGELOG.md
+  gate: false
+  checked: false
+- id: ac-08
+  description: CLAUDE.md (project) and AGENTS.md updated — hughcameron→meridian-online URL references switched, the "Orbit-state Substrate" quick-reference still works verbatim against a brew-installed orbit binary, and the install pointer in CLAUDE.md (if any) reflects the brew path
+  gate: false
+  checked: false
+- id: ac-09
+  description: CHANGELOG.md migration note tells existing orb plugin users to remove the old marketplace entry and re-add it from meridian-online/orbit; entry also flags the new binary distribution channel and the version that first ships through it
+  gate: false
+  checked: false
+- id: ac-10
+  description: End-to-end smoke pass — first release tag pushed from meridian-online/orbit cuts cleanly through the pipeline (binaries built, GitHub release created, homebrew-tap updated, install-script updated if used); a fresh macOS box AND a fresh linux box each install via the documented path and run `orbit session prime` cleanly in a freshly-/setup'd project
+  gate: true
+  checked: false
