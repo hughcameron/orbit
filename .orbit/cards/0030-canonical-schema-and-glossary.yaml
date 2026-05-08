@@ -1,0 +1,58 @@
+feature: Canonical schema and glossary — one document for card / spec fields and orbit vocabulary
+as_a: orbit contributor / agent / new joiner
+i_want: a single-source reference for what every card and spec field means, what every orbit term names, and where to find it
+so_that: I can look up the semantics of a field, an artefact, or a concept without reverse-engineering it from existing cards or pattern-matching across skills
+goal: every card and spec field is documented in one canonical reference; /orb:card and /orb:distill cite the reference rather than re-stating the schema; agents authoring from the reference produce structurally consistent output
+maturity: planned
+scenarios:
+- name: New contributor finds the schema in one document
+  given: a contributor or agent reading orbit for the first time
+  when: they need to know what a card field means
+  then: they find the canonical reference (linked from README and CLAUDE.md), not a scatter of examples and skill prompts
+  gate: true
+- name: Field-by-field reference for cards and specs
+  given: a card or spec field with non-obvious semantics (relations vs references, maturity values, gate, ac_type, fan_out)
+  when: it appears in the schema doc
+  then: it has a name, type, required-ness, purpose, sibling-comparison, and a one-line example
+  gate: true
+- name: Glossary covers artefacts, skills, personas, concepts, substrate
+  given: an orbit term used across multiple skills or cards
+  when: a contributor looks it up
+  then: a flat A–Z reference returns the canonical definition — one source, no duplication between CLAUDE.md and the schema doc
+  gate: false
+- name: Skills cite the schema rather than restating it
+  given: /orb:card, /orb:distill, /orb:spec, /orb:design
+  when: their SKILL.md is updated
+  then: they reference the schema doc for field semantics, shortening the skill prompt
+  gate: false
+- name: Schema additions land with documentation
+  given: a new card or spec field is being added (e.g., the pillar field from card 0028)
+  when: the field is introduced
+  then: the schema doc is updated in the same change — fields don't land undocumented
+  gate: true
+- name: Drift detection flags undocumented fields
+  given: cards using a field
+  when: an audit pass runs
+  then: fields used in cards but absent from the schema are flagged as drift — the doc is mechanically tied to reality, not a write-once aspiration
+  gate: false
+- name: Glossary stays scoped — bar for inclusion
+  given: a candidate term proposed for the glossary
+  when: it is reviewed
+  then: it is included only if used across multiple skills or cards; single-card terms stay in the card and don't bloat the glossary
+  gate: false
+- name: Wired into the framework
+  given: this card declares a single canonical schema and glossary
+  when: enforcement is examined
+  then: SCHEMA.md (or equivalent) exists at a stable path, README.md and CLAUDE.md link to it, /orb:card and /orb:distill and /orb:spec SKILL.md cite the schema for field semantics, and /orb:audit grows a column flagging fields used in cards but absent from the schema — without these wires the doc is a write-once aspiration
+  gate: true
+specs: []
+relations:
+- card: 0026-executive-communication
+  type: feeds
+  reason: the schema doc reduces the cost of getting answers to "what does this field mean?" — a direct service to pillar 1 (executive interaction)
+- card: 0028-four-pillars
+  type: depends-on
+  reason: the forthcoming pillar field on cards must land documented; this card and the four-pillars card couple at the schema layer
+references:
+- '.orbit/cards/memos/2026-05-08-card-schema-glossary.md: distillation source — gap analysis, three-section structure (card schema / spec schema / glossary), mechanical drift detection'
+notes: []

@@ -1,0 +1,63 @@
+feature: Design sessions stay in user-language; closed-decision-space cards skip the interview
+as_a: orbit author
+i_want: /orb:design to recognise when a card has no real design space, produce a short design note instead of a forced interview, and apply an implementation-question filter to whatever questions it does ask
+so_that: my time isn't burned on questions disguised as preference, and design output is grounded in user experience rather than agent-manufactured Q&A
+goal: /orb:design has three modes (open / closed / partial); every question passes the "would the author need codebase context to answer this?" filter; user-voice prose is a first-class output of the design session, not just an extracted answer
+maturity: planned
+scenarios:
+- name: Design-space pre-flight gate
+  given: a card entering /orb:design
+  when: the skill opens
+  then: it assesses the card's design space — open (no choice file, decisions unresolved), closed (architectural choice already pinned), partial (some residual trade-offs) — and selects the matching mode
+  gate: true
+- name: Closed design space produces a design note, not an interview
+  given: a card whose decision space is already closed (existing choice + prior specs)
+  when: the design session runs
+  then: the output is a one-screen design note — pinned approach (citing the choice), user-voice paragraph of what good looks like, deferred items as a bullet list — no questions are asked
+  gate: true
+- name: Implementation-question filter
+  given: the agent generating a question for the author
+  when: it composes the question
+  then: it applies the test "would the author need codebase context, schema knowledge, metric vocabulary, or evaluation tooling to answer this?" — questions that fail are converted to implementation notes for the implementing agent, not surfaced to the author
+  gate: true
+- name: User-voice prose paragraph is a first-class output
+  given: a card with an open or partial design space
+  when: the design session produces an interview
+  then: a top-of-file user-voice paragraph leads the artefact — written from the user's experience, in the author's idiom, observing from outside the system — and the agent offers the draft for the author to edit, rather than asking four questions to reconstruct the same paragraph
+  gate: true
+- name: Specs cite the user-voice paragraph as the intent contract
+  given: a spec generated from a design session that produced a user-voice paragraph
+  when: /orb:spec runs
+  then: the spec cites the paragraph as the intent contract — not just the Q&A — so the implementing agent has prose-level user intent, not just structured answers
+  gate: false
+- name: Three rounds of "still implementation" trigger mode change, not rephrasing
+  given: an interview where the author has rejected questions as implementation-shaped twice
+  when: the agent considers the third reformulation
+  then: it stops rephrasing and switches mode (closed or partial) — repeated rejection is evidence the design space isn't open, not evidence the questions need better wording
+  gate: false
+- name: Multiple-choice options flagged as implementation
+  given: the agent reaching for "would you prefer A, B, or C?" framing
+  when: the question is composed
+  then: the agent treats the multiple-choice shape as a smell — author preferences over implementation alternatives are still implementation; only the framing changed
+  gate: false
+- name: No-interview-needed is a normal outcome
+  given: a card arriving with a closed design space
+  when: the design session runs
+  then: it produces a design note and exits cleanly — "no interview" is a valid termination, not a failure mode
+  gate: false
+- name: Wired into the framework
+  given: this card declares design-session discipline
+  when: enforcement is examined
+  then: /orb:design SKILL.md encodes the pre-flight design-space gate, the implementation-question filter is named as a question-generation test the skill applies, the interview.md template includes a top-of-file user-voice paragraph slot, and /orb:spec accepts short design notes alongside full interviews — without these wires the card is aspirational
+  gate: true
+specs: []
+relations:
+- card: 0026-executive-communication
+  type: feeds
+  reason: the principle of paying the compression cost extends from agent prose to agent questions — the agent should offer prose for the author to react to rather than extract prose from the author via Q&A
+- card: 0028-four-pillars
+  type: feeds
+  reason: grounds in pillar 1 (executive interaction) — design sessions that drift to implementation burn the author's attention budget on questions they cannot usefully answer
+references:
+- '.orbit/cards/memos/2026-05-08-design-session-implementation-drift.md: distillation source — failure mode, design-space gate, three modes, implementation-question filter, user-voice prose primitive'
+notes: []

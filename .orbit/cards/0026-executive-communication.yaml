@@ -45,6 +45,11 @@ scenarios:
   when: the shape is selected
   then: it follows the matching variant — full template for decisions; status updates use Progress + Blockers + Next step; factual answers compress to TL;DR plus brief context
   gate: false
+- name: Contract is wired into the framework
+  given: this card declares what every author-facing response should look like
+  when: enforcement is examined
+  then: at least one named wire is live — CLAUDE.md preamble cites the BLUF / Decision Brief contract, /orb:design and /orb:review-* SKILL.md cite this card for response shape, and /orb:audit can flag responses against the seven anti-patterns — without these wires the card is aspirational and agents follow it only by happenstance
+  gate: true
 specs: []
 relations:
 - card: 0018-two-artefact-contract

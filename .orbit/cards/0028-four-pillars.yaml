@@ -40,6 +40,11 @@ scenarios:
   when: someone proposes adding a fifth pillar
   then: the proposal is rejected at the pillar level — the candidate is examined for whether it is truly a user outcome of orbit, not whether to grow the framework
   gate: false
+- name: Wired into the framework
+  given: this card declares the four pillars as the why-test
+  when: enforcement is examined
+  then: CLAUDE.md and README.md name the pillars at top level, the card schema carries a pillar field, distill / design / review-spec SKILL.md cite the pillar test, and /orb:audit flags cards with no pillar claim — without these wires the card describes intent but the framework does not enforce it
+  gate: true
 specs: []
 relations:
 - card: 0026-executive-communication
