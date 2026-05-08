@@ -1,0 +1,58 @@
+id: '0019'
+title: Cards declare framework wires; aspirational cards don't pass review
+status: accepted
+date_created: 2026-05-08
+date_modified: 2026-05-08
+body: |
+  # 0019. Cards declare framework wires; aspirational cards don't pass review
+
+  ## Context and Problem Statement
+
+  Cards in `.orbit/cards/` describe capabilities the framework should produce, but until 2026-05-08 there was no discipline requiring cards to name how their contract is enforced. Card 0026 (executive-communication) is the canonical example — a full BLUF / Decision Brief contract specified, zero references in any skill prompt, hook, or CLAUDE.md preamble. Repo-wide search for BLUF / TL;DR / decision brief returns no hits outside the card itself. The discipline runs only when an agent happens to read the card.
+
+  Without an explicit rule, every new card defaults to aspirational. The card describes the desired behaviour; the behaviour does not happen, because nothing in the framework's context-loading, skill prompts, hooks, or audits encodes it.
+
+  ## Considered Options
+
+  - **A. No discipline.** Cards continue to describe intent without declaring enforcement; agents apply contracts only when they happen to read the relevant card. Re-introduces the failure 0026 demonstrates: contract specified, contract not delivered, gap invisible.
+  - **B. Soft guidance ("name your wires when you can").** Captures intent but does not prevent drift; cards still default to aspirational. The same failure as A, slower.
+  - **C. Hard rule, load-bearing.** Every card carries an explicit "Wired into the framework" gate scenario naming the enforcement points the contract depends on. Cards without named wires don't pass review. `/orb:audit` checks named wires are live.
+
+  ## Decision Outcome
+
+  Chosen option: **C — hard rule, load-bearing.**
+
+  A **wire** is a concrete enforcement point. The set is small and finite:
+
+  - CLAUDE.md preamble (loaded into every agent's context)
+  - Skill prompt citation (the SKILL.md tells the agent to apply the card's contract)
+  - Substrate schema field (the substrate refuses cards that don't conform)
+  - SessionStart or PreToolUse hook (the harness enforces it before the agent acts)
+  - `/orb:audit` column (the audit flags drift)
+  - Test or CI check (the build enforces it)
+
+  Wires connect a card to **where its contract is enforced**. Relations (`relations:`) connect cards in the dependency graph. Different concerns; do not merge.
+
+  Wires are **not a substitute for specs**. Naming the wire is the *contract* for the implementing spec. A card with named-but-missing wires still requires implementation work; the audit column distinguishes "wires named, not yet live" from "no wires named at all" — both are flagged, but the second is a more serious smell.
+
+  The principle is decoupled from its implementation: the schema-level `wires:` field is downstream of card 0030 (canonical-schema-and-glossary); the audit column is downstream of `/orb:audit`. This choice fixes the rule. The implementations land in specs under those cards. In the meantime, cards apply the rule via a "Wired into the framework" gate scenario in their `scenarios:` array — already added to 0026, 0028, 0030, 0031 in the same change as this choice.
+
+  Hidden dependency on agent reading is **not a wire**. A wire that depends on "the agent reads card 0026 before responding" is a hope, not a wire. Real wires are loaded into context regardless of what the agent reads, or run by the substrate without the agent's involvement.
+
+  ### Consequences
+
+  - Good, because aspirational cards are caught at review time rather than discovered six months later when an agent isn't applying their contract.
+  - Good, because each card carries its own "how is this enforced" narrative, removing the need to scan the codebase to find out.
+  - Good, because cards force a question at distill time that is otherwise easy to defer indefinitely: "how would the framework produce this?"
+  - Good, because the rule operationalises pillar 3 (state-persistence): contracts live in the substrate, not in the agent's optional reading list.
+  - Bad, because some cards genuinely describe capabilities the framework can't yet enforce (early `planned` cards) — they will carry "wires: named but planned, no live enforcement yet" scenarios. The audit must distinguish these from cards that have no wires named at all.
+  - Bad, because new contributors face a higher bar to land a card — they must think through enforcement, not just describe intent. This is intentional: the cost compounds the other way without the rule.
+  - Neutral, because the wires vs relations distinction is a vocabulary item the schema-glossary card (0030) already commits to capturing.
+
+  ## Related
+
+  - 0026-executive-communication — canonical example of the failure mode this choice prevents; first card amended with a wiring scenario in this change
+  - 0028-four-pillars — wiring scenario added; this choice operationalises pillar 3 (state-persistence) by moving contracts from agent-readable cards to substrate-enforced wires
+  - 0030-canonical-schema-and-glossary — the schema layer where the `wires:` field eventually lands
+  - 0031-design-session-user-language — wiring scenario added; one of the first new cards distilled under this choice
+references: []
