@@ -1,0 +1,4 @@
+key: session-close-2026-05-10
+body: 'Drive 2026-05-09-drive-rally-sidecar-layout merged as PR #24. orbit 0.4.7 released and reloaded. The bd-era folder layout for per-spec sidecars is gone — drive.yaml, rally.yaml, decisions.md, interview.md, review-{spec,pr}-*.md all live as flat sidecars at .orbit/specs/<id>.<file>. Substrate scanner (orbit-state/crates/core/src/layout.rs:list_yaml_files) filters by dotless-stem so sidecars are skipped during spec parsing.'
+timestamp: 2026-05-09T22:07:50.26709918Z
+labels: []
