@@ -2,6 +2,31 @@
 
 All notable changes to orbit are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.4.5] - 2026-05-09
+
+The bd-era cleanup arc closes — `promote.sh` is ported to orbit-state, every /orb:drive promote stage runs against the substrate directly, no manual workaround. /orb:design also gains three modes (open / closed / partial), an implementation-question filter, and a user-voice prose paragraph promoted to a first-class output that downstream specs cite as the intent contract.
+
+### Added
+
+- /orb:design pre-flight design-space classification — open (no choice file), closed (architectural choice already pinned), partial (residual trade-offs). Closed mode emits a one-screen `design-note.md` instead of a full interview.
+- Implementation-question filter at /orb:design — each candidate question must require codebase context, schema knowledge, metric vocabulary, or evaluation tooling to pass. Author-preference questions get routed to implementation-notes for the implementing agent rather than surfaced to the author.
+- Top-of-file user-voice "What good looks like" paragraph slot in interview / design-note artefacts, drafted by the agent from the card and offered for editing rather than reconstructed via Q&A.
+- /orb:spec and /orb:spec-architect cite the user-voice paragraph as the intent contract — quoted in the spec's `goal` or `notes`, alongside the Q&A.
+- Mode-switch trigger at /orb:design — twice-rejected implementation-shaped questions trigger a switch to closed/partial mode rather than another reformulation.
+
+### Changed
+
+- `plugins/orb/scripts/promote.sh` rewritten against orbit-state — derives `<YYYY-MM-DD>-<card-slug>` from the card filename, calls `orbit spec create`, writes `acceptance_criteria` directly into the flat spec YAML, then runs `orbit canonicalise`. Stdout still emits just the spec id; new `--root` passthrough makes the script testable.
+- `test-promote-gate-propagation.sh` now exercises the real promote → orbit-spec-create → orbit-spec-show round-trip end-to-end under a temp `--root`, not just the dry-run path.
+- /orb:drive SKILL.md trimmed 853 → 688 lines (-19%); /orb:rally SKILL.md trimmed 1016 → 840 lines (-17%). Slim Critical Rules sections restored.
+- `.orbit/conventions/acceptance-field.md` rewritten from the bd-era markdown-line format to orbit-state's structured `acceptance_criteria`.
+- Project `CLAUDE.md` no longer inlines STYLE.md — the `@.orbit/STYLE.md` import resolves at session start, verified empirically against fresh subagent forks.
+- Card 0028 amended to documentation-only pillar wiring; goal refined to reflect emergent pillar outcomes rather than schema fields.
+
+### Removed
+
+- Six bd-era files: `bd-init.sh`, `parse-progress.sh`, `session-context.sh`, `rally-coherence-scan.sh`, `AGENTS.md`, `plugins/orb/hooks/hooks.json`.
+
 ## [0.4.4] - 2026-05-08
 
 First live wires under choice 0019 (cards declare framework wires in scenarios; aspirational cards don't pass review). Card 0026's BLUF / Decision Brief contract is now substrate-enforced — distilled into `.orbit/STYLE.md`, imported into project CLAUDE.md, and cited from the three prose-producing orb skills. Closes the canonical aspirational-card example the choice was written about.
