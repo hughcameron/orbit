@@ -3,7 +3,7 @@ goal: Migrate /orb:drive's drive.yaml, /orb:rally's rally.yaml, and per-cycle re
 cards:
 - 0005-drive
 - 0006-rally
-status: open
+status: closed
 labels:
 - spec
 - drive
