@@ -1,0 +1,45 @@
+id: 2026-05-09-promote-orbit-state-port
+goal: Port promote.sh from the bd-era CLI to the orbit-state pattern (orbit spec create + direct YAML write of acceptance_criteria + orbit canonicalise) so /orb:drive does not wedge at its promote stage
+cards:
+- 0005-drive
+status: open
+labels:
+- spec
+- drive
+acceptance_criteria:
+- id: ac-01
+  description: promote.sh derives a spec id of the form `<YYYY-MM-DD>-<card-slug>` from today's ISO date plus the card filename's slug (the basename without leading number prefix and `.yaml` suffix), and creates the spec via `orbit --json spec create <id> <goal> --card <card-id>`. The card-id passed to `--card` is the card filename basename without `.yaml`. The goal passed to `orbit spec create` is the card's `goal` field. Failure of `orbit spec create` (e.g. duplicate id) causes promote.sh to exit non-zero with the orbit error on stderr.
+  gate: true
+  checked: true
+- id: ac-02
+  description: 'promote.sh writes the spec''s `acceptance_criteria` field directly into the flat spec YAML at `.orbit/specs/<spec-id>.yaml` — one entry per card scenario, in card order. Each entry has `id: ac-NN` (1-indexed, zero-padded to two digits), `description: <scenario-name> — <scenario-then-clause>`, `gate: <bool>` mirroring the card scenario''s `gate` field (default false), and `checked: false`. The pre-existing empty `acceptance_criteria: []` line emitted by `orbit spec create` is replaced wholesale.'
+  gate: true
+  checked: true
+- id: ac-03
+  description: After writing the acceptance_criteria, promote.sh runs `orbit canonicalise` so the spec YAML is byte-identical to canonical form. `orbit verify` against the new spec exits zero immediately after promote.sh returns. Canonicalise failures cause promote.sh to exit non-zero with the orbit error on stderr.
+  gate: true
+  checked: true
+- id: ac-04
+  description: promote.sh contains no `bd` CLI invocations and no references to bd-era fields (`--acceptance`, `--parent`, `bd create`, `--stdin`, `bead`, `bead_id`). The `--parent` option is removed from the usage string and argument parser — rallies wire spec-to-spec relations through other means (out of scope for this spec).
+  gate: true
+  checked: true
+- id: ac-05
+  description: A successful (non-dry-run) invocation prints exactly the spec id to stdout — single line, no trailing whitespace, no other content — preserving the contract callers (drive, rally) depend on. Stderr may carry orbit's human-readable confirmation, but stdout is reserved for the id.
+  gate: false
+  checked: true
+- id: ac-06
+  description: '`promote.sh <card> --dry-run` prints the planned spec id, the goal, the card-id passed to --card, and the per-scenario AC table (id, gate flag, description) without invoking `orbit spec create` or `orbit canonicalise` and without writing any file. Exits 0 when the card has at least one scenario; exits 2 with a clear stderr message when the card has none.'
+  gate: false
+  checked: true
+- id: ac-07
+  description: 'plugins/orb/scripts/tests/test-promote-gate-propagation.sh is updated end-to-end: it runs the non-dry-run path against a synthetic card under a temporary `--root` (so the real `.orbit/` is untouched), then asserts via `orbit --json spec show <spec-id>` that (a) the spec exists, (b) acceptance_criteria has the expected count, (c) the gate-true scenario''s AC has `gate: true` and the gate-false scenario''s AC has `gate: false`, (d) the printed stdout is the spec id. Test exits 0 on pass, non-zero on fail.'
+  gate: false
+  checked: true
+- id: ac-08
+  description: plugins/orb/scripts/tests/test-gate-ac-verification.sh is reviewed and either updated to drive against orbit-state (mirroring ac-07) or removed if its bd-era assumptions are no longer relevant after the port. The decision is recorded in the test file header or in a spec note.
+  gate: false
+  checked: true
+- id: ac-09
+  description: A spec note on 2026-05-09-promote-orbit-state-port records that drive SKILL.md and rally SKILL.md still assume the bd-era folder layout (`.orbit/specs/<id>/spec.yaml`, `.orbit/specs/<id>/drive.yaml`) for sidecars and call sites — explicitly out of scope for this port and tracked as a follow-up so the next /orb:drive session knows which workaround still applies.
+  gate: false
+  checked: true
