@@ -2,6 +2,27 @@
 
 All notable changes to orbit are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.4.6] - 2026-05-09
+
+`/orb:setup` now primes downstream projects with a canonical orbit method overview that CLAUDE.md `@-imports` — no more inline vocabulary blocks drifting across plugin versions. `/orb:card` and `/orb:distill` gain a card-vs-choice pre-flight so implementation-surface decisions ('should X be in bash or rust?') route to choice files, not aspirational cards.
+
+### Added
+
+- `plugins/orb/skills/setup/METHOD.md` — canonical orbit method overview (single screen, ~72 lines): pipeline, vocabulary, card-vs-choice-vs-spec-vs-memo decision tree, substrate rules, four pillars, BLUF / Decision Brief skeleton inlined directly so projects without `.orbit/STYLE.md` get the prose contract too.
+- `plugins/orb/scripts/setup-method.sh` — atomic `/orb:setup` §6 implementation: legacy-CLAUDE.md detection BEFORE any file write (decline → atomic refuse, no orphan METHOD.md), byte-for-byte drift detection on re-run, idempotent `@-import`. Supports `--answer-legacy` / `--answer-drift` for scripted contexts.
+- `plugins/orb/scripts/tests/test-setup-method.sh` — four scenarios (fresh / drift-prompt / legacy-accept / legacy-refuse), all green.
+- `/orb:card` and `/orb:distill` SKILL.md gain a "Card or Choice?" pre-flight — implementation-surface decisions route out to MADR choice files at `.orbit/choices/`, not new cards.
+- Choice `0020-shell-scripts-to-rust-verbs` — policy choice naming the migration path for `promote.sh`, `setup-method.sh`, and `orbit-acceptance.sh` to orbit Rust verbs, sequenced opportunistically per script.
+
+### Changed
+
+- `/orb:setup` SKILL.md §6 rewritten end-to-end. The old inline `## Workflow (orbit)` / `## Orbit vocabulary` / `## Current Sprint` snippet is removed; METHOD.md is the single source of truth. Existing downstream CLAUDE.md files containing the legacy blocks get an atomic migrate-or-refuse prompt — no path to dual-source drift.
+- CLAUDE.md decision tree gains a fourth branch covering choices, placed before the card branch so agents discriminate before defaulting to a card. Worked example named: "should `orbit spec promote` live in rust" is a choice, not a card.
+- CLAUDE.md vocabulary table's `Decision` row renamed to `Choice` (matches the `.orbit/choices/` directory), path corrected from `.md` to `.yaml`, and the row carries the implementation-surface framing.
+- `/orb:distill` SKILL.md §2 Draft adds per-candidate capability-vs-choice classification — choice-shape distillations write MADR files instead of cards.
+- Card 0017 amended: greenfield scenario then-clause updated to "writes `.orbit/METHOD.md` and ensures CLAUDE.md @-imports it"; two new scenarios cover drift detection and atomic legacy migration; pillar 2 (agent self-learning) attribution added via `relations:feeds → 0028`.
+- orbit-repo CLAUDE.md dogfooded: 119 → 32 lines. Substrate sections (vocabulary, decision tree, pipeline, four pillars, key concepts, orbit-state quick reference) replaced by `@.orbit/METHOD.md`. The standalone "Session Completion / Mandatory Workflow" section is reshaped to a tight 4-line "Push discipline" block; substrate-shaped rules (orbit task verbs, hand-off via memory) deleted from CLAUDE.md, project-specific git discipline kept inline.
+
 ## [0.4.5] - 2026-05-09
 
 The bd-era cleanup arc closes — `promote.sh` is ported to orbit-state, every /orb:drive promote stage runs against the substrate directly, no manual workaround. /orb:design also gains three modes (open / closed / partial), an implementation-question filter, and a user-voice prose paragraph promoted to a first-class output that downstream specs cite as the intent contract.
