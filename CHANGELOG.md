@@ -2,6 +2,28 @@
 
 All notable changes to orbit are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.4.7] - 2026-05-09
+
+The bd-era folder layout for per-spec sidecars (drive.yaml, rally.yaml, review files) migrates to flat sidecar paths (`.orbit/specs/<id>.<file>`) — one substrate convention across drives, rallies, and reviews. The orbit-state scanner gains a dotless-stem filter so `<id>.drive.yaml` and `<id>.rally.yaml` are skipped during spec parsing; `orbit verify` and `orbit spec list` stay clean with sidecars on disk.
+
+### Added
+
+- `.orbit/conventions/spec-layout.md` — canonical sidecar inventory naming every per-spec sidecar shape (`<id>.yaml`, `<id>.tasks.jsonl`, `<id>.notes.jsonl`, `<id>.drive.yaml`, `<id>.rally.yaml`, `<id>.decisions.md`, `<id>.interview.md`, `<id>.review-{spec,pr}-<date>.md` with `-v2`/`-v3` cycle suffixes). The bd-era folder layout is named explicitly as deprecated.
+- `plugins/orb/scripts/tests/test-sidecar-layout.sh` — five-step smoke test against a temp `--root`: promote produces flat spec, drive sidecar reachable via `[[ -f *.drive.yaml ]]`, rally sidecar reached via `*.rally.yaml` glob, `orbit verify` clean, `orbit spec list` excludes sidecar ids.
+- Two unit tests in `orbit-state-core` pin the scanner-fix contract: `list_spec_files_skips_sidecar_shapes` (layout) and `verify_excludes_sidecar_yaml_shapes` (verify).
+
+### Changed
+
+- `orbit-state/crates/core/src/layout.rs` — `list_yaml_files` filters spec YAML loads to dotless-stem files only. Both `verify_all` and `Index::rebuild_from_files` consume the filtered list, so adding a new sidecar shape requires no scanner changes — the dotless-stem rule excludes it automatically.
+- `/orb:drive` SKILL.md — every drive sidecar reference (path, code block, resumption-detection snippet, embedded CronCreate heartbeat prompt body) and every review-file path uses sidecar form. The promote-stage description corrected: `promote.sh` materialises a spec at the flat `.orbit/specs/<spec-id>.yaml` (no folder).
+- `/orb:rally` SKILL.md — folder convention collapsed end-to-end. `RALLY_DIR` removed; CLI argument changes from `<rally-folder>` to `<rally-id>`; resumption scan iterates `.orbit/specs/*.rally.yaml`. Per-child decision packs and interviews migrate to sidecars (`<child-spec-id>.decisions.md`, `<child-spec-id>.interview.md`); the path-discipline contract names the two specific sidecars rather than a per-child folder.
+- `/orb:review-spec` and `/orb:review-pr` SKILL.md — inline-invocation defaults default to sidecar paths; the `<spec-folder>`-shaped branch and the `.orbit/reviews/` fallback are removed.
+- `.orbit/METHOD.md` and `plugins/orb/skills/setup/METHOD.md` — vocabulary table rewritten to sidecar form (Drive state, Rally state, Interview rows). The two files stay byte-equal so greenfield projects bootstrapped via `/orb:setup` get the same canonical statement.
+
+### Fixed
+
+- `orbit verify` and `orbit spec list` no longer break when a `<id>.drive.yaml` or `<id>.rally.yaml` sidecar is present in `.orbit/specs/` — previously the scanner attempted to parse them as `Spec` and surfaced an `unknown field, expected one of id, goal, cards, status, labels, acceptance_criteria` error. The dotless-stem filter excludes sidecar shapes from primary entity loads.
+
 ## [0.4.6] - 2026-05-09
 
 `/orb:setup` now primes downstream projects with a canonical orbit method overview that CLAUDE.md `@-imports` — no more inline vocabulary blocks drifting across plugin versions. `/orb:card` and `/orb:distill` gain a card-vs-choice pre-flight so implementation-surface decisions ('should X be in bash or rust?') route to choice files, not aspirational cards.
