@@ -2,7 +2,7 @@ id: 2026-05-09-orbit-method-md
 goal: Create canonical .orbit/METHOD.md (vocabulary, pipeline, substrate rules, four pillars, BLUF/Decision Brief skeleton, card-vs-choice discrimination) and wire /orb:setup to copy it into projects + append @.orbit/METHOD.md to CLAUDE.md; audit the existing Mandatory Workflow / Session Completion section so rules are either substrate-baked into METHOD.md or sharpened to project-specific git discipline. Pillar attribution — pillar 2 (agent self-learning), since the substrate teaches new agents how to use it.
 cards:
 - 0017-setup-is-bead-aware
-status: open
+status: closed
 labels:
 - spec
 - setup
