@@ -64,6 +64,7 @@ specs:
 - .orbit/specs/2026-04-19-rally/spec.yaml
 - .orbit/specs/2026-04-19-rally-subagent-model/spec.yaml
 - .orbit/specs/2026-04-20-rally-approval-prompt/spec.yaml
+- .orbit/specs/2026-05-09-drive-rally-sidecar-layout.yaml
 relations:
 - card: 0019-tabletop
   type: depends-on

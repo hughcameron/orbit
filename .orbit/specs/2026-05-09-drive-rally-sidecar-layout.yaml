@@ -1,0 +1,47 @@
+id: 2026-05-09-drive-rally-sidecar-layout
+goal: Migrate /orb:drive's drive.yaml, /orb:rally's rally.yaml, and per-cycle review files from the bd-era folder layout (.orbit/specs/<id>/<file>) to orbit-state v0.1 sidecar layout (.orbit/specs/<id>.<file>) so the entire substrate uses one flat layout consistently
+cards:
+- 0005-drive
+- 0006-rally
+status: open
+labels:
+- spec
+- drive
+- rally
+acceptance_criteria:
+- id: ac-01
+  description: /orb:drive SKILL.md is updated so every read/write of the drive sidecar uses `.orbit/specs/<spec-id>.drive.yaml` instead of `.orbit/specs/<spec-id>/drive.yaml`. Every code block, every cited path, and every resumption-detection snippet uses the sidecar form. A grep of the file for `<spec-id>/drive.yaml`, `$SPEC_ID/drive.yaml`, or `<spec-folder>/drive.yaml` returns zero hits.
+  gate: true
+  checked: false
+- id: ac-02
+  description: /orb:drive SKILL.md no longer references `.orbit/specs/<spec-id>/spec.yaml` for spec reads — all spec access goes through `orbit spec show <spec-id>` (which already resolves the flat `.orbit/specs/<spec-id>.yaml`). A grep for `<spec-id>/spec.yaml` or `$SPEC_ID/spec.yaml` in the file returns zero hits.
+  gate: true
+  checked: false
+- id: ac-03
+  description: /orb:rally SKILL.md is updated so every read/write of the rally sidecar uses `.orbit/specs/<rally-id>.rally.yaml` instead of `.orbit/specs/<rally-id>/rally.yaml`. A grep of the file for `<rally-id>/rally.yaml` or `$RALLY_ID/rally.yaml` returns zero hits.
+  gate: true
+  checked: false
+- id: ac-04
+  description: Per-cycle review files migrate from the folder layout (`.orbit/specs/<spec-id>/review-spec-<date>.md`, `.orbit/specs/<spec-id>/review-pr-<date>.md`, with `-v2`/`-v3` suffixes) to the sidecar layout (`.orbit/specs/<spec-id>.review-spec-<date>.md` etc.). /orb:drive SKILL.md §1.1, §1.3, §3.1, §3.2 and the review-spec / review-pr Agent briefs all cite the sidecar paths. The cycle-suffix convention (no suffix for cycle 1, `-v2` and `-v3` for later cycles) is preserved.
+  gate: true
+  checked: false
+- id: ac-05
+  description: Resumption logic in /orb:drive (§Resumption) is updated to detect drive sidecars via the new path. The "no argument" detection snippet in §Input contract is rewritten — instead of `[[ -f ".orbit/specs/$sid/drive.yaml" ]]`, it tests `[[ -f ".orbit/specs/$sid.drive.yaml" ]]`.
+  gate: true
+  checked: false
+- id: ac-06
+  description: 'Existing on-disk folders (`.orbit/specs/<id>/` directories from drives/rallies that ran before this spec) are handled by an explicit policy recorded in a spec note: either (a) migrated in place to sidecar form, or (b) left untouched as historical artefacts and only new drives/rallies use the sidecar layout. The decision is recorded in the spec note before any migration touches the existing folders.'
+  gate: false
+  checked: false
+- id: ac-07
+  description: 'A smoke test runs end-to-end against a synthetic card under a temp `--root`: invoke promote.sh, write a drive.yaml at the sidecar path, then invoke /orb:drive''s resumption-detection snippet and confirm the drive is found. The test exits zero on a successful round-trip and is added to `plugins/orb/scripts/tests/`.'
+  gate: false
+  checked: false
+- id: ac-08
+  description: '`.orbit/conventions/` documentation (or wherever the canonical layout is documented — e.g. orbit-state README, PRIME.md, or a dedicated layout doc) is updated to state the sidecar convention as the canonical orbit-state v0.1 layout: `.orbit/specs/<id>.<file>` for every per-spec sidecar (notes.jsonl, tasks.jsonl, drive.yaml, rally.yaml, review-spec-*, review-pr-*). The folder layout is named explicitly as deprecated bd-era.'
+  gate: false
+  checked: false
+- id: ac-09
+  description: After this spec ships, a /orb:drive on a real card with ≥3 scenarios produces drive.yaml at `.orbit/specs/<spec-id>.drive.yaml` (verified by listing `.orbit/specs/` and confirming no new folder was created), resumes correctly via `/orb:drive` with no argument, and review-spec / review-pr files land at the sidecar paths. This is the integration test — recorded as a spec note with the spec id of the drive that proved it.
+  gate: false
+  checked: false
