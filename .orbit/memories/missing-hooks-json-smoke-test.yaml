@@ -1,0 +1,4 @@
+key: missing-hooks-json-smoke-test
+body: 'Verified 2026-05-09 at orbit 0.4.5 release: /reload-plugins after the post-#22 release reports ''0 hooks · 0 plugin MCP servers'' with no warning about the missing plugins/orb/hooks/hooks.json. Closes the outstanding check from memory 0019-next-steps. No need to restore an empty {hooks: {}} stub — Claude Code''s loader does not require hooks.json to exist.'
+timestamp: 2026-05-09T03:32:21.208879492Z
+labels: []

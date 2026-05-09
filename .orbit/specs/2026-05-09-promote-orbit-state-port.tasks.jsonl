@@ -7,3 +7,5 @@
 {"task_id":"t-0009059f18adc74e341c57d6","spec_id":"2026-05-09-promote-orbit-state-port","event":"update","body":"Superseded — explicitly out of scope for this spec; tracked as ac-09 follow-up note (drive/rally callers still assume bd-era folder layout)","labels":[],"timestamp":"2026-05-09T03:19:26.037228457Z"}
 {"task_id":"t-0009059f18adc74e341c57d6","spec_id":"2026-05-09-promote-orbit-state-port","event":"done","labels":[],"timestamp":"2026-05-09T03:19:26.046057919Z"}
 {"task_id":"t-000905a018adc74e34968dc0","spec_id":"2026-05-09-promote-orbit-state-port","event":"claim","labels":[],"timestamp":"2026-05-09T03:19:26.054654429Z"}
+{"task_id":"t-000905a018adc74e34968dc0","spec_id":"2026-05-09-promote-orbit-state-port","event":"update","body":"Released 0.4.5; /reload-plugins reported '4 plugins · 0 skills · 5 agents · 0 hooks · 0 plugin MCP servers · 3 plugin LSP servers' — no warning about the missing plugins/orb/hooks/hooks.json. Smoke test passes.","labels":[],"timestamp":"2026-05-09T03:32:21.197177159Z"}
+{"task_id":"t-000905a018adc74e34968dc0","spec_id":"2026-05-09-promote-orbit-state-port","event":"done","labels":[],"timestamp":"2026-05-09T03:32:21.20282808Z"}

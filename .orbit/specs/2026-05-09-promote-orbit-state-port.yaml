@@ -2,7 +2,7 @@ id: 2026-05-09-promote-orbit-state-port
 goal: Port promote.sh from the bd-era CLI to the orbit-state pattern (orbit spec create + direct YAML write of acceptance_criteria + orbit canonicalise) so /orb:drive does not wedge at its promote stage
 cards:
 - 0005-drive
-status: open
+status: closed
 labels:
 - spec
 - drive
