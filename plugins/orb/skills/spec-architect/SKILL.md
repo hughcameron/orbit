@@ -15,6 +15,8 @@ Transform interview conversations into immutable specifications — the "constit
 
 ## Components to Extract
 
+When the input artefact (interview or design note) carries a top-of-file **What good looks like** user-voice paragraph, that paragraph is the intent contract — quote it or directly reference it in the generated `goal` (if it compresses to one sentence) or in a leading note on the spec (if it does not). The implementing agent reads prose-level intent from this paragraph; the structured Q&A is supporting evidence, not the contract.
+
 1. **GOAL**: A clear, specific statement of the primary objective
 2. **CONSTRAINTS**: Hard limitations or requirements that must be satisfied
 3. **ACCEPTANCE_CRITERIA**: Specific, measurable criteria for success — each with an `id` in `ac-NN` format

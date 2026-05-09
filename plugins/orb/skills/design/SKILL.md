@@ -66,18 +66,86 @@ If no orphans are found, move on silently.
 
 **Apply the evidence hierarchy** (see `/orb:interviewer`): findings with data are constraints, not questions. Only ask about areas where evidence is silent or contradictory.
 
-### 3. Open with the Card and Its History
+### 3. Assess the Design Space
 
-Don't re-ask what the author wants. They wrote a card. Instead:
+The evidence loaded in §2 determines whether questions are warranted at all. Before composing any question, classify the card's design space:
+
+| Mode | Signals | Path |
+|------|---------|------|
+| **closed** | An associated choice file under `.orbit/choices/` already pins the architectural approach (status `accepted`), AND prior specs declare or build on the pattern. The card's scenarios are operational consequences of a decided shape. | §4 — produce a design note, no interview |
+| **open** | No associated choice file. Decisions unresolved. Multiple plausible shapes for the card. Prior specs (if any) explored adjacent angles without converging. | §5 — open with the card, then conduct the design session |
+| **partial** | A choice exists but residual trade-offs remain — the choice is `proposed`, or only some scenarios are addressed by prior specs, or the card's references represent unresolved alternatives. | §5 — conduct the design session, scoped to the residual trade-offs |
+
+**Detection heuristic.** A card is in *closed* mode when (a) at least one accepted choice file in `.orbit/choices/` directly addresses the card's domain (matched by topic keywords or by the choice citing the card or its prior specs) and (b) the card's `specs` array contains at least one shipped spec following that choice. Either signal alone is *partial*; absence of both is *open*.
+
+State the classification and the path it selects to the author in one line before proceeding:
+
+> "Card 0031: closed. Choice 0012 pins the intent-vs-means distinction; prior specs apply it. Producing a design note rather than running an interview."
+
+The classification is a load-bearing pre-flight — don't skip it. "No interview" is a normal terminal outcome (§4), not a failure mode.
+
+### 4. Closed Mode: Produce a Design Note
+
+When the design space is closed, skip the interview entirely and produce a one-screen design note. The card already carries the intent; the choice already pins the shape; the agent's job is to surface the implementation handoff, not to manufacture Q&A.
+
+**Output:** `.orbit/specs/YYYY-MM-DD-<topic-slug>/design-note.md`
+
+```markdown
+# Design Note: <Topic>
+
+**Date:** YYYY-MM-DD
+**Card:** .orbit/cards/NNNN-slug.yaml
+**Mode:** closed
+**Choice:** .orbit/choices/NNNN-slug.yaml — <one-line title>
+
+---
+
+## What good looks like
+
+<User-voice paragraph — written from the user's experience, in the author's idiom, observing from outside the system. Drafted by the agent from the card's goal and scenarios, offered to the author for editing rather than extracted via questions. One paragraph, three to six sentences.>
+
+## Pinned approach
+
+<Cite the choice and any prior specs that establish the pattern. One to three bullets — what's already decided and why this card is operationally inside that decision.>
+
+## Deferred items
+
+- <Anything the card raises that this spec does not address>
+- <Open question that belongs to a future spec, not this one>
+
+## Implementation notes
+
+- <Means-level leads from the codebase scan in §2 — starting context for the implementing agent>
+```
+
+The user-voice paragraph and the pinned approach are the load-bearing content. The design note is short on purpose — closed-space cards don't need re-litigation.
+
+After writing the design note, exit cleanly:
+
+> "Design note written. No interview needed — design space is closed. Run `/orb:spec` against this design note to crystallise the spec."
+
+This is a normal terminal outcome. Do not prompt for further input.
+
+### 5. Open or Partial Mode: Open with the Card and Its History
+
+In open or partial mode, anchor the session before asking anything:
 
 1. Summarise the card: "I've read card NNNN — *<feature name>*. Your scenarios cover: X, Y, Z."
 2. Present the progress summary: where prior specs got to, what they learned, and where the goal still has gaps
 3. **Anchor on the gap between current state and goal** — this is the design space. "The card's goal is X. Prior work got to Y. This session is about what closes the remaining gap."
 4. If the card has `references`, surface them: "Your references include A, B, C — these represent different approaches."
 
+**Draft the user-voice paragraph from the card** — don't extract it by Q&A. The card's goal and scenarios already carry the user's experience; the agent's job is to compress that into a paragraph the author can react to.
+
+> "Here's what I read as 'what good looks like' from the card — written from your seat as the user. Edit if it's off, or accept it as the intent contract for this spec."
+>
+> *<draft paragraph>*
+
+Save the (possibly edited) paragraph; it becomes the top-of-file slot in the interview record (§9). This pattern — the agent pays the compression cost, the author edits — is the load-bearing alternative to four reconstructive questions.
+
 **Note:** Not every design session continues the last spec's thread. The author may want to approach the goal from a different angle — infrastructure work, data quality, tooling improvements, or adjacent capabilities that indirectly advance the goal. The design session should surface which path the author intends, not assume linear progression.
 
-### 4. Conduct the Design Session
+### 6. Conduct the Design Session
 
 Adopt the interviewer role (see `/orb:interviewer` for the full persona and the decision-level gate).
 
@@ -91,22 +159,41 @@ Target: **3–5 questions** focused on:
 - **Scope boundaries** — what's explicitly out of scope for this spec? What adjacent problems should be deferred?
 - **Quality of experience** — when references or scenarios imply different user-facing approaches, probe the feel. "You referenced uv and cargo — uv is quiet, cargo is verbose. Which feel?" These are UX preferences only the author can provide.
 
-**For each question:**
+#### The implementation-question filter
 
-1. Apply the decision-level gate: "Would the author need codebase context to answer this?" If yes, record as an implementation note — don't ask.
+Every candidate question passes through the filter at composition time. Apply the test:
 
-2. Present the question using **AskUserQuestion** with contextually relevant suggested answers:
+> **Would the author need codebase context, schema knowledge, metric vocabulary, or evaluation tooling to answer this?**
+
+Each signal is a fail:
+
+- **Codebase context** — "which function should we modify", "what's the current error path", "where does the validator live"
+- **Schema knowledge** — "what fields exist on the X model", "how is Y indexed", "what's the relationship between A and B"
+- **Metric vocabulary** — "what's the F1 baseline", "which evaluation captured this last time"
+- **Evaluation tooling** — "how do we test this", "what fixture covers this case", "which CI step catches it"
+
+If a candidate question hits any signal, **don't ask it.** Route it to the **Implementation Notes** section of the interview record, where the implementing agent can act on it. The filter is the gate every question passes through; it is not optional and it does not relax under time pressure.
+
+**Multiple-choice as a smell.** "Would you prefer A, B, or C?" framing between implementation alternatives is still implementation — only the surface changed. If the agent reaches for an A/B/C question between two code paths, two libraries, two function signatures, two test layouts, treat the framing as a smell and re-classify the question. UX preferences (tone, naming, visual style) are legitimate multiple-choice; implementation alternatives are not, regardless of how the question is dressed.
+
+**Mode-switch trigger after repeated rejection.** When the author rejects a question as implementation-shaped — explicit phrasing like "that's an implementation detail", "ask the implementing agent", "I'd need codebase context", "that's a code question" — count the rejection. After two rejections in a session, the agent treats the third candidate question as a mode-switch decision rather than a third reformulation. Re-run §3's design-space assessment; the evidence is that the design space is closed or partial, not that the question wording was wrong. Repeated implementation-shape is a signal about the card, not about the agent's prose.
+
+#### Per-question protocol
+
+For each question that survives the filter:
+
+1. Present the question using **AskUserQuestion** with contextually relevant suggested answers:
    - When the card has references, use them as suggested answers where relevant
    - Priority questions: use the competing concerns as options
    - The author can always type a custom response
 
-3. Record the Q&A pair in your working notes
+2. Record the Q&A pair in your working notes
 
-4. After each answer, target the biggest remaining gap in **intent**
+3. After each answer, target the biggest remaining gap in **intent**
 
-**Implementation notes:** As you explore the codebase and evidence base (§2), you'll identify implementation-level decisions — which module to modify, what patterns exist, what approach seems right. Record these under **Implementation Notes** in the interview record. They give the implementing agent a head start without burdening the author.
+**Implementation notes:** As you explore the codebase and evidence base (§2), and as the filter routes failed questions, you'll accumulate implementation-level decisions — which module to modify, what patterns exist, what approach seems right. Record these under **Implementation Notes** in the interview record. They give the implementing agent a head start without burdening the author.
 
-### 5. Ambiguity Assessment
+### 7. Ambiguity Assessment
 
 After every 2-3 questions, assess clarity:
 - **Goal Clarity**: Is the objective specific and well-defined? (card usually covers this)
@@ -115,7 +202,7 @@ After every 2-3 questions, assess clarity:
 
 If all three are clear (ambiguity ≤ 0.2), suggest wrapping up. Design sessions should be tight — the card did the heavy lifting.
 
-### 6. Surface Decisions
+### 8. Surface Decisions
 
 Design sessions are where most decisions live. When probing references and approach selection, choices will surface naturally. When a clear choice is made:
 
@@ -123,7 +210,7 @@ Design sessions are where most decisions live. When probing references and appro
 2. Each entry should name the choice, the alternatives considered, and the rationale
 3. These become MADR decision records during or after the session (the spec will reference them)
 
-### 7. Save the Record
+### 9. Save the Record
 
 Save the Q&A as: `.orbit/specs/YYYY-MM-DD-<topic-slug>/interview.md`
 
@@ -133,6 +220,13 @@ Save the Q&A as: `.orbit/specs/YYYY-MM-DD-<topic-slug>/interview.md`
 **Date:** YYYY-MM-DD
 **Interviewer:** <agent name>
 **Card:** .orbit/cards/NNNN-slug.yaml
+**Mode:** open | partial
+
+---
+
+## What good looks like
+
+<User-voice paragraph — drafted by the agent from the card, edited by the author. This is the intent contract: the implementing agent reads this for prose-level user intent, not just the structured Q&A below. One paragraph, three to six sentences, written from the user's seat in the author's idiom.>
 
 ---
 
@@ -168,11 +262,14 @@ Gap: <what remains between current state and goal>
 
 ### Implementation Notes
 - <means-level observations from codebase exploration — starting context for the implementing agent>
+- <questions that failed the implementation-question filter — routed here rather than asked>
 
 ### Open Questions
 - <anything still unclear — intent-level only>
 ```
 
+The **What good looks like** paragraph is the load-bearing top-of-file slot. The implementing agent and `/orb:spec` both read it as the intent contract — it survives the structured-Q&A reduction.
+
 ---
 
-**Next step:** `/orb:spec` to generate a structured specification from this design session.
+**Next step:** `/orb:spec` to generate a structured specification from this design session — or, in closed mode, from the design note.

@@ -1,0 +1,45 @@
+id: 2026-05-09-design-session-user-language
+goal: /orb:design recognises closed design spaces and skips the interview, applies an implementation-question filter to questions it asks, and treats the user-voice prose paragraph as a first-class output rather than something extracted via Q&A
+cards:
+- 0031-design-session-user-language
+status: closed
+labels:
+- spec
+- drive
+acceptance_criteria:
+- id: ac-01
+  description: /orb:design SKILL.md adds a pre-flight design-space assessment that classifies the card's design space as open (no associated choice file under .orbit/choices/, decisions unresolved), closed (architectural choice already pinned via choice ref or prior specs declaring the pattern), or partial (some residual trade-offs). The assessment runs before any question is composed, and selects the corresponding mode for the rest of the session.
+  gate: true
+  checked: true
+- id: ac-02
+  description: In closed mode, /orb:design produces a one-screen design note instead of an interview — pinned approach (citing the choice or prior spec), a user-voice paragraph of what good looks like in the author's idiom, and a bulleted list of deferred items. No questions are asked. /orb:spec SKILL.md is amended to accept this short design note as a valid input alongside the full interview.md, so the closed path produces a clean handoff.
+  gate: true
+  checked: true
+- id: ac-03
+  description: '/orb:design SKILL.md encodes an implementation-question filter applied at question-generation time: each candidate question must pass the test "would the author need codebase context, schema knowledge, metric vocabulary, or evaluation tooling to answer this?" Questions that fail are routed to an implementation-notes section in the interview artefact for the implementing agent, not surfaced to the author. The skill names this as the gate that question-generation passes through.'
+  gate: true
+  checked: true
+- id: ac-04
+  description: The interview.md template (in /orb:design SKILL.md or its referenced template) carries a top-of-file user-voice paragraph slot — written in the author's idiom, observing from outside the system. /orb:design SKILL.md instructs the agent to draft this paragraph from the card and offer it to the author for editing, rather than extracting the same content via four reconstructive questions.
+  gate: true
+  checked: true
+- id: ac-05
+  description: The framework wires are realised in skill files — /orb:design SKILL.md encodes the pre-flight design-space gate (ac-01), names the implementation-question filter as a question-generation test (ac-03), and references the user-voice paragraph slot in its interview output instructions (ac-04). /orb:spec SKILL.md accepts short design notes alongside interview.md (ac-02). Without these four edits the card stays aspirational.
+  gate: true
+  checked: true
+- id: ac-06
+  description: /orb:spec SKILL.md is amended so that, when the input artefact contains a user-voice paragraph (whether full interview or short design note), the generated spec cites the paragraph as the intent contract — not only the Q&A answers — giving the implementing agent prose-level user intent. The citation is concrete (the paragraph is quoted or directly referenced in the spec's goal or notes).
+  gate: false
+  checked: true
+- id: ac-07
+  description: '/orb:design SKILL.md encodes a mode-switch trigger: when the author has rejected questions as implementation-shaped twice in a session, the agent treats the third reformulation as a mode-switch signal and shifts to closed or partial mode rather than reformulating the question. Repeated rejection is treated as evidence that the design space isn''t open, not as evidence of poor question wording.'
+  gate: false
+  checked: true
+- id: ac-08
+  description: /orb:design SKILL.md flags multiple-choice "would you prefer A, B, or C?" framing as a smell in the question-generation guidance — author preference between implementation alternatives is still implementation, only the surface framing has changed.
+  gate: false
+  checked: true
+- id: ac-09
+  description: /orb:design SKILL.md states explicitly that "no interview" is a valid terminal outcome of the closed-mode path — a clean exit, not a failure mode or precondition violation. The closing message names the design note artefact and exits without prompting for further input.
+  gate: false
+  checked: true
