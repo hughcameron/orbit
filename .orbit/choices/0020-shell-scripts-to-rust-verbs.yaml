@@ -1,0 +1,72 @@
+id: '0020'
+title: Shell scripts under plugins/orb/scripts/ migrate into orbit Rust verbs
+status: accepted
+date_created: 2026-05-09
+date_modified: 2026-05-09
+body: |
+  # 0020. Shell scripts under plugins/orb/scripts/ migrate into orbit Rust verbs
+
+  ## Context and Problem Statement
+
+  Three shell scripts currently sit under `plugins/orb/scripts/` and shell out to the orbit binary for substrate operations:
+
+  - `promote.sh` — card → spec promotion (just ported from bd-era 2026-05-09)
+  - `setup-method.sh` — /orb:setup §6 implementation: METHOD.md copy + CLAUDE.md @-import + atomic legacy-migration (just shipped 2026-05-09)
+  - `orbit-acceptance.sh` — acceptance_criteria parser around `orbit spec show --json`
+
+  All three are substrate-shaped: they read and write `.orbit/` files, derive ids, parse YAML, and call `orbit` for canonicalisation. None contain logic that benefits from being shell — every one of them is a thin shim that shells out to orbit and post-processes JSON via inline python3.
+
+  The recurring question — surfaced once for promote.sh on 2026-05-09, then immediately again for setup-method.sh in the same session — is *"shouldn't this just be in rust?"* The card-vs-choice discrimination shipped this session names this as a choice (implementation surface), not a card. This file is that choice, applied across the script collection rather than per-script.
+
+  Three discrimination signals point at the same answer for all three scripts:
+
+  1. **Tooling cost.** Each script duplicates work the Rust core already does — id derivation, YAML parsing, canonical writing, JSON envelope handling. The shell version re-implements these in bash + python3 every time.
+  2. **Test surface.** Shell tests under `plugins/orb/scripts/tests/` are integration tests against a temp `--root`. Rust verbs would run under the orbit-state test suite alongside other verbs, with typed contracts and faster feedback.
+  3. **MCP exposure.** Every Rust verb is automatically callable via the orbit MCP server (one tool call). Shell scripts can only run via Bash shell-out, which excludes them from MCP-only contexts.
+
+  ## Considered Options
+
+  - **A. Status quo.** Keep all three as shell scripts indefinitely. Pro: zero migration cost, scripts work today. Con: every new substrate operation defaults to shell, accumulating drift between SKILL.md prose and shell logic. The "thin shim that shells out" pattern multiplies.
+
+  - **B. Per-script choice each time.** File a separate choice when each script is being considered for migration. Pro: contextual, decided when the migration's payoff is concrete. Con: re-derives the same trade-off three times; agents miss the policy and default to shell because no single document names the policy.
+
+  - **C. One policy choice covering the script collection.** Declare that substrate-shaped scripts under `plugins/orb/scripts/` migrate into orbit Rust verbs as a default direction, with the migration sequenced opportunistically (no rush, no bulk rewrite). Each migration ships in its own spec citing this choice for rationale.
+
+  - **D. Bulk migration spec.** File one spec to migrate all three at once. Pro: closes the shell-script chapter. Con: large surface area, blocks current work, the bulk PR is harder to review than three sequenced ones.
+
+  ## Decision Outcome
+
+  Chosen option: **C — one policy choice, opportunistic per-script migration.**
+
+  The policy: any new substrate-shaped operation lands as an orbit Rust verb by default. Existing shell scripts under `plugins/orb/scripts/` are migration candidates, sequenced by author appetite (not blocked on a deadline). Each per-script migration is its own spec citing this choice.
+
+  Rationale for opportunistic over bulk:
+
+  - The shell scripts work today. The cost of running them is small. Bulk migration is engineering churn for a problem that isn't burning.
+  - Per-script migration lets each port land with its own test coverage and review, smaller PR each time.
+  - The Rust core (orbit-state) is itself young (v0.1, 2026-05). Verbs should accrete as the substrate matures, not all at once before it stabilises.
+
+  ### In-scope migration candidates
+
+  | Script | Suggested verb | Notes |
+  |--------|----------------|-------|
+  | `promote.sh` | `orbit spec promote <card-path>` | Wraps current `orbit spec create` + acceptance_criteria write + canonicalise into one verb. |
+  | `setup-method.sh` | `orbit setup method --project-root <path>` (or extend `orbit init` if it exists) | Atomic legacy detection, byte-for-byte drift check, idempotent @-import. |
+  | `orbit-acceptance.sh` | Already largely covered by `orbit spec show --json`; the `next-ac` / `blocking-gate` / `has-unchecked` / `check` subcommands could become orbit task or spec verbs. | Lower priority — the parser is small. |
+
+  ### Out of scope
+
+  - Tests under `plugins/orb/scripts/tests/`. They remain shell as long as their script-under-test does. Once a script ports to Rust, its test coverage moves to the Rust suite.
+  - Build / release / lint scripts (none currently exist in this collection).
+
+  ### Test-vs-prod parity
+
+  When a Rust verb ships, the shell shim becomes a thin wrapper that calls the verb (preserving the existing CLI surface) until downstream call sites (drive SKILL.md, rally SKILL.md) migrate to the verb directly. Decommission the shim only after grep confirms zero call sites — see card 0030's audit pattern.
+
+  ## Consequences
+
+  - Future shell scripts in `plugins/orb/scripts/` should be questioned: is this substrate-shaped? If yes, write the Rust verb instead.
+  - When agents propose "let's add a script for X under plugins/orb/scripts/", the discrimination is: substrate-shaped → Rust verb; project-tooling-shaped (orchestration, dev experience) → shell stays valid.
+  - The orbit-state crate gets more verbs over time. Plan for binary version bumps as part of script-port specs.
+  - Cards 0005-drive (uses promote.sh), 0006-rally (uses promote.sh), 0017-setup-is-bead-aware (uses setup-method.sh) gain a relations:respects → 0020 edge so the call sites trace to the policy.
+references: []
