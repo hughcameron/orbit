@@ -2,6 +2,14 @@
 
 All notable changes to orbit are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.4.8] - 2026-05-10
+
+`/orb:release` gains a substrate-binary parity gate. When `orbit-state/` changed in the release window but the on-PATH `orbit` binary predates the change, release refuses with a three-option resolution path (rebuild formula, set `ORBIT` env, or explicit `--accept-binary-lag` for forward-compatible changes). Closes the defect from 0.4.7 — sidecar-aware skill prose shipped against an older binary, which broke `orbit verify` for any terminal still on brew 0.4.3.
+
+### Changed
+
+- `plugins/orb/skills/release/SKILL.md` — pre-flight §1 gains step 4: substrate-binary parity gate. §7 confirm output now restates the binary state explicitly (resolved path, or "not gated" when orbit-state was untouched in this window).
+
 ## [0.4.7] - 2026-05-09
 
 The bd-era folder layout for per-spec sidecars (drive.yaml, rally.yaml, review files) migrates to flat sidecar paths (`.orbit/specs/<id>.<file>`) — one substrate convention across drives, rallies, and reviews. The orbit-state scanner gains a dotless-stem filter so `<id>.drive.yaml` and `<id>.rally.yaml` are skipped during spec parsing; `orbit verify` and `orbit spec list` stay clean with sidecars on disk.
