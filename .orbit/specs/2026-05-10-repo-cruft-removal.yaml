@@ -1,0 +1,27 @@
+id: 2026-05-10-repo-cruft-removal
+goal: Remove archived and empty top-level directories (.beads-archive/, .claude/worktrees/) so the repo root contains only the product, substrate, dogfood, and standard project files
+cards:
+- 0024-lean-pass
+status: closed
+labels: []
+acceptance_criteria:
+- id: ac-01
+  description: .beads-archive/ no longer exists at the repo root. The directory and all its contents (backup/, embeddeddolt/, hooks/, config.yaml, issues.jsonl, etc.) are removed from the working tree. The directory is already gitignored, so removal is a working-tree-only action — no git-tracked file is affected.
+  gate: true
+  checked: true
+- id: ac-02
+  description: .claude/worktrees/ no longer exists. The directory was empty and served no purpose; it is removed from the working tree.
+  gate: true
+  checked: true
+- id: ac-03
+  description: After removal, `git status` shows no new tracked-file deletions and no new untracked artefacts introduced by this spec. The working tree is no dirtier than before.
+  gate: true
+  checked: true
+- id: ac-04
+  description: The `.gitignore` entry for `.beads-archive/` is left in place to prevent the directory being recreated by stale tooling. Removal is one-directional — this spec does not delete the gitignore line.
+  gate: true
+  checked: true
+- id: ac-05
+  description: README.md's Repository layout section remains accurate — neither removed directory was listed, so no edit is required. Verified by re-reading the section.
+  gate: false
+  checked: true

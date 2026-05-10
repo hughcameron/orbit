@@ -4,6 +4,15 @@ An opinionated specification-driven workflow for [Claude Code](https://claude.ai
 
 > Early Release — Orbit is under active development. Expect breaking changes to schemas, CLI arguments, library APIs, and model formats between releases. Pin to a specific version if stability matters for your use case.
 
+## Repository layout
+
+- `plugins/orb/` — the plugin shipped to Claude Code: skills, hooks, plugin metadata.
+- `orbit-state/` — Rust workspace producing the `orbit` CLI and MCP server (substrate behind the skills).
+- `.orbit/` — orbit's own dogfooded artefacts (cards, choices, specs, memories) — orbit uses itself.
+- `.claude-plugin/marketplace.json` — marketplace manifest for installing the plugin.
+- `CLAUDE.md`, `.orbit/METHOD.md`, `.orbit/STYLE.md` — the contract every session loads.
+- `README.md`, `CHANGELOG.md`, `LICENSE` — top-level docs.
+
 ## Why a workflow at all?
 
 Agents have gravity. Context windows fill, sessions end, and there's a constant pull toward closing things out, sometimes by taking shortcuts, sometimes by quietly making decisions that were never yours to delegate. That pull isn't a flaw; it's how agents get work done. But left unchecked, it drifts the software away from what you actually wanted.

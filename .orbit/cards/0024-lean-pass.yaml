@@ -40,7 +40,8 @@ scenarios:
   when: it runs
   then: it caps at one hour; if more lean is needed, it spawns a follow-up; lean-as-ceremony (auditing for the sake of auditing) is the named failure mode
   gate: false
-specs: []
+specs:
+- .orbit/specs/2026-05-10-repo-cruft-removal.yaml
 relations:
 - card: 0002-distill
   type: depends-on
