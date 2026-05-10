@@ -1,0 +1,95 @@
+id: '0022'
+title: Standardise id conventions across cards, choices, specs, memories
+status: accepted
+date_created: 2026-05-10
+date_modified: 2026-05-10
+body: |
+  # 0022. Standardise id conventions across cards, choices, specs, memories
+
+  ## Context and Problem Statement
+
+  The substrate has four canonical entity types and four different id conventions. Documenting the live state:
+
+  | Entity   | YAML id field      | Filename prefix       | CLI lookup form                          |
+  |----------|--------------------|-----------------------|------------------------------------------|
+  | Spec     | `id: <date-slug>`  | `YYYY-MM-DD-slug`     | full slug (`2026-05-10-repo-cruft-removal`) |
+  | Card     | **(none)**         | `NNNN-slug`           | full slug (`0008-consolidated-orbit-artefact-folder`) |
+  | Choice   | `id: 'NNNN'`       | `NNNN-slug`           | full slug (`0008-rally-subagent-path-discipline`) |
+  | Memory   | `key: <key>`       | matches key           | key                                       |
+
+  Three concrete frictions surfaced in the 2026-05-10 design session:
+
+  1. **Cards have no `id:` field at all.** The `Card` struct in `orbit-state/crates/core/src/schema.rs` starts with `feature: String`. The 4-digit prefix in the filename is doing dual duty as sort-key *and* pseudo-id, with no schema-level recognition. Conversational shorthand "card 0008" has no formal counterpart — both `orbit card show 0008` and `orbit card show 8` 404; only the full slug works.
+
+  2. **Specs lack a NNNN id.** Spec ids are date-slugs (`2026-05-10-repo-cruft-removal`), not zero-padded numbers. The shape is fine for time-ordered work but breaks the cards/choices "card 8 / choice 21" shorthand. There is no "spec 7" — only "the spec dated 2026-04-15".
+
+  3. **Cross-type number collision.** `0008` is taken twice — by `cards/0008-consolidated-orbit-artefact-folder.yaml` *and* by `choices/0008-rally-subagent-path-discipline.yaml`. Each entity type runs its own independent NNNN sequence. So bare "0008" is ambiguous; only `card 0008` or `choice 0008` resolves uniquely. The CLI already enforces this (each verb takes a type-scoped lookup), but prose and memory artefacts have been sloppier.
+
+  Memory's `key:` is a separate question — keys are lookup keys for an associative store, not entity ids. This choice does not propose renaming `key:` to `id:`; conceptually they differ. Memories are out of scope below.
+
+  ## Considered Options
+
+  - **A. Status quo + documentation.** Accept the four conventions, document them explicitly in METHOD.md so the heterogeneity is named rather than discovered. Pro: zero schema or migration cost. Con: cards still lack a schema-level id; "card 0008" remains a conversational fiction; the substrate has a documented but persistent asymmetry.
+
+  - **B. Add `id:` to cards, leave the rest alone.** Promote the filename NNNN-slug to a first-class field on `Card`. Cards gain `id: <full-slug>` matching the filename. Specs keep date-slug. Choices already have `id:`. Pro: closes the schema gap on cards with one field addition; smallest change that addresses the most concrete friction. Con: leaves the cards-NNNN vs specs-date-slug asymmetry standing.
+
+  - **C. Globally unique numbering.** Allocate a single NNNN sequence shared across all entity types. `0008` is uniquely a card, `0009` uniquely a choice, etc. Pro: bare "0008" disambiguates without the type prefix. Con: forces renumbering of every existing choice (or card); breaks per-type authoring rhythm; the numbers stop carrying type information; massive migration churn for marginal clarity.
+
+  - **D. Drop NNNN prefix entirely; slug-only ids.** Cards become `consolidated-orbit-artefact-folder.yaml`, choices become `rally-subagent-path-discipline.yaml`. Sort by creation date (or alphabetic). Pro: removes the false-id problem at its root — the only id is the slug. Con: loses the "card 8" shorthand entirely; renaming churn for ~50 cards/choices; lexical sort is uglier without padding.
+
+  - **E. Per-type id types — formalise the asymmetry.** Cards and choices are *enumerated* (a known set, sequenced by addition) → NNNN-slug. Specs are *dated* (created at a moment) → YYYY-MM-DD-slug. Memories are *keyed* (associative store) → key. Each entity type's id matches its lifecycle. Add `id:` to `Card`, document the three id-type families. Pro: the asymmetry is principled, not accidental — each shape fits its entity's nature. Con: still three id conventions; readers must learn each one.
+
+  ## Decision Outcome
+
+  Chosen option: **E — per-type id types, formalise the asymmetry.**
+
+  The schema gains symmetry where it should and keeps asymmetry where it must. Concretely:
+
+  ### Schema changes
+
+  - `Card` gains an optional `id: String` field positioned as the first field in the struct, holding the full slug (e.g. `0008-consolidated-orbit-artefact-folder`). When present, must match the filename. Optional in YAML for backwards compatibility with existing card files; the canonical writer emits it on the next canonicalise pass.
+  - `Spec` keeps `id: <date-slug>`. No change.
+  - `Choice` keeps `id: 'NNNN'` *as-is* (just the four-digit number, not the full slug). Documented as the choice convention — a deliberate shorthand because the choice title is in the body and the filename slug is derivable.
+  - `Memory` keeps `key:` — distinct concept, retained.
+
+  ### Prose and lookup conventions
+
+  - In agent-to-author prose and in artefact bodies, references must always include the type qualifier: `card 0008`, `choice 0008`, `spec 2026-05-10-repo-cruft-removal`. Bare `0008` is forbidden because the namespaces collide cross-type.
+  - CLI lookup gains optional bare-NNNN convenience for cards and choices: `orbit card show 8` resolves to the unique card whose filename starts with `0008-`, erroring if zero or multiple match. Same for `orbit choice show 8`. The existing full-slug form remains valid.
+  - `orbit spec show <date-slug>` continues unchanged.
+
+  ### Three id-type families (canonical)
+
+  1. **Enumerated** (cards, choices) — `NNNN-slug`. Allocated at creation, monotonically increased per type. Padding is four digits.
+  2. **Dated** (specs) — `YYYY-MM-DD-slug`. Allocated at creation, the date is part of the id. Multiple specs may share a date; the slug disambiguates.
+  3. **Keyed** (memories) — `key`. Free-form lookup key, allocated at write time. No padding, no date.
+
+  This is documented in `.orbit/conventions/id-conventions.md` and reflected in METHOD.md's vocabulary table.
+
+  ### Migration plan (drives a follow-up spec)
+
+  1. Add `id: Option<String>` to `Card` in `orbit-state/crates/core/src/schema.rs` (positioned first); update the canonical writer to emit it; update parsers to accept yaml with or without it.
+  2. One-shot canonicalise pass: every existing `.orbit/cards/<slug>.yaml` gains `id: <slug>` as its first field. Idempotent.
+  3. CLI: extend `orbit card show` and `orbit choice show` to accept bare NNNN with prefix-match resolution. Error message names the type ambiguity if it ever arises within a type (it shouldn't).
+  4. Documentation: write `.orbit/conventions/id-conventions.md`; update `.orbit/METHOD.md` vocabulary table to cite the three id-type families; add a one-line "Reference style" note covering `card NNNN` / `choice NNNN` / `spec date-slug`.
+  5. Audit existing artefacts (cards, choices, specs, conventions, memos) for bare-NNNN references and qualify them with the type. This is the prose-hygiene tail of the change.
+
+  ### Out of scope
+
+  - Renaming `key` to `id` on memories. Different concept; staying as is.
+  - Reshuffling existing NNNN allocations to avoid the cross-type collision (option C). Explicitly rejected — type prefix in prose is the intended disambiguator.
+  - Changing the slug portion of any id. Slugs are stable.
+
+  ## Consequences
+
+  - The sloppy "card 0008" shorthand acquires a schema-level home: cards now have `id`, the lookup verb accepts the bare number, and prose conventions name the type explicitly.
+  - The remaining asymmetry between cards/choices (NNNN) and specs (date-slug) is documented as deliberate — one capability per id shape, matching entity lifecycle. Readers of METHOD.md learn three patterns instead of one, but each is principled.
+  - Choice 0021 and earlier choice files use `id: 'NNNN'` (just the number). New cards under this choice use `id: <full-slug>`. The asymmetry between Card.id and Choice.id is intentional: choices' id field is shorthand because the title carries the rest; cards' id field is the full slug because cards have no separate title field.
+  - Future drafts of the canonical writer must canonicalise the new `id` field on cards. The substrate-binary parity gate catches drift.
+  - Migration cost is modest: one schema field, one canonicalise pass, two CLI extensions, one new conventions doc.
+references:
+- '.orbit/choices/0015-orbit-state-architecture.yaml: files-canonical commitment under which this choice operates'
+- '.orbit/choices/0016-choices-vocabulary.yaml: choices vocabulary (decisions/ → choices/) — the precedent for naming clarity'
+- '.orbit/cards/0008-consolidated-orbit-artefact-folder.yaml: the card whose missing id surfaced this issue'
+- '.orbit/choices/0008-rally-subagent-path-discipline.yaml: the choice whose number collides cross-type'
+- '.orbit/cards/0030-canonical-schema-and-glossary.yaml: parent capability — canonical schema work this choice extends'
