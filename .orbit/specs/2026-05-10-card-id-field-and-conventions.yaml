@@ -1,0 +1,35 @@
+id: 2026-05-10-card-id-field-and-conventions
+goal: 'Add id: field to Card, document the three id-type families (enumerated / dated / keyed), formalise type-prefix prose contract, and add bare-NNNN CLI lookup for cards and choices per choice 0022'
+cards:
+- 0030-canonical-schema-and-glossary
+status: open
+labels: []
+acceptance_criteria:
+- id: ac-01
+  description: '`Card` struct in `orbit-state/crates/core/src/schema.rs` gains `id: Option<String>` as its first field (positioned before `feature`). The canonical writer emits the field when present; parsers accept yaml with or without it (backwards-compatible read of old cards). When `id` is present it MUST equal the filename slug minus the `.yaml` extension; mismatch is a parse error. Two unit tests: (a) round-trip a card with `id` set; (b) round-trip a legacy card without `id` and confirm the canonical writer adds it on the next pass.'
+  gate: true
+  checked: false
+- id: ac-02
+  description: 'A one-shot canonicalise pass over `.orbit/cards/*.yaml` adds `id: <full-slug>` as the first field of every existing card. Idempotent. Verification: every file under `.orbit/cards/` (excluding `cards/memos/`) starts with an `id:` line whose value matches its filename slug. `orbit verify` returns clean post-pass.'
+  gate: true
+  checked: false
+- id: ac-03
+  description: '`orbit card show <bare-NNNN>` resolves via filename prefix-match — e.g. `orbit card show 8` returns the unique card whose filename starts with `0008-`. Errors: zero matches → `not-found`; multiple matches → `ambiguous` (should never trigger within a type, but the error path is named). Same behaviour for `orbit choice show <bare-NNNN>`. The existing full-slug form (`orbit card show 0008-consolidated-orbit-artefact-folder`) remains valid. Three unit tests: bare-NNNN resolves; full-slug still works; zero-match returns the right error.'
+  gate: true
+  checked: false
+- id: ac-04
+  description: '`.orbit/conventions/id-conventions.md` is created. The doc lists the three id-type families (enumerated for cards/choices, dated for specs, keyed for memories), gives one example per type, names the type-qualifier prose contract (`card NNNN`, `choice NNNN`, `spec date-slug`), and links to choice 0022 for rationale. One screen of dense prose; no recapitulation of the choice''s body.'
+  gate: true
+  checked: false
+- id: ac-05
+  description: '`.orbit/METHOD.md` vocabulary table gains an explicit "Reference style" note covering the type-qualifier convention (`card NNNN`, `choice NNNN`, `spec <date-slug>`, `memory <key>`). Each row of the existing vocabulary table cites its id shape inline (the Card row gains "id: NNNN-slug"; the Memory row already cites `key`; etc.). `plugins/orb/skills/setup/METHOD.md` mirrors the change byte-for-byte; `diff` exits zero.'
+  gate: true
+  checked: false
+- id: ac-06
+  description: 'Audit pass on existing artefacts (`.orbit/cards/`, `.orbit/choices/`, `.orbit/specs/`, `.orbit/conventions/`, `.orbit/memories/`) for bare-NNNN references that should be type-qualified. Verification: `grep -rnE ''(^|[[:space:]\(\[])([0-9]{4})-'' .orbit/{cards,choices,specs,conventions,memories}` is reviewed and any prose-context bare-NNNN (i.e. not part of a path or filename) is qualified with `card |choice ` prefix. The grep result after the pass shows only path-context or quoted-id hits.'
+  gate: false
+  checked: false
+- id: ac-07
+  description: '`orbit verify` returns clean post-changes. Substrate-binary parity gate (commit ca00bb1) passes. Workspace version bumps to reflect the schema change; a fresh release is cut so the brew bottle picks up the new Card schema and the new CLI prefix-match resolver. Verification: after rebuild, `orbit -V` reports the new version and `orbit card show 8` resolves correctly against this repo.'
+  gate: false
+  checked: false
