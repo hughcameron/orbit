@@ -2,7 +2,7 @@ id: 2026-05-10-spec-folders-migration
 goal: 'Migrate post-2026-05-08 flat-sidecar specs to per-spec folders per choice 0021: scanner update, one-shot migration verb, SKILL.md path reverts, and METHOD.md / conventions doc rewrites'
 cards:
 - 0008-consolidated-orbit-artefact-folder
-status: open
+status: closed
 labels: []
 acceptance_criteria:
 - id: ac-01
@@ -12,7 +12,7 @@ acceptance_criteria:
 - id: ac-02
   description: 'A new orbit verb `orbit spec migrate-layout` exists. For each `.orbit/specs/<id>.yaml` plus prefix-matched sidecars, it creates `.orbit/specs/<id>/` and moves files in with renames: `<id>.yaml` → `<id>/spec.yaml`, `<id>.drive.yaml` → `<id>/drive.yaml`, `<id>.rally.yaml` → `<id>/rally.yaml`, `<id>.notes.jsonl` → `<id>/notes.jsonl`, `<id>.tasks.jsonl` → `<id>/tasks.jsonl`, `<id>.review-spec-<date>.md` → `<id>/review-spec-<date>.md`, `<id>.review-pr-<date>.md` → `<id>/review-pr-<date>.md`, `<id>.interview.md` → `<id>/interview.md`. The verb is idempotent (re-running on already-migrated state is a no-op). Sidecars are matched by exact prefix `<id>.` to avoid the prefix-collision risk noted in choice 0021. A unit test runs the verb against a synthetic temp root with mixed flat + folder specs and verifies the post-state.'
   gate: true
-  checked: false
+  checked: true
 - id: ac-03
   description: 'Run the migration verb against this repo. Result: `.orbit/specs/` contains folders only (no flat `<id>.yaml` at top level except inside the bd-era historical folders). The 24 bd-era folders are pre-existing and unchanged. The post-2026-05-08 flat specs (count: 6 yamls + their sidecars) are folded into folders. `orbit verify` returns clean against the migrated state.'
   gate: true
@@ -36,4 +36,4 @@ acceptance_criteria:
 - id: ac-08
   description: Substrate-binary parity gate passes after the schema and verb changes. If the new verb shifts the public CLI surface, the workspace version bumps and a fresh release is cut so the brew bottle picks up the change. The existing parity test (per commit ca00bb1) covers this — its CI run passes against the new build.
   gate: false
-  checked: false
+  checked: true

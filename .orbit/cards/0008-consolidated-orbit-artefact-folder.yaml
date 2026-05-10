@@ -43,6 +43,7 @@ scenarios:
   gate: false
 specs:
 - .orbit/archive/specs/2026-04-20-orbit-artefact-folder/spec.yaml
+- .orbit/specs/2026-05-10-spec-folders-migration/spec.yaml
 relations:
 - card: 0020-orbit-state
   type: depends-on
