@@ -278,6 +278,16 @@ enum SpecAction {
     Close {
         id: String,
     },
+    /// One-shot migration from flat sidecar layout to per-spec folders per
+    /// choice 0021. For each `.orbit/specs/<id>.yaml`, creates `<id>/` and
+    /// moves the yaml to `<id>/spec.yaml`. Sidecars matching `<id>.<suffix>`
+    /// are folded into `<id>/<suffix>` with the leading dot stripped.
+    /// Idempotent — safe to re-run.
+    MigrateLayout {
+        /// Print what would change without writing.
+        #[arg(long)]
+        dry_run: bool,
+    },
 }
 
 fn main() -> ExitCode {
@@ -310,6 +320,12 @@ fn main() -> ExitCode {
     }
     if let Command::Canonicalise { dry_run } = cli.command {
         return run_canonicalise(&layout, dry_run, cli.json);
+    }
+    if let Command::Spec {
+        action: SpecAction::MigrateLayout { dry_run },
+    } = cli.command
+    {
+        return run_migrate_layout(&layout, dry_run, cli.json);
     }
 
     let request = match build_request(&layout, &cli.command) {
@@ -472,6 +488,63 @@ fn run_canonicalise(layout: &OrbitLayout, dry_run: bool, json: bool) -> ExitCode
     }
 }
 
+/// One-shot per-spec-folder migration per choice 0021. Like canonicalise,
+/// this is a fs-level operation that doesn't fit the verb envelope cleanly
+/// — handled here directly so its per-move output stays separate.
+fn run_migrate_layout(layout: &OrbitLayout, dry_run: bool, json: bool) -> ExitCode {
+    let report = orbit_state_core::migrate_spec_layout(layout, dry_run);
+
+    if json {
+        let mut out = String::from("{\"ok\":");
+        out.push_str(if report.errors.is_empty() {
+            "true"
+        } else {
+            "false"
+        });
+        out.push_str(",\"dry_run\":");
+        out.push_str(if dry_run { "true" } else { "false" });
+        out.push_str(&format!(
+            ",\"migrated\":{},\"already_folder\":{},\"moves\":{}",
+            report.migrated.len(),
+            report.already_folder.len(),
+            report.moves.len()
+        ));
+        out.push_str(",\"errors\":[");
+        for (i, (path, msg)) in report.errors.iter().enumerate() {
+            if i > 0 {
+                out.push(',');
+            }
+            out.push_str(&format!(
+                "{{\"path\":{:?},\"error\":{:?}}}",
+                path.display().to_string(),
+                msg
+            ));
+        }
+        out.push_str("]}");
+        println!("{out}");
+    } else {
+        let verb = if dry_run { "would migrate" } else { "migrated" };
+        println!(
+            "orbit spec migrate-layout: {verb} {} spec(s), {} already in folder shape, {} planned move(s)",
+            report.migrated.len(),
+            report.already_folder.len(),
+            report.moves.len(),
+        );
+        for spec_id in &report.migrated {
+            println!("  {} {spec_id}", if dry_run { "would migrate" } else { "migrated" });
+        }
+        for (path, msg) in &report.errors {
+            eprintln!("  error: {} — {msg}", path.display());
+        }
+    }
+
+    if report.errors.is_empty() {
+        ExitCode::SUCCESS
+    } else {
+        ExitCode::FAILURE
+    }
+}
+
 /// Translate the parsed argv into a [`VerbRequest`]. Mostly pure — the only
 /// I/O happens for `spec update --ac-check / --ac-uncheck`, which must read
 /// the current spec to compute the new acceptance_criteria list. The parity
@@ -567,6 +640,9 @@ fn build_request(layout: &OrbitLayout, command: &Command) -> Result<VerbRequest,
                 })
             }
             SpecAction::Close { id } => VerbRequest::SpecClose(SpecCloseArgs { id: id.clone() }),
+            SpecAction::MigrateLayout { .. } => unreachable!(
+                "spec migrate-layout is short-circuited in main() before reaching build_request"
+            ),
         },
         Command::Task { action } => match action {
             TaskAction::Open {
