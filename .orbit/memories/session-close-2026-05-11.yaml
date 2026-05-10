@@ -1,0 +1,4 @@
+key: session-close-2026-05-11
+body: 'Session closed mid-spec on 2026-05-10-spec-folders-migration. AC-02 (orbit spec migrate-layout verb) shipped — module at orbit-state/crates/core/src/migrate.rs with 10 unit tests; CLI subcommand wired in main.rs; v0.4.9 binary on PATH includes it. Dry-run against this repo reports 12 specs to migrate, 32 file moves; 4 specs are hybrid-state (folder + flat spec.yaml co-exist — folder kept bd-era sidecars, spec body went flat in 2026-05-09 sidecar migration). Migration is fs-level, doesn''t depend on layout.rs helpers. Outstanding ACs: 01 (layout.rs flip from <id>.yaml to <id>/spec.yaml lookup), 03 (run migration on repo), 04 (SKILL.md path reverts across drive/rally/review-spec/review-pr), 05 (rewrite .orbit/conventions/spec-layout.md), 06 (METHOD.md vocabulary table to folder paths), 07 (smoke test), 08 (release v0.4.10 + brew upgrade).'
+timestamp: 2026-05-10T20:58:06.881011607Z
+labels: []
