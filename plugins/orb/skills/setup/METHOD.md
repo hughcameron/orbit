@@ -21,11 +21,11 @@ Variants:
 | Card       | `NNNN-slug`       | `.orbit/cards/NNNN-<slug>.yaml`                  | A capability the product provides. User language. Never closed — updated in place.      |
 | Memo       | dated filename    | `.orbit/cards/memos/<date>-<slug>.md`            | Raw idea awaiting distillation. Freeform markdown. Deleted after promotion to a card.   |
 | Choice     | `NNNN-slug`       | `.orbit/choices/NNNN-<slug>.yaml`                | MADR record of an architectural choice — *how* a capability is implemented.             |
-| Spec       | `YYYY-MM-DD-slug` | `.orbit/specs/<date>-<slug>.yaml`                | A discrete unit of work with numbered acceptance criteria. One card may spawn many.     |
-| Interview  | (sidecar of spec) | `.orbit/specs/<date>-<slug>.interview.md`        | Q&A record from a `/design` or `/discovery` session. Feeds the spec.                    |
-| Review     | (sidecar of spec) | `.orbit/specs/<date>-<slug>.review-{spec,pr}-<date>.md` | Verdict artefact from `/review-spec` or `/review-pr`.                            |
-| Drive state| (sidecar of spec) | `.orbit/specs/<date>-<slug>.drive.yaml`          | Durable orchestration state for a single-card drive.                                    |
-| Rally state| (sidecar of spec) | `.orbit/specs/<date>-<slug>-rally.rally.yaml`    | Durable orchestration state for a multi-card rally.                                     |
+| Spec       | `YYYY-MM-DD-slug` | `.orbit/specs/<date>-<slug>/spec.yaml`           | A discrete unit of work with numbered acceptance criteria. One card may spawn many.     |
+| Interview  | (sidecar of spec) | `.orbit/specs/<date>-<slug>/interview.md`        | Q&A record from a `/design` or `/discovery` session. Feeds the spec.                    |
+| Review     | (sidecar of spec) | `.orbit/specs/<date>-<slug>/review-{spec,pr}-<date>.md` | Verdict artefact from `/review-spec` or `/review-pr`.                            |
+| Drive state| (sidecar of spec) | `.orbit/specs/<date>-<slug>/drive.yaml`          | Durable orchestration state for a single-card drive.                                    |
+| Rally state| (sidecar of spec) | `.orbit/specs/<date>-<slug>-rally/rally.yaml`    | Durable orchestration state for a multi-card rally.                                     |
 | Memory     | `key`             | `.orbit/memories/<key>.yaml`                     | Persistent knowledge across sessions, looked up by key.                                 |
 
 ### Reference style

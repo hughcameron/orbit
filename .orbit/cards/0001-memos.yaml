@@ -37,7 +37,7 @@ scenarios:
   then: the memo is deleted (or archived under cards/memos/.archive/) — memos do not accumulate post-distillation
   gate: false
 specs:
-- .orbit/specs/2026-04-04-memos/spec.yaml
+- .orbit/archive/specs/2026-04-04-memos/spec.yaml
 relations: []
 references:
 - cards are living documents — no done/ directory, git history is the audit trail

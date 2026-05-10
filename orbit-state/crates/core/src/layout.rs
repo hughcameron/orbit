@@ -3,31 +3,33 @@
 //! Single source of truth for where each entity type lives on disk. Paths are
 //! relative to a root that the caller supplies (typically the repo root).
 //!
-//! Layout (per card 0008 + ac-20). See `.orbit/conventions/spec-layout.md`
-//! for the canonical sidecar inventory; the rule below is its mechanical
-//! enforcement.
+//! Layout (per card 0008 + ac-20, choice 0021). See
+//! `.orbit/conventions/spec-layout.md` for the canonical sidecar inventory;
+//! the rule below is its mechanical enforcement.
 //!
 //! ```text
 //! .orbit/
-//!   schema-version       (substrate-written, gitignored)
-//!   state.db             (derived index, gitignored)
-//!   locks/               (lock files, gitignored)
-//!   specs/<id>.yaml      (substrate-written, tracked) — primary spec
-//!   specs/<id>.tasks.jsonl       (append-only events, tracked)
-//!   specs/<id>.notes.jsonl       (append-only notes, tracked)
-//!   specs/<id>.drive.yaml        (drive sidecar, tracked)
-//!   specs/<id>.rally.yaml        (rally sidecar, tracked)
-//!   specs/<id>.review-spec-<date>.md   (review artefact, tracked)
-//!   specs/<id>.review-pr-<date>.md     (review artefact, tracked)
-//!   cards/<slug>.yaml    (human-written, tracked)
-//!   cards/memos/         (memos awaiting distillation, tracked)
-//!   choices/<slug>.yaml  (human-written, tracked)
-//!   memories/<slug>.yaml (substrate-written, tracked)
+//!   schema-version             (substrate-written, gitignored)
+//!   state.db                   (derived index, gitignored)
+//!   locks/                     (lock files, gitignored)
+//!   specs/<id>/spec.yaml                   (substrate-written, tracked) — primary spec
+//!   specs/<id>/tasks.jsonl                 (append-only events, tracked)
+//!   specs/<id>/notes.jsonl                 (append-only notes, tracked)
+//!   specs/<id>/drive.yaml                  (drive sidecar, tracked)
+//!   specs/<id>/rally.yaml                  (rally sidecar, tracked)
+//!   specs/<id>/review-spec-<date>.md       (review artefact, tracked)
+//!   specs/<id>/review-pr-<date>.md         (review artefact, tracked)
+//!   specs/<id>/interview.md                (interview sidecar, tracked)
+//!   cards/<slug>.yaml          (human-written, tracked)
+//!   cards/memos/               (memos awaiting distillation, tracked)
+//!   choices/<slug>.yaml        (human-written, tracked)
+//!   memories/<slug>.yaml       (substrate-written, tracked)
 //! ```
 //!
-//! Spec files are loaded from `specs/*.yaml` filtered to dotless stems.
-//! `<id>.drive.yaml` and `<id>.rally.yaml` are sidecars, not specs — the
-//! scanner skips them because their file stems contain a `.`.
+//! Specs live in per-id folders: `list_spec_files()` scans immediate
+//! subdirectories of `specs/` and returns every `<id>/spec.yaml` it finds.
+//! Sidecars live alongside `spec.yaml` inside the same folder and are never
+//! loaded as primary specs.
 
 use std::path::{Path, PathBuf};
 
@@ -66,16 +68,29 @@ impl OrbitLayout {
         self.root.join("specs")
     }
 
+    /// Per-spec folder: `specs/<id>/`. Holds `spec.yaml` plus all sidecars.
+    pub fn spec_dir(&self, id: &str) -> PathBuf {
+        self.specs_dir().join(id)
+    }
+
     pub fn spec_file(&self, id: &str) -> PathBuf {
-        self.specs_dir().join(format!("{id}.yaml"))
+        self.spec_dir(id).join("spec.yaml")
     }
 
     pub fn task_stream(&self, spec_id: &str) -> PathBuf {
-        self.specs_dir().join(format!("{spec_id}.tasks.jsonl"))
+        self.spec_dir(spec_id).join("tasks.jsonl")
     }
 
     pub fn notes_stream(&self, spec_id: &str) -> PathBuf {
-        self.specs_dir().join(format!("{spec_id}.notes.jsonl"))
+        self.spec_dir(spec_id).join("notes.jsonl")
+    }
+
+    /// Create the per-spec folder. Idempotent. Callers must invoke this
+    /// before writing `spec_file(id)`, `task_stream(id)`, `notes_stream(id)`,
+    /// or any sidecar — `write_atomic` and `append_jsonl_line` reject a
+    /// missing parent directory by design.
+    pub fn ensure_spec_dir(&self, id: &str) -> std::io::Result<()> {
+        std::fs::create_dir_all(self.spec_dir(id))
     }
 
     pub fn cards_dir(&self) -> PathBuf {
@@ -122,9 +137,31 @@ impl OrbitLayout {
         Ok(())
     }
 
-    /// Return all spec YAML files (not the .tasks.jsonl streams) under specs/.
+    /// Return every `<id>/spec.yaml` under `specs/`, sorted by path.
+    ///
+    /// Scans immediate subdirectories of `specs_dir()`. A subdirectory
+    /// without a `spec.yaml` is skipped silently (it's a partial migration
+    /// state or a stray folder, not a spec to load). Top-level `<id>.yaml`
+    /// files are ignored — see choice 0021 for the layout rationale.
     pub fn list_spec_files(&self) -> std::io::Result<Vec<PathBuf>> {
-        list_yaml_files(&self.specs_dir())
+        let dir = self.specs_dir();
+        if !dir.exists() {
+            return Ok(vec![]);
+        }
+        let mut out = Vec::new();
+        for entry in std::fs::read_dir(&dir)? {
+            let entry = entry?;
+            let path = entry.path();
+            if !path.is_dir() {
+                continue;
+            }
+            let spec_yaml = path.join("spec.yaml");
+            if spec_yaml.is_file() {
+                out.push(spec_yaml);
+            }
+        }
+        out.sort();
+        Ok(out)
     }
 
     pub fn list_card_files(&self) -> std::io::Result<Vec<PathBuf>> {
@@ -187,12 +224,20 @@ mod tests {
         assert_eq!(layout.root, PathBuf::from("/tmp/repo/.orbit"));
         assert_eq!(layout.state_db(), PathBuf::from("/tmp/repo/.orbit/state.db"));
         assert_eq!(
+            layout.spec_dir("0001"),
+            PathBuf::from("/tmp/repo/.orbit/specs/0001")
+        );
+        assert_eq!(
             layout.spec_file("0001"),
-            PathBuf::from("/tmp/repo/.orbit/specs/0001.yaml")
+            PathBuf::from("/tmp/repo/.orbit/specs/0001/spec.yaml")
         );
         assert_eq!(
             layout.task_stream("0001"),
-            PathBuf::from("/tmp/repo/.orbit/specs/0001.tasks.jsonl")
+            PathBuf::from("/tmp/repo/.orbit/specs/0001/tasks.jsonl")
+        );
+        assert_eq!(
+            layout.notes_stream("0001"),
+            PathBuf::from("/tmp/repo/.orbit/specs/0001/notes.jsonl")
         );
         assert_eq!(
             layout.card_file("0020-orbit-state"),
@@ -223,49 +268,57 @@ mod tests {
     }
 
     #[test]
-    fn list_yaml_filters_extension() {
+    fn list_spec_files_returns_folder_shape() {
         let dir = tempdir().unwrap();
         let layout = OrbitLayout::at(dir.path());
         layout.ensure_dirs().unwrap();
+        layout.ensure_spec_dir("0001").unwrap();
         std::fs::write(layout.spec_file("0001"), "id: '0001'\n").unwrap();
-        std::fs::write(layout.specs_dir().join("readme.md"), "ignore me").unwrap();
         std::fs::write(
             layout.task_stream("0001"),
             r#"{"task_id":"t","spec_id":"0001","event":"open","timestamp":"x"}"#,
         )
         .unwrap();
+        // Stray flat YAML at the top of specs/ — must not be picked up.
+        std::fs::write(
+            layout.specs_dir().join("0002-other.yaml"),
+            "id: '0002-other'\n",
+        )
+        .unwrap();
+        // Subdirectory without spec.yaml — silently skipped.
+        std::fs::create_dir_all(layout.specs_dir().join("0003-empty")).unwrap();
+        // Random file at top of specs/ — ignored.
+        std::fs::write(layout.specs_dir().join("readme.md"), "ignore me").unwrap();
+
         let files = layout.list_spec_files().unwrap();
-        assert_eq!(files.len(), 1);
-        assert_eq!(files[0].file_name().unwrap(), "0001.yaml");
+        assert_eq!(files.len(), 1, "only the folder-shape spec should be returned");
+        assert_eq!(files[0], layout.spec_file("0001"));
     }
 
     #[test]
-    fn list_spec_files_skips_sidecar_shapes() {
+    fn list_spec_files_ignores_sidecars_inside_folder() {
+        // Sidecars sit alongside spec.yaml inside the folder; only spec.yaml
+        // is the primary entity. The scanner returns spec.yaml paths and
+        // never enumerates folder contents beyond that.
         let dir = tempdir().unwrap();
         let layout = OrbitLayout::at(dir.path());
         layout.ensure_dirs().unwrap();
-        // Primary spec
+        layout.ensure_spec_dir("2026-05-09-foo").unwrap();
         std::fs::write(layout.spec_file("2026-05-09-foo"), "id: '2026-05-09-foo'\n").unwrap();
-        // Sidecars — must NOT be returned by list_spec_files
         std::fs::write(
-            layout.specs_dir().join("2026-05-09-foo.drive.yaml"),
+            layout.spec_dir("2026-05-09-foo").join("drive.yaml"),
             "spec_id: '2026-05-09-foo'\nstage: review-spec\n",
         )
         .unwrap();
         std::fs::write(
-            layout.specs_dir().join("2026-05-09-bar.rally.yaml"),
-            "rally_id: '2026-05-09-bar'\n",
-        )
-        .unwrap();
-        std::fs::write(
-            layout.specs_dir().join("2026-05-09-foo.review-spec-2026-05-09.md"),
+            layout.spec_dir("2026-05-09-foo").join("review-spec-2026-05-09.md"),
             "# Review",
         )
         .unwrap();
 
         let files = layout.list_spec_files().unwrap();
-        assert_eq!(files.len(), 1, "only the dotless-stem yaml should be returned");
-        assert_eq!(files[0].file_name().unwrap(), "2026-05-09-foo.yaml");
+        assert_eq!(files.len(), 1);
+        assert_eq!(files[0], layout.spec_file("2026-05-09-foo"));
     }
 
     #[test]

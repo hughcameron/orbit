@@ -57,10 +57,10 @@ scenarios:
   then: autonomy level is implicit in the contract — strict halts and narrow escalations enforce the boundary; no separate autonomy parameter is needed
   gate: false
 specs:
-- .orbit/specs/2026-04-15-drive/spec.yaml
-- .orbit/specs/2026-04-20-drive-live-visibility/spec.yaml
-- .orbit/specs/2026-05-09-promote-orbit-state-port.yaml
-- .orbit/specs/2026-05-09-drive-rally-sidecar-layout.yaml
+- .orbit/archive/specs/2026-04-15-drive/spec.yaml
+- .orbit/archive/specs/2026-04-20-drive-live-visibility/spec.yaml
+- .orbit/specs/2026-05-09-promote-orbit-state-port/spec.yaml
+- .orbit/specs/2026-05-09-drive-rally-sidecar-layout/spec.yaml
 relations:
 - card: 0019-tabletop
   type: depends-on

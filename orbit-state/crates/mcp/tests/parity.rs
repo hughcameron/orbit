@@ -114,7 +114,7 @@ fn spec_note_mcp_writes_byte_identical_jsonl_and_envelope() {
 
     // State parity: same on-disk bytes as the CLI surface produces, by
     // transitivity (both surfaces compared to the same library reference).
-    let stream_path = dir.path().join(".orbit/specs/0001.notes.jsonl");
+    let stream_path = dir.path().join(".orbit/specs/0001/notes.jsonl");
     let actual = std::fs::read_to_string(&stream_path).unwrap();
     assert_eq!(actual, common::expected_notes_jsonl_for_fixture_note());
 }

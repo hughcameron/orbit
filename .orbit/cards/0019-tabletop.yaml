@@ -75,7 +75,7 @@ relations:
 references:
 - '.orbit/choices/0017-tabletop-output-is-contract.md: load-bearing rule that prevents the v1 design failure mode'
 - '.orbit/cards/0026-executive-communication.yaml: governs closing-recommendation prose inside tabletop; see notes above for the overlap'
-- '.orbit/specs/2026-05-07-orbit-state-v0.1/tabletop.md: first multi-card tabletop run — methodology dogfood'
+- '.orbit/archive/specs/2026-05-07-orbit-state-v0.1/tabletop.md: first multi-card tabletop run — methodology dogfood'
 - '.orbit/cards/memos/2026-05-06-tabletop-the-killer-feature.md (consumed): distillation source — ten right questions and the contract-not-solution rule'
 notes:
 - |

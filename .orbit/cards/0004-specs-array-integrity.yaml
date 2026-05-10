@@ -37,7 +37,7 @@ scenarios:
   then: it falls back to grep with equivalent functionality
   gate: false
 specs:
-- .orbit/specs/2026-04-12-specs-array-integrity/spec.yaml
+- .orbit/archive/specs/2026-04-12-specs-array-integrity/spec.yaml
 relations: []
 references:
 - 'Prior incident: agent ping-ponged between diagnoses because card''s specs array was incomplete'

@@ -8,7 +8,7 @@ acceptance_criteria:
 - id: ac-01
   description: '`orbit-state/crates/core/src/layout.rs` is updated so `list_spec_files()` returns `<id>/spec.yaml` paths for each immediate subdirectory of `specs_dir()` containing a `spec.yaml`. Flat `<id>.yaml` files at the top level of `specs/` no longer count as canonical specs. The dotless-stem filter in `list_yaml_files` may stay as a defensive guard but is no longer load-bearing for spec discovery. A unit test creates a temp `.orbit/specs/<id>/spec.yaml` plus a stray `.orbit/specs/<id-other>.yaml` and confirms only the folder shape is returned.'
   gate: true
-  checked: false
+  checked: true
 - id: ac-02
   description: 'A new orbit verb `orbit spec migrate-layout` exists. For each `.orbit/specs/<id>.yaml` plus prefix-matched sidecars, it creates `.orbit/specs/<id>/` and moves files in with renames: `<id>.yaml` → `<id>/spec.yaml`, `<id>.drive.yaml` → `<id>/drive.yaml`, `<id>.rally.yaml` → `<id>/rally.yaml`, `<id>.notes.jsonl` → `<id>/notes.jsonl`, `<id>.tasks.jsonl` → `<id>/tasks.jsonl`, `<id>.review-spec-<date>.md` → `<id>/review-spec-<date>.md`, `<id>.review-pr-<date>.md` → `<id>/review-pr-<date>.md`, `<id>.interview.md` → `<id>/interview.md`. The verb is idempotent (re-running on already-migrated state is a no-op). Sidecars are matched by exact prefix `<id>.` to avoid the prefix-collision risk noted in choice 0021. A unit test runs the verb against a synthetic temp root with mixed flat + folder specs and verifies the post-state.'
   gate: true
@@ -16,23 +16,23 @@ acceptance_criteria:
 - id: ac-03
   description: 'Run the migration verb against this repo. Result: `.orbit/specs/` contains folders only (no flat `<id>.yaml` at top level except inside the bd-era historical folders). The 24 bd-era folders are pre-existing and unchanged. The post-2026-05-08 flat specs (count: 6 yamls + their sidecars) are folded into folders. `orbit verify` returns clean against the migrated state.'
   gate: true
-  checked: false
+  checked: true
 - id: ac-04
   description: 'SKILL.md edits across drive, rally, review-spec, review-pr: every cited spec path reverts from sidecar to folder form. Concretely, paths matching `<spec-id>.drive.yaml`, `<spec-id>.rally.yaml`, `<spec-id>.review-spec-<date>.md`, `<spec-id>.review-pr-<date>.md`, `<spec-id>.notes.jsonl`, `<spec-id>.tasks.jsonl` become `<spec-id>/drive.yaml`, `<spec-id>/rally.yaml`, etc. Verification: `grep -rnE ''\.orbit/specs/[^/]*\.(drive|rally|notes|tasks|review-(spec|pr))\.'' plugins/orb/skills/drive/SKILL.md plugins/orb/skills/rally/SKILL.md plugins/orb/skills/review-spec/SKILL.md plugins/orb/skills/review-pr/SKILL.md` returns zero hits. The cycle-suffix convention (no suffix for cycle 1, `-v2` and `-v3` for later cycles) is preserved.'
   gate: true
-  checked: false
+  checked: true
 - id: ac-05
   description: '`.orbit/conventions/spec-layout.md` is rewritten: folder shape (`<id>/spec.yaml + sidecars`) is named as canonical; flat sidecar layout is named as the prior experiment, with a one-line rationale (visual mess in `ls`, prefix-collision risk, non-atomic rename). The doc lists each per-spec sidecar by canonical filename inside the folder.'
   gate: true
-  checked: false
+  checked: true
 - id: ac-06
   description: '`.orbit/METHOD.md` vocabulary table is updated to folder paths. The Drive state row becomes `.orbit/specs/<date>-<slug>/drive.yaml`; the Rally state row becomes `.orbit/specs/<date>-<slug>/rally.yaml`; the Interview row becomes `.orbit/specs/<date>-<slug>/interview.md`; the Review row becomes `.orbit/specs/<date>-<slug>/review-{spec,pr}-<date>.md`. `plugins/orb/skills/setup/METHOD.md` mirrors the change byte-for-byte. Verification: `diff .orbit/METHOD.md plugins/orb/skills/setup/METHOD.md` exits zero.'
   gate: true
-  checked: false
+  checked: true
 - id: ac-07
   description: 'Post-migration smoke test: `orbit verify` returns clean; `orbit spec list` succeeds and surfaces every migrated spec; a synthetic `/orb:drive` against a pre-nominated card spawns drive.yaml at `.orbit/specs/<spec-id>/drive.yaml` (verified by listing the folder), and resumption via `/orb:drive` with no argument resolves correctly. The pre-nomination is the implementer''s first action and is recorded as a spec note before any SKILL.md edits land.'
   gate: false
-  checked: false
+  checked: true
 - id: ac-08
   description: Substrate-binary parity gate passes after the schema and verb changes. If the new verb shifts the public CLI surface, the workspace version bumps and a fresh release is cut so the brew bottle picks up the change. The existing parity test (per commit ca00bb1) covers this — its CI run passes against the new build.
   gate: false

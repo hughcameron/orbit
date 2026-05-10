@@ -8,7 +8,7 @@ maturity: established
 scenarios:
 - name: Spec is loaded before any code is written
   given: a spec exists for the current work
-  when: I run /orb:implement .orbit/specs/2026-04-01-topic/spec.yaml
+  when: I run /orb:implement .orbit/archive/specs/2026-04-01-topic/spec.yaml
   then: the agent reads the spec and presents the hard constraints and ACs as a checklist
   gate: false
 - name: Codebase gaps are flagged not worked around
@@ -62,8 +62,8 @@ scenarios:
   then: a Monitor feeds each failing line back to the agent as it appears, so failures surface mid-run rather than on completion
   gate: false
 specs:
-- .orbit/specs/2026-04-04-implement/spec.yaml
-- .orbit/specs/2026-04-20-implement-session-visibility/spec.yaml
+- .orbit/archive/specs/2026-04-04-implement/spec.yaml
+- .orbit/archive/specs/2026-04-20-implement-session-visibility/spec.yaml
 relations: []
 references:
 - 'Prior incident: agent treated codebase as ground truth, missed spec-prescribed entrypoint pattern'

@@ -2,6 +2,27 @@
 
 All notable changes to orbit are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.4.10] - 2026-05-11
+
+Spec layout reverts to per-spec folders per choice 0021. `.orbit/specs/<id>.yaml + <id>.<sidecar>` becomes `.orbit/specs/<id>/spec.yaml + <id>/<sidecar>` across the substrate, the canonical writer, and every SKILL.md path string. Closes spec `2026-05-10-spec-folders-migration` (cards 0008).
+
+The new `list_spec_files` walks immediate subdirectories of `.orbit/specs/` and returns every `<id>/spec.yaml`. As a side-effect it surfaced 19 bd-era specs that the previous flat scanner was silently skipping; those folders moved to `.orbit/archive/specs/` (no schema migration — the bd-era `constraints` / `values` fields are out of orbit-state v0.1's Spec schema). Card refs to those archived specs were rewritten to `.orbit/archive/specs/<id>/...`.
+
+**Forward-incompatible layout change** — the parity gate fires. The 0.4.10 binary expects folder-shape; the 0.4.9 binary reads zero specs against the new layout.
+
+### Added
+
+- `OrbitLayout::spec_dir(id)` and `ensure_spec_dir(id)` helpers — callers writing per-spec files (spec.yaml, tasks.jsonl, notes.jsonl, sidecars) ensure the folder exists before invoking `write_atomic` / `append_jsonl_line`.
+- `.orbit/archive/specs/` — quarantine destination for the 20 pre-orbit-state-v0.1 bd-era folders that don't parse against the current Spec schema.
+
+### Changed
+
+- `OrbitLayout::spec_file(id)` now returns `<root>/specs/<id>/spec.yaml`; `task_stream(id)` and `notes_stream(id)` now return `<id>/tasks.jsonl` and `<id>/notes.jsonl`. `list_spec_files` scans subdirectories.
+- `spec.close` writes `.orbit/specs/<id>/spec.yaml` into linked-card `specs` arrays (was `<id>.yaml`). Existing card refs were updated for the post-migration specs and the archived bd-era specs in the same release.
+- `.orbit/conventions/spec-layout.md` rewritten — folder shape canonical, flat sidecar layout named as the prior experiment with rationale (visual mess, prefix collision, non-atomic rename).
+- `.orbit/METHOD.md` (and the byte-mirror at `plugins/orb/skills/setup/METHOD.md`) — vocabulary table Spec / Interview / Review / Drive state / Rally state rows updated to folder paths.
+- SKILL.md sweep across `drive`, `rally`, `review-spec`, `review-pr`, `setup` — every cited sidecar path reverts from `<id>.<sidecar>` to `<id>/<sidecar>`.
+
 ## [0.4.9] - 2026-05-10
 
 `Card` gains an explicit `id:` field; `orbit card show` and `orbit choice show` accept bare `NNNN` shorthand. The substrate's id conventions are documented as three families (enumerated for cards/choices, dated for specs, keyed for memories). Choices `0021-spec-folders` (per-spec folders revert) and `0022-entity-id-conventions` (id heterogeneity) are accepted; their migration specs open against cards 0008 and 0030.

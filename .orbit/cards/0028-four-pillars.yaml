@@ -47,7 +47,7 @@ scenarios:
   then: CLAUDE.md and README.md name the pillars at top level, and the relations graph that pillar-defining cards form is intact — each pillar has at least one card that operationalises it (executive interaction → 0026; self-learning → 0023, 0022; state-persistence → 0009, 0020; long-running R&D → 0006), and each `feeds` edge's reason text names the pillar served, so the graph is self-describing; without these wires the card describes intent but the framework does not surface it
   gate: true
 specs:
-- .orbit/specs/2026-05-08-four-pillars-wires.yaml
+- .orbit/specs/2026-05-08-four-pillars-wires/spec.yaml
 relations:
 - card: 0026-executive-communication
   type: feeds

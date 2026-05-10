@@ -47,7 +47,7 @@ scenarios:
   then: the agent appends a note and continues — does not ask, does not improvise, halts only on conditions named in the spec's halt list
   gate: false
 specs:
-- .orbit/specs/2026-04-20-mission-resilience/spec.yaml
+- .orbit/archive/specs/2026-04-20-mission-resilience/spec.yaml
 relations:
 - card: 0019-tabletop
   type: depends-on

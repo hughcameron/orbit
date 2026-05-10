@@ -543,6 +543,7 @@ mod tests {
                 verification: None,
             }],
         };
+        layout.ensure_spec_dir("0001").unwrap();
         write_yaml(layout.spec_file("0001"), &spec);
 
         let card = Card {
@@ -698,6 +699,7 @@ mod tests {
             labels: vec![],
             acceptance_criteria: vec![],
         };
+        layout.ensure_spec_dir("0002").unwrap();
         write_yaml(layout.spec_file("0002"), &new_spec);
 
         let report = idx.verify(&layout).unwrap();
@@ -721,6 +723,7 @@ mod tests {
         assert_eq!(initial.specs, 1);
 
         // Drop a malformed spec into the directory.
+        layout.ensure_spec_dir("malformed").unwrap();
         std::fs::write(
             layout.spec_file("malformed"),
             "id: '0003'\nstatus: open\nunknown_field: oops\n",

@@ -57,7 +57,7 @@ scenarios:
   then: the named retirement is enforced — the academic apparatus or implementation-driving framings the user flagged are *structurally absent* from the resulting cards, not merely "noted as cut"
   gate: false
 specs:
-- .orbit/specs/2026-04-04-distill/spec.yaml
+- .orbit/archive/specs/2026-04-04-distill/spec.yaml
 relations: []
 references:
 - '/orb:card: interactive interview produces one card'

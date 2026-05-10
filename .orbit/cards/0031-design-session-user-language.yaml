@@ -52,7 +52,7 @@ scenarios:
   then: /orb:design SKILL.md encodes the pre-flight design-space gate, the implementation-question filter is named as a question-generation test the skill applies, the interview.md template includes a top-of-file user-voice paragraph slot, and /orb:spec accepts short design notes alongside full interviews — without these wires the card is aspirational
   gate: true
 specs:
-- .orbit/specs/2026-05-09-design-session-user-language.yaml
+- .orbit/specs/2026-05-09-design-session-user-language/spec.yaml
 relations:
 - card: 0026-executive-communication
   type: feeds

@@ -293,11 +293,11 @@ mystery_field: ohno
     #[test]
     fn verify_excludes_task_jsonl_from_round_trip() {
         // ac-16 exclusion: task event JSONL is append-only and not iterated.
-        // We plant a task stream that would NOT round-trip as YAML and
-        // confirm verify ignores it.
+        // Under choice 0021 the stream lives inside the per-spec folder.
         let (_dir, layout) = fresh_layout();
+        layout.ensure_spec_dir("2026-05-07-x").unwrap();
         std::fs::write(
-            layout.specs_dir().join("2026-05-07-x.tasks.jsonl"),
+            layout.task_stream("2026-05-07-x"),
             r#"{"task_id":"t","spec_id":"2026-05-07-x","event":"open","timestamp":"x"}
 "#,
         )
@@ -310,36 +310,49 @@ mystery_field: ohno
     }
 
     #[test]
-    fn verify_excludes_sidecar_yaml_shapes() {
-        // 2026-05-09-drive-rally-sidecar-layout ac-00: sidecar yaml shapes
-        // (`<id>.drive.yaml`, `<id>.rally.yaml`, and any future
-        // `<id>.<sidecar>.yaml`) are filtered by `list_yaml_files`'s
-        // dotless-stem rule and never reach the Spec round-trip check. A
-        // file that would NOT parse as a Spec must still leave verify
-        // clean.
+    fn verify_excludes_sidecar_shapes_inside_spec_folder() {
+        // Sidecars (drive/rally/review markdown) live alongside spec.yaml
+        // inside the per-spec folder under choice 0021. `list_spec_files`
+        // returns only `<id>/spec.yaml`, so sidecars never reach the Spec
+        // round-trip check.
         let (_dir, layout) = fresh_layout();
-        // Drive sidecar with a non-Spec shape (has spec_id, stage — no id, no goal).
+        let id = "2026-05-09-foo";
+        layout.ensure_spec_dir(id).unwrap();
+        // Plant a real spec.yaml so the folder isn't silently skipped.
+        let spec = Spec {
+            id: id.into(),
+            goal: "g".into(),
+            cards: vec![],
+            status: crate::schema::SpecStatus::Open,
+            labels: vec![],
+            acceptance_criteria: vec![],
+        };
+        write_atomic(
+            layout.spec_file(id),
+            serialise_yaml(&spec).unwrap().as_bytes(),
+        )
+        .unwrap();
+        // Drive sidecar with a non-Spec shape — would fail Spec round-trip
+        // if iterated. Must be ignored.
         std::fs::write(
-            layout.specs_dir().join("2026-05-09-foo.drive.yaml"),
+            layout.spec_dir(id).join("drive.yaml"),
             "spec_id: '2026-05-09-foo'\nstage: review-spec\niteration: 1\n",
         )
         .unwrap();
-        // Rally sidecar with arbitrary content.
         std::fs::write(
-            layout.specs_dir().join("2026-05-09-bar.rally.yaml"),
-            "rally_id: '2026-05-09-bar'\nchildren: []\n",
+            layout.spec_dir(id).join("rally.yaml"),
+            "rally_id: '2026-05-09-foo'\nchildren: []\n",
         )
         .unwrap();
-        // Review markdown — different extension, also harmless.
         std::fs::write(
-            layout.specs_dir().join("2026-05-09-foo.review-spec-2026-05-09.md"),
+            layout.spec_dir(id).join("review-spec-2026-05-09.md"),
             "# Review\n",
         )
         .unwrap();
         let outcome = verify_all(&layout).unwrap();
         assert!(
             !outcome.has_failures(),
-            "sidecar yaml shapes must not be iterated as Specs; got {outcome:?}"
+            "sidecars inside per-spec folder must not be iterated as Specs; got {outcome:?}"
         );
     }
 

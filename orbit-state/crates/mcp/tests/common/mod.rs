@@ -8,24 +8,20 @@
 use orbit_state_core::{envelope_ok_string, SpecListResult, SpecSummary, VerbResponse};
 use std::path::Path;
 
-/// Populate `<root>/.orbit/specs/` with two specs:
-/// - `0001.yaml` — open, "first spec"
-/// - `0002.yaml` — closed, "second spec"
+/// Populate `<root>/.orbit/specs/` with two specs (folder layout per
+/// choice 0021):
+/// - `0001/spec.yaml` — open, "first spec"
+/// - `0002/spec.yaml` — closed, "second spec"
 pub fn populate_two_specs(root: &Path) {
-    let orbit_dir = root.join(".orbit");
-    let specs_dir = orbit_dir.join("specs");
-    std::fs::create_dir_all(&specs_dir).unwrap();
-
-    std::fs::write(
-        specs_dir.join("0001.yaml"),
-        "id: '0001'\ngoal: first spec\nstatus: open\n",
-    )
-    .unwrap();
-    std::fs::write(
-        specs_dir.join("0002.yaml"),
-        "id: '0002'\ngoal: second spec\nstatus: closed\n",
-    )
-    .unwrap();
+    let specs_dir = root.join(".orbit/specs");
+    for (id, body) in [
+        ("0001", "id: '0001'\ngoal: first spec\nstatus: open\n"),
+        ("0002", "id: '0002'\ngoal: second spec\nstatus: closed\n"),
+    ] {
+        let folder = specs_dir.join(id);
+        std::fs::create_dir_all(&folder).unwrap();
+        std::fs::write(folder.join("spec.yaml"), body).unwrap();
+    }
 }
 
 /// The canonical envelope expected from `spec.list` against the two-spec
@@ -79,7 +75,7 @@ pub fn expected_envelope_for_spec_show_0001() -> String {
 /// Expected error envelope for `spec.show 0099` (not present).
 pub fn expected_envelope_for_spec_show_missing(root: &Path) -> String {
     use orbit_state_core::{envelope_err_string, Error};
-    let path = root.join(".orbit/specs/0099.yaml");
+    let path = root.join(".orbit/specs/0099/spec.yaml");
     let err = Error::not_found("spec.show", format!("no spec at {}", path.display()));
     envelope_err_string(&err)
 }

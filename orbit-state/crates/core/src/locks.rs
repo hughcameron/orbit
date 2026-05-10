@@ -286,6 +286,7 @@ mod tests {
         // verify this property by holding a lock and reading the underlying
         // canonical file directly — the read must succeed with no lock work.
         let (dir, layout) = fresh_layout();
+        layout.ensure_spec_dir("0001").unwrap();
         let target = layout.spec_file("0001");
         std::fs::write(&target, "id: '0001'\nstatus: open\n").unwrap();
 

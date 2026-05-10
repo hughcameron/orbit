@@ -42,7 +42,7 @@ scenarios:
   then: a migration spec opens to move artefacts into .orbit/ — orbit dogfoods its own setup migration, just as it dogfoods every other capability
   gate: false
 specs:
-- .orbit/specs/2026-04-20-orbit-artefact-folder/spec.yaml
+- .orbit/archive/specs/2026-04-20-orbit-artefact-folder/spec.yaml
 relations:
 - card: 0020-orbit-state
   type: depends-on

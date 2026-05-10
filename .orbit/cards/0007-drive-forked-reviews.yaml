@@ -57,11 +57,11 @@ scenarios:
   then: the sub-agent launches its own forked reviewer, producing recursive context separation without rally-specific plumbing
   gate: false
 specs:
-- .orbit/specs/2026-04-20-drive-forked-reviews/spec.yaml
+- .orbit/archive/specs/2026-04-20-drive-forked-reviews/spec.yaml
 relations: []
 references:
-- '.orbit/specs/2026-04-19-rally-subagent-model/review-spec-2026-04-19.md: F-01 identified drive''s inline reviews as the structural cause of rally''s parallel-sub-agent contradiction'
-- '.orbit/specs/2026-04-19-rally/review-pr-2026-04-19.md: the v2.0 rally spec''s F-05 finding, traced back to drive''s inline-review pattern'
+- '.orbit/archive/specs/2026-04-19-rally-subagent-model/review-spec-2026-04-19.md: F-01 identified drive''s inline reviews as the structural cause of rally''s parallel-sub-agent contradiction'
+- '.orbit/archive/specs/2026-04-19-rally/review-pr-2026-04-19.md: the v2.0 rally spec''s F-05 finding, traced back to drive''s inline-review pattern'
 - 'plugins/orb/skills/review-spec/SKILL.md: frontmatter declares context:fork — drive currently violates this'
 - 'plugins/orb/skills/review-pr/SKILL.md: frontmatter declares context:fork, agent:general-purpose — drive currently violates this'
 - 'plugins/orb/skills/drive/SKILL.md §5, §7, Critical Rules: current inline-review instructions that require amendment'

@@ -52,7 +52,7 @@ scenarios:
   then: review-gate quality regression is removed and the 0.4.0 release can be cut without exporting a degraded review depth to production projects
   gate: false
 specs:
-- .orbit/specs/2026-05-01-bead-native-cold-fork-reviews/spec.yaml
+- .orbit/archive/specs/2026-05-01-bead-native-cold-fork-reviews/spec.yaml
 relations:
 - card: 0007-drive-forked-reviews
   type: depends-on

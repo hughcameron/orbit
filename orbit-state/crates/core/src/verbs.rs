@@ -765,6 +765,9 @@ fn spec_create(layout: &OrbitLayout, args: &SpecCreateArgs) -> Result<SpecCreate
     layout
         .ensure_dirs()
         .map_err(|e| Error::unavailable(VERB, format!("ensure dirs: {e}")))?;
+    layout
+        .ensure_spec_dir(&args.id)
+        .map_err(|e| Error::unavailable(VERB, format!("ensure spec dir: {e}")))?;
 
     let spec = Spec {
         id: args.id.clone(),
@@ -926,8 +929,9 @@ fn spec_close(layout: &OrbitLayout, args: &SpecCloseArgs) -> Result<SpecCloseRes
 
     // Reference inserted into each linked card's `specs` array. We use the
     // spec id with the `.orbit/specs/` prefix so the reference stays
-    // stable regardless of where the workspace is rooted.
-    let spec_ref = format!(".orbit/specs/{}.yaml", spec.id);
+    // stable regardless of where the workspace is rooted. Folder-shape
+    // layout (choice 0021): `.orbit/specs/<id>/spec.yaml`.
+    let spec_ref = format!(".orbit/specs/{}/spec.yaml", spec.id);
 
     // Phase 1: read every linked card and compute the proposed update.
     // We deliberately collect everything into memory before writing
@@ -1435,13 +1439,20 @@ fn collect_task_states(
             vec![id.to_string()]
         }
         None => {
-            // List all spec files; derive ids from their filenames.
+            // List all spec files; derive ids from their parent folder names
+            // — list_spec_files returns `<id>/spec.yaml` paths under choice
+            // 0021's folder layout.
             let files = layout
                 .list_spec_files()
                 .map_err(|e| Error::unavailable(verb, format!("list specs: {e}")))?;
             files
                 .iter()
-                .filter_map(|p| p.file_stem().and_then(|s| s.to_str()).map(String::from))
+                .filter_map(|p| {
+                    p.parent()
+                        .and_then(|d| d.file_name())
+                        .and_then(|s| s.to_str())
+                        .map(String::from)
+                })
                 .collect()
         }
     };
@@ -1973,6 +1984,7 @@ mod tests {
             labels: vec![],
             acceptance_criteria: vec![],
         };
+        layout.ensure_spec_dir(id).unwrap();
         std::fs::write(layout.spec_file(id), serialise_yaml(&spec).unwrap()).unwrap();
     }
 
@@ -2041,6 +2053,7 @@ mod tests {
         let dir = tempdir().unwrap();
         let layout = OrbitLayout::at(dir.path());
         layout.ensure_dirs().unwrap();
+        layout.ensure_spec_dir("bad").unwrap();
         std::fs::write(layout.spec_file("bad"), "id: '0001'\nunknown_field: oops\n").unwrap();
 
         let err = execute(&layout, &VerbRequest::SpecList(SpecListArgs::default())).unwrap_err();
@@ -2442,6 +2455,7 @@ mod tests {
                 verification: None,
             }],
         };
+        layout.ensure_spec_dir("0001").unwrap();
         std::fs::write(
             layout.spec_file("0001"),
             crate::canonical::serialise_yaml(&original).unwrap(),
@@ -2516,6 +2530,7 @@ mod tests {
             labels: vec![],
             acceptance_criteria: vec![],
         };
+        layout.ensure_spec_dir("0001").unwrap();
         std::fs::write(
             layout.spec_file("0001"),
             crate::canonical::serialise_yaml(&spec).unwrap(),
@@ -2534,7 +2549,7 @@ mod tests {
         assert_eq!(r.cards_updated.len(), 2);
 
         // Both cards now have the spec ref.
-        let expected_ref = ".orbit/specs/0001.yaml";
+        let expected_ref = ".orbit/specs/0001/spec.yaml";
         for slug in ["0020-orbit-state", "0021-tasks"] {
             let card = read_card(&layout, slug);
             assert!(
@@ -2567,7 +2582,7 @@ mod tests {
             goal: "g".into(),
             maturity: CardMaturity::Planned,
             scenarios: vec![],
-            specs: vec![".orbit/specs/0001.yaml".into()],
+            specs: vec![".orbit/specs/0001/spec.yaml".into()],
             relations: vec![],
             references: vec![],
             notes: vec![],
@@ -2586,6 +2601,7 @@ mod tests {
             labels: vec![],
             acceptance_criteria: vec![],
         };
+        layout.ensure_spec_dir("0001").unwrap();
         std::fs::write(
             layout.spec_file("0001"),
             crate::canonical::serialise_yaml(&spec).unwrap(),
@@ -2604,7 +2620,7 @@ mod tests {
         assert!(r.cards_updated.is_empty());
         // Card still has exactly one ref (no duplicate).
         let post = read_card(&layout, "0020-x");
-        assert_eq!(post.specs, vec![".orbit/specs/0001.yaml".to_string()]);
+        assert_eq!(post.specs, vec![".orbit/specs/0001/spec.yaml".to_string()]);
     }
 
     #[test]
@@ -2640,6 +2656,7 @@ mod tests {
             labels: vec![],
             acceptance_criteria: vec![],
         };
+        layout.ensure_spec_dir("0001").unwrap();
         std::fs::write(
             layout.spec_file("0001"),
             crate::canonical::serialise_yaml(&spec).unwrap(),
@@ -2998,6 +3015,7 @@ mod tests {
             labels: vec![],
             acceptance_criteria: vec![],
         };
+        layout.ensure_spec_dir("0001").unwrap();
         std::fs::write(
             layout.spec_file("0001"),
             crate::canonical::serialise_yaml(&spec).unwrap(),
@@ -3078,7 +3096,7 @@ mod tests {
 
         // 6. Linked card's specs array now contains the ref
         let card = read_card(&layout, "0020-test");
-        assert_eq!(card.specs, vec![".orbit/specs/0001.yaml".to_string()]);
+        assert_eq!(card.specs, vec![".orbit/specs/0001/spec.yaml".to_string()]);
     }
 
     #[test]

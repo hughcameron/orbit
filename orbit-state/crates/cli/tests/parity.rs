@@ -186,7 +186,7 @@ fn spec_note_cli_writes_byte_identical_jsonl_and_envelope() {
     // serialiser would produce. This is the "byte-identical state" half of
     // ac-05's parity contract — both surfaces, given the same input, produce
     // the same on-disk bytes.
-    let stream_path = dir.path().join(".orbit/specs/0001.notes.jsonl");
+    let stream_path = dir.path().join(".orbit/specs/0001/notes.jsonl");
     let actual = std::fs::read_to_string(&stream_path).unwrap();
     assert_eq!(actual, common::expected_notes_jsonl_for_fixture_note());
 }
@@ -212,7 +212,7 @@ fn spec_note_cli_appends_in_order_for_two_calls() {
         assert!(status.success());
     }
 
-    let stream = std::fs::read_to_string(dir.path().join(".orbit/specs/0001.notes.jsonl")).unwrap();
+    let stream = std::fs::read_to_string(dir.path().join(".orbit/specs/0001/notes.jsonl")).unwrap();
     let lines: Vec<_> = stream.lines().collect();
     assert_eq!(lines.len(), 2);
     assert!(lines[0].contains(r#""body":"first""#));
@@ -282,19 +282,19 @@ fn cli_full_spec_lifecycle() {
 
     // 5. Verify final state
     //    spec is closed with revised goal
-    let spec_text = std::fs::read_to_string(dir.path().join(".orbit/specs/0001.yaml")).unwrap();
+    let spec_text = std::fs::read_to_string(dir.path().join(".orbit/specs/0001/spec.yaml")).unwrap();
     assert!(spec_text.contains("status: closed"), "spec not closed: {spec_text}");
     assert!(spec_text.contains("the revised goal"), "goal not updated: {spec_text}");
 
     //    note stream has one entry
-    let notes = std::fs::read_to_string(dir.path().join(".orbit/specs/0001.notes.jsonl")).unwrap();
+    let notes = std::fs::read_to_string(dir.path().join(".orbit/specs/0001/notes.jsonl")).unwrap();
     assert_eq!(notes.lines().count(), 1);
     assert!(notes.contains(r#""body":"kicked off""#));
 
     //    linked card's specs array now contains the spec ref
     let card_text = std::fs::read_to_string(cards_dir.join("0020-orbit-state.yaml")).unwrap();
     assert!(
-        card_text.contains(".orbit/specs/0001.yaml"),
+        card_text.contains(".orbit/specs/0001/spec.yaml"),
         "card not updated: {card_text}"
     );
 }
@@ -306,10 +306,10 @@ fn cli_full_spec_lifecycle() {
 #[test]
 fn cli_spec_update_ac_check_flips_named_ac() {
     let dir = tempfile::tempdir().unwrap();
-    let specs = dir.path().join(".orbit/specs");
-    std::fs::create_dir_all(&specs).unwrap();
+    let spec_dir = dir.path().join(".orbit/specs/test");
+    std::fs::create_dir_all(&spec_dir).unwrap();
     std::fs::write(
-        specs.join("test.yaml"),
+        spec_dir.join("spec.yaml"),
         "id: test\n\
          goal: smoke\n\
          cards: []\n\
@@ -336,7 +336,7 @@ fn cli_spec_update_ac_check_flips_named_ac() {
         String::from_utf8_lossy(&out.stderr)
     );
 
-    let yaml = std::fs::read_to_string(specs.join("test.yaml")).unwrap();
+    let yaml = std::fs::read_to_string(spec_dir.join("spec.yaml")).unwrap();
     assert!(yaml.contains("- id: ac-01\n  description: First\n  gate: true\n  checked: true\n"));
     assert!(yaml.contains("- id: ac-02\n  description: Second\n  gate: false\n  checked: false\n"));
 
@@ -359,17 +359,17 @@ fn cli_spec_update_ac_check_flips_named_ac() {
         .unwrap();
     assert!(out.status.success());
 
-    let yaml = std::fs::read_to_string(specs.join("test.yaml")).unwrap();
+    let yaml = std::fs::read_to_string(spec_dir.join("spec.yaml")).unwrap();
     assert!(yaml.contains("- id: ac-01\n  description: First\n  gate: true\n  checked: false\n"));
 }
 
 #[test]
 fn cli_spec_update_ac_check_missing_ac_emits_not_found() {
     let dir = tempfile::tempdir().unwrap();
-    let specs = dir.path().join(".orbit/specs");
-    std::fs::create_dir_all(&specs).unwrap();
+    let spec_dir = dir.path().join(".orbit/specs/test");
+    std::fs::create_dir_all(&spec_dir).unwrap();
     std::fs::write(
-        specs.join("test.yaml"),
+        spec_dir.join("spec.yaml"),
         "id: test\n\
          goal: smoke\n\
          cards: []\n\
@@ -396,10 +396,10 @@ fn cli_spec_update_ac_check_missing_ac_emits_not_found() {
 #[test]
 fn cli_spec_update_both_ac_flags_is_malformed() {
     let dir = tempfile::tempdir().unwrap();
-    let specs = dir.path().join(".orbit/specs");
-    std::fs::create_dir_all(&specs).unwrap();
+    let spec_dir = dir.path().join(".orbit/specs/test");
+    std::fs::create_dir_all(&spec_dir).unwrap();
     std::fs::write(
-        specs.join("test.yaml"),
+        spec_dir.join("spec.yaml"),
         "id: test\n\
          goal: smoke\n\
          cards: []\n\

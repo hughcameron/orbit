@@ -52,7 +52,7 @@ scenarios:
   then: setup does not auto-run a drive — validation is a separate operator concern (manual /orb:drive on an existing card, or a future /orb:smoke-test skill if it earns its keep)
   gate: false
 specs:
-- .orbit/specs/2026-05-09-orbit-method-md.yaml
+- .orbit/specs/2026-05-09-orbit-method-md/spec.yaml
 relations:
 - card: 0008-consolidated-orbit-artefact-folder
   type: feeds
