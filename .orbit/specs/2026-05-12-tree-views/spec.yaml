@@ -16,22 +16,26 @@ acceptance_criteria:
   gate: false
   checked: false
 - id: ac-03
-  description: '`orbit overview` produces a single-screen synthesis bounded by the same shape as `session prime`: open spec count + ids, cards-by-maturity counts (planned / emerging / established), recent memories (last K=10), most-connected card (highest relation degree), and orphans (cards with no specs AND no incoming relations).'
+  description: '`orbit overview` produces a single-screen synthesis bounded by the same shape as `session prime`: open spec count + ids, cards-by-maturity counts (planned / emerging / established), recent memories (last K=10), most-connected card (degree = outgoing `relations:` count + incoming `relations:` references from other cards; `specs:` array entries do NOT count toward connectivity; ties resolved by lowest numeric card id), and orphans (cards with `specs: []` AND zero incoming `relations:` from any other card).'
   gate: true
   checked: false
 - id: ac-04
-  description: '`orbit graph` emits a mermaid (default) or graphviz rendering of the cards-choices-specs graph to stdout — pasteable into markdown or a renderer. No file-write side-effect; `--filter` flags scope the output (e.g. `--card 0028 --depth 2`).'
+  description: '`orbit graph` emits a mermaid (default) or graphviz rendering of the cards-choices-specs graph to stdout — pasteable into markdown or a renderer. No file-write side-effect. Supported flags: `--card <id>` (scope to one card and its neighbourhood), `--depth <N>` (default 2), `--format <mermaid|graphviz>` (default mermaid). Other filters are out of scope for this spec.'
   gate: false
   checked: false
 - id: ac-05
-  description: '`orbit audit drift` flags fields used in any card / spec / choice that are absent from the canonical schema (per card 0030''s drift-detection scenario), with file path, offending field, and a proposed disposition (map / drop / quarantine — matching card 0032''s vocabulary). Read-only; no rewrites.'
+  description: '`orbit audit drift` performs a permissive YAML scan over `.orbit/cards/`, `.orbit/specs/`, `.orbit/choices/`, and `.orbit/memories/`, comparing each top-level field against the canonical schema sourced from the Rust structs (`Card`, `Spec`, `Choice`, `Memory` in `orbit-state/crates/core/src/schema.rs`). For each unknown field, reports file path, field name, and a proposed disposition (map / drop / quarantine — matching card 0032''s vocabulary). Differs from `orbit verify`: permissive (does not bail at first parse failure) and surfaces pre-canonical content like brownfield legacy files; read-only, no rewrites.'
   gate: false
   checked: false
 - id: ac-06
-  description: All new verbs are read-only and walk files — they do NOT consult `state.db`. SQLite remains a verify-only correctness fixture until a query verb explicitly justifies promoting it. The parity test (`orbit-state/crates/cli/tests/parity.rs`) extends to cover each new verb's `--json` envelope against MCP.
+  description: 'All new verbs are read-only and walk files — they do NOT consult `state.db`. Each verb ships on both CLI and MCP surfaces calling the same Rust core, with the canonical `<verb>: <category>: <sentence>` error format. Parity tests in `orbit-state/crates/cli/tests/parity.rs` and `orbit-state/crates/mcp/tests/parity.rs` cover each new verb''s `--json` envelope. SQLite remains a verify-only correctness fixture until a query verb explicitly justifies promoting it.'
   gate: true
   checked: false
 - id: ac-07
-  description: Surfacing wired into the agent path — `session prime` references `orbit overview` so a fresh session can reach the synthesis layer in one step; relevant SKILL.md files (at minimum `setup`, `drive`, `rally`) name the new verbs where browsing the tree is the natural next move. Without this wire the verbs exist but nobody reaches for them.
+  description: Surfacing wired into the agent path — `session prime` output references `orbit overview` so a fresh session reaches the synthesis layer in one step (this is the load-bearing wire). At least one author-facing SKILL.md additionally names the navigation verbs where browsing the tree is the genuine next move; candidates are `/orb:card` (after `card show`, suggest `card tree`) and `/orb:distill` (before authoring a new card, suggest checking the existing tree for adjacent capabilities). Without these wires the verbs exist but nobody reaches for them.
+  gate: true
+  checked: false
+- id: ac-08
+  description: 'Structured error envelopes — each new verb emits the canonical `<verb>: <category>: <sentence>` error envelope (matching `orbit card show <unknown-id>` today) for at least three error paths: (a) unknown id lookup, (b) broken referenced file (e.g. a card''s `specs:` entry points to a missing file), (c) malformed YAML encountered during a walk. One parity-tested case per path per verb where applicable.'
   gate: true
   checked: false

@@ -44,7 +44,7 @@ scenarios:
 - name: Wired into the framework
   given: this card declares see-the-tree as a first-class capability
   when: enforcement is examined
-  then: the verbs exist on orbit-state (`card tree`, `card specs`, `overview`, `graph`, `audit drift`), `session prime` references `overview` in its output, and at least one SKILL.md (`setup`, `drive`, `rally`) names the navigation verbs where browsing the tree is the natural next move — without these wires the verbs ship but nobody reaches for them
+  then: the verbs exist on orbit-state (`card tree`, `card specs`, `overview`, `graph`, `audit drift`) on both CLI and MCP surfaces, `session prime` output references `overview` (load-bearing wire), and at least one author-facing SKILL.md (candidates `/orb:card`, `/orb:distill`) names the navigation verbs where browsing the tree is the genuine next move — without these wires the verbs ship but nobody reaches for them
   gate: true
 specs:
 - .orbit/specs/2026-05-12-tree-views/spec.yaml
