@@ -17,6 +17,7 @@ pub mod layout;
 pub mod locks;
 pub mod migrate;
 pub mod migrations;
+pub mod reconcile;
 pub mod schema;
 pub mod sqlite_link;
 pub mod verbs;
@@ -24,6 +25,7 @@ pub mod verify;
 
 pub use canonicalise::{canonicalise_all, CanonicaliseReport};
 pub use migrate::{migrate_spec_layout, MigrateReport, PlannedMove};
+pub use reconcile::{reconcile_all, Disposition, DispositionRecord, EntityType, ReconcileReport};
 pub use error::{Category, Error, Result};
 pub use sqlite_link::{link_sanity_check, sqlite_version};
 pub use verify::{verify_all, RoundTripFailure, RoundTripFailureKind, VerifyOutcome};

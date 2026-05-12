@@ -97,6 +97,27 @@ orbit: migration complete.
 
 When no residue exists, the completion message is quiet about it.
 
+**3g. Reconcile legacy field shapes (after the layout migration).** With the substrate now under `.orbit/`, run `orbit audit drift` to detect spec/card/choice/memory files whose top-level or inner field shape pre-dates the canonical schema. If the drift report is empty, skip the rest of §3g.
+
+When drift is non-empty, offer the reconcile path:
+
+```
+orbit: audit drift surfaced N unknown field(s) across M file(s).
+Preview the reconcile pass (renames / drops / quarantines) before any rewrite? (y/N)
+```
+
+- **`y`:** run `orbit canonicalise --reconcile --dry-run`. The output lists every disposition. Then prompt:
+
+  ```
+  Apply these dispositions? (y/N)
+  ```
+
+  - **`y`:** run `orbit canonicalise --reconcile`. Each quarantined field lands in a sibling `<name>.legacy.yaml` sidecar so semantic content is preserved for a human to re-anchor.
+  - **anything else:** abort the reconcile step. The substrate still parses against the canonical schema only after the author either applies reconcile, hand-edits the legacy fields, or removes them. Surface this in the completion message.
+- **anything else:** skip reconcile. The author can invoke `orbit canonicalise --reconcile --dry-run` later when ready.
+
+Reconcile is **only** offered from this brownfield path. It is never invoked by the greenfield path (§2), `orbit verify`, pre-commit hooks, or any other routine surface.
+
 Then proceed to §6 (CLAUDE.md snippet) and §7 (first card tutorial).
 
 ### 4. Mixed State: Refuse With Clear Error

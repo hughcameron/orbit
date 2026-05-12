@@ -1,0 +1,50 @@
+id: '0023'
+title: Reconcile as a mode on `orbit canonicalise`, not a separate verb
+status: accepted
+date_created: 2026-05-12
+date_modified: 2026-05-12
+body: |
+  # 0023. Reconcile as a mode on `orbit canonicalise`, not a separate verb
+
+  ## Context and Problem Statement
+
+  Card 0032 calls for an on-ramp from legacy yaml field shapes (encountered when a brownfield project adopts orbit, or when the canonical schema evolves) to the canonical schema. Strict `deny_unknown_fields` on every schema struct (ac-01 of the orbit-state v0.1 spec) means a legacy field that the writer omitted from the canonical type can't be parsed at all — adoption blocks until every legacy file is hand-edited or has its content migrated.
+
+  The reconcile pipeline (parse permissively, apply registry rules, quarantine unknown content, reserialise canonically) is genuinely a different read posture from the routine canonicalise pass — the routine pass parses strictly and only rewrites byte-drift. The question this choice records: should reconcile be a separate verb (`orbit spec migrate-fields`, `orbit reconcile`, or similar), or a mode on the existing `orbit canonicalise` verb?
+
+  The 2026-05-12 design session (`.orbit/specs/2026-05-12-reconcile-mode/interview.md`) framed this directly: card 0032's original wording said "migrate-fields verb"; the design session reframed it as "reconciliation, not migration" — reconcile is what `canonicalise` already does (bring files into canonical shape), with a permissive read added when explicitly requested.
+
+  ## Considered Options
+
+  - **A. Separate verb `orbit spec migrate-fields`** — mirrors `orbit spec migrate-layout` (choice 0021 ac-02), which is the one-shot per-spec-folder migration. Pro: makes the "this is a brownfield one-shot, not routine work" framing visible at the verb level. Con: reinforces the "migration" framing the design session rejected; sits in a `spec` subcommand even though the verb walks cards / choices / memories too; creates a separate verb that has to be maintained, documented, and tested in parallel with `canonicalise`.
+
+  - **B. New verb `orbit reconcile` wrapping `canonicalise`** — top-level verb explicitly for the permissive pass. Pro: makes the read posture (permissive vs strict) a verb-level distinction; preserves `canonicalise` as the strict-pass-only verb. Con: two verbs do nearly identical I/O (walk + reserialise + write), differing only in the read posture; users learning the substrate now have two verbs to compare; the JSON envelope shape diverges across two near-identical paths.
+
+  - **C. Mode on `orbit canonicalise`: `--reconcile`** — single verb, single envelope, gated by an explicit flag. Pro: reconcile is conceptually "canonicalise with permissive read" — the mode framing fits; the JSON envelope extends `run_canonicalise`'s existing hand-rolled shape with a `dispositions` array (additive, not a parallel structure); routine `orbit canonicalise` continues to mean "strict pass" with zero change in default behaviour; no permissive escape hatch leaks into routine paths because the flag is the only switch. Con: a single verb now branches on a flag, which means readers must learn that `--reconcile` changes the read posture (not just adds a column).
+
+  - **D. No verb — manual hand-edit** — accept that brownfield adoption requires per-file editing; status quo. Pro: zero schema or implementation change. Con: blocks adoption in projects with non-trivial legacy content; the immediate trigger for card 0032 was a research project hitting exactly this and unblocking with `--no-verify`; the substrate has no canonical answer to "how do I reach the schema from here".
+
+  ## Decision Outcome
+
+  **Chosen: C — Mode on `orbit canonicalise` (`--reconcile`).**
+
+  The single-verb framing matches the design session's reframe (reconcile, not migrate): both `orbit canonicalise` and `orbit canonicalise --reconcile` bring files into canonical shape; the difference is the read posture. The JSON envelope extends the existing hand-rolled shape at `cli/src/main.rs:496-516` with one new `dispositions` array — additive, not parallel. Users learn one verb plus one flag instead of two near-identical verbs.
+
+  ac-01's strict-parse invariant is preserved: the permissive read lives in a new module (`reconcile.rs`) reachable only when `--reconcile` is passed; `deny_unknown_fields` stays on every schema struct in `schema.rs`; `orbit verify`, the routine `orbit canonicalise` path, and every other entry point continue to reject unknown fields strictly.
+
+  ## Consequences
+
+  - One verb, one envelope shape, one set of tests. The reconcile module reuses the canonical layer's writer (`crate::canonical::serialise_yaml`) and the atomic write primitive (`crate::atomic::write_atomic`); the new code is the permissive read, the registry, and the sidecar writer.
+  - Sidecar writes go through `write_atomic` and are ordered sidecar-first, then canonical file — a crash between writes leaves quarantined content recoverable.
+  - The registry (`FIELD_RULES` const in `reconcile.rs`) is in-tree. Per ac-05 it's keyed by `(EntityType, structural_path) → Disposition`. A project-local override is out of scope for v1; the registry grows as new legacy patterns surface across projects.
+  - v1 dispositions are `map` (rename only, value passes through), `drop` (remove), and `quarantine` (move to sibling sidecar). Value transforms (enum-value renaming, shape changes that move content between fields) are deferred — legacy fields needing value-level handling default to quarantine and a follow-up spec teaches the registry the richer rule shape once a second project demands it.
+  - `/orb:setup`'s brownfield path gains a §3g (after the layout migration completes) that invokes `orbit audit drift`, and when drift is non-empty offers the reconcile path: `orbit canonicalise --reconcile --dry-run` → confirm → `orbit canonicalise --reconcile`. Reconcile is never offered from the greenfield path, `orbit verify`, or any pre-commit hook.
+
+  ## References
+
+  - `.orbit/specs/2026-05-12-reconcile-mode/spec.yaml` — the spec this choice records the surface decision for; ACs 1–8 enumerate the implementation surface.
+  - `.orbit/specs/2026-05-12-reconcile-mode/interview.md` — design session that reframed migration → reconciliation and arrived at the mode-on-canonicalise framing.
+  - `.orbit/cards/0032-brownfield-spec-migration.yaml` — capability card the on-ramp serves.
+  - `.orbit/cards/0030-canonical-schema-and-glossary.yaml` — names this mode as the on-ramp from legacy field shapes to the canonical schema.
+  - `.orbit/choices/0021-spec-folders.yaml` — precedent for one-shot brownfield verbs; `migrate-layout` is the folder-shape sibling.
+references: []

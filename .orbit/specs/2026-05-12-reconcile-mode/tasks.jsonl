@@ -1,0 +1,3 @@
+{"task_id":"t-001b76d018aec8e2cac2c405","spec_id":"2026-05-12-reconcile-mode","event":"open","body":"implement reconcile.rs + framework wires across 8 ACs (gates ac-01, ac-03, ac-04, ac-08)","labels":[],"timestamp":"2026-05-12T09:56:19.247853126Z"}
+{"task_id":"t-001b76d018aec8e2cac2c405","spec_id":"2026-05-12-reconcile-mode","event":"claim","labels":[],"timestamp":"2026-05-12T09:56:22.33871598Z"}
+{"task_id":"t-001b76d018aec8e2cac2c405","spec_id":"2026-05-12-reconcile-mode","event":"done","body":"all 8 ACs verified — implementation lands reconcile.rs + inner FIELDS + CLI flag + framework wires","labels":[],"timestamp":"2026-05-12T10:03:30.165766432Z"}

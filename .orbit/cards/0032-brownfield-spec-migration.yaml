@@ -8,7 +8,7 @@ maturity: planned
 scenarios:
 - name: Verb reports planned changes before rewriting any file
   given: a project with legacy spec.yaml files containing unknown fields
-  when: I run `orbit spec migrate-fields --dry-run`
+  when: I run `orbit canonicalise --reconcile --dry-run`
   then: every unknown field is listed with file path and proposed disposition (map / drop / quarantine), no file is rewritten, and the exit code signals whether a non-dry-run would change anything
   gate: true
 - name: Unknown fields default to quarantine, not silent drop
@@ -22,31 +22,31 @@ scenarios:
   then: the field is dropped or remapped per the registry rule, the disposition is recorded in the run summary, and the resulting spec.yaml parses canonically
   gate: false
 - name: ac-01 strict parse is preserved
-  given: a project after a successful migrate-fields run
+  given: a project after a successful `orbit canonicalise --reconcile` run
   when: '`orbit verify` runs against the migrated tree'
   then: every spec.yaml parses against the canonical schema, no permissive-mode escape hatch persists in the substrate, and the strict-parse invariant from `orbit-state/crates/core/src/schema.rs` is intact
   gate: true
 - name: Migration is brownfield-only, not part of routine verify
   given: a project past the onboarding phase
   when: normal work proceeds
-  then: migrate-fields is not invoked by `orbit verify`, not part of pre-commit hooks, and not part of /orb:setup's greenfield path — it is a one-time brownfield verb invoked deliberately
+  then: '`orbit canonicalise --reconcile` is not invoked by `orbit verify`, not part of pre-commit hooks, and not part of /orb:setup''s greenfield path — it is a mode invoked deliberately by the author or agent'
   gate: false
 - name: Mapping registry is extensible without re-shipping orbit-state
   given: a project encountering a recurring legacy field the defaults don't cover
   when: a contributor adds a mapping rule to a project-local registry
-  then: future migrate-fields invocations apply the rule, and the registry's location and shape are discoverable from the verb's `--help` output
+  then: future `orbit canonicalise --reconcile` invocations apply the rule, and the registry's location and shape are discoverable from the verb's `--help` output
   gate: false
 - name: Wired into the framework
   given: this card declares brownfield spec migration as a first-class capability
   when: enforcement is examined
-  then: orbit-state ships a `spec migrate-fields` verb alongside `spec migrate-layout`, the /orb:setup skill's brownfield path invokes (or instructs the agent to invoke) this verb when legacy spec content is detected, and the canonical schema doc (card 0030) names this verb as the on-ramp from legacy field shapes — without these wires the card describes intent but the framework does not surface it
+  then: orbit-state ships `orbit canonicalise --reconcile` alongside the existing routine `orbit canonicalise` pass, the /orb:setup skill's brownfield path invokes (or instructs the agent to invoke) this mode when legacy spec content is detected, and the canonical schema doc (card 0030) names this mode as the on-ramp from legacy field shapes — without these wires the card describes intent but the framework does not surface it
   gate: true
 specs:
 - .orbit/specs/2026-05-12-reconcile-mode/spec.yaml
 relations:
 - card: 0020-orbit-state
   type: feeds
-  reason: serves pillar 3 (state-persistence) — brownfield projects can't reach the orbit-state substrate when strict parse blocks legacy content; the verb (`spec migrate-fields`) lives in orbit-state alongside the existing `spec migrate-layout` from choice 0021 ac-02
+  reason: serves pillar 3 (state-persistence) — brownfield projects can't reach the orbit-state substrate when strict parse blocks legacy content; the mode (`orbit canonicalise --reconcile`) lives in orbit-state alongside the routine canonicalise pass and the `spec migrate-layout` verb from choice 0021 ac-02
 - card: 0030-canonical-schema-and-glossary
   type: feeds
   reason: the canonical schema is the migration TARGET — this card provides the on-ramp from legacy field shapes to that target, strengthening 0030's promise that the schema is reachable from any starting point
@@ -56,6 +56,7 @@ relations:
 references:
 - 'orbit-state/crates/core/src/schema.rs:1-7: the ac-01 strict-parse invariant (`deny_unknown_fields` everywhere) that drives the need for explicit migration rather than schema relaxation'
 - 'orbit-state/crates/core/src/migrations.rs:24-38: schema-version migration runner — field-shape migration is a separate concern and does not flow through this registry'
-- '.orbit/choices/0021-spec-folders.yaml: precedent — `migrate-layout` is the folder-shape sibling to this card''s field-shape migration verb'
+- '.orbit/choices/0021-spec-folders.yaml: precedent — `migrate-layout` is the folder-shape sibling to this card''s field-shape reconcile mode'
+- '.orbit/choices/0023-reconcile-as-canonicalise-mode.yaml: surface decision — reconcile lives as a `--reconcile` mode on `orbit canonicalise` rather than as a separate verb'
 notes:
 - triggered by a downstream research project hitting strict-parse failure on five pre-orbit-state spec.yaml files with fields (version, date_opened, predecessor_evidence, constraints, exit_conditions) authored against an earlier schema; the immediate unblock was a single annotated --no-verify commit, and this card captures the durable fix

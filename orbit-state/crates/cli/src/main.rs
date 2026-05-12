@@ -22,7 +22,8 @@ use clap::{Parser, Subcommand};
 use orbit_state_core::layout::OrbitLayout;
 use orbit_state_core::Error as OrbitError;
 use orbit_state_core::{
-    canonicalise_all, envelope_err_string, envelope_ok_string, execute, CanonicaliseReport,
+    canonicalise_all, envelope_err_string, envelope_ok_string, execute, reconcile_all,
+    CanonicaliseReport, ReconcileReport,
     AuditDriftArgs, AuditDriftResult, CardListArgs, CardSearchArgs, CardShowArgs, CardShowResult,
     CardSpecsArgs, CardSpecsResult, CardTreeArgs, CardTreeEdge, CardTreeResult, ChoiceListArgs,
     ChoiceListResult, GraphArgs, GraphFormat, GraphResult, OverviewArgs, OverviewResult,
@@ -125,6 +126,13 @@ enum Command {
         /// Parse and reserialise without writing — preview what would change.
         #[arg(long)]
         dry_run: bool,
+        /// Permissive pass that brings legacy yaml content into the canonical
+        /// schema. Renames or drops legacy fields per a built-in registry,
+        /// and quarantines unknown content into a sibling `<name>.legacy.yaml`
+        /// sidecar. Invocable any time; never on routine paths. The strict
+        /// ac-01 parse stays in force everywhere else.
+        #[arg(long)]
+        reconcile: bool,
     },
 }
 
@@ -364,8 +372,8 @@ fn main() -> ExitCode {
     if matches!(cli.command, Command::Verify) {
         return run_verify(&layout, cli.json);
     }
-    if let Command::Canonicalise { dry_run } = cli.command {
-        return run_canonicalise(&layout, dry_run, cli.json);
+    if let Command::Canonicalise { dry_run, reconcile } = cli.command {
+        return run_canonicalise(&layout, dry_run, reconcile, cli.json);
     }
     if let Command::Spec {
         action: SpecAction::MigrateLayout { dry_run },
@@ -488,9 +496,21 @@ fn run_verify(layout: &OrbitLayout, json: bool) -> ExitCode {
 /// Walk every canonical YAML and rewrite drifted files through the canonical
 /// writer. Mirrors `run_verify`'s output shape: human mode prints a one-line
 /// summary plus per-failure paths; JSON mode emits a single envelope-shaped
-/// line for tooling. Exits non-zero only on parse failures — drift fixed in
-/// place is success.
-fn run_canonicalise(layout: &OrbitLayout, dry_run: bool, json: bool) -> ExitCode {
+/// line for tooling.
+///
+/// Without `--reconcile`: routine canonicalise pass. Exits non-zero only on
+/// parse failures — drift fixed in place is success.
+///
+/// With `--reconcile`: permissive pass that maps/drops/quarantines legacy
+/// fields per [`orbit_state_core::reconcile`]. The JSON envelope gains a
+/// `dispositions` array. In `--dry-run --reconcile` the exit code signals
+/// whether a non-dry-run would change anything (non-zero when dispositions
+/// is non-empty), so CI can gate on a clean tree. Non-dry-run `--reconcile`
+/// keeps the canonicalise contract: zero on a successful rewrite.
+fn run_canonicalise(layout: &OrbitLayout, dry_run: bool, reconcile: bool, json: bool) -> ExitCode {
+    if reconcile {
+        return run_reconcile(layout, dry_run, json);
+    }
     let report: CanonicaliseReport = canonicalise_all(layout, dry_run);
 
     if json {
@@ -532,6 +552,74 @@ fn run_canonicalise(layout: &OrbitLayout, dry_run: bool, json: bool) -> ExitCode
     } else {
         ExitCode::SUCCESS
     }
+}
+
+/// `orbit canonicalise --reconcile` — permissive pass over the substrate.
+///
+/// Output shape preserves `run_canonicalise`'s envelope and adds a
+/// `dispositions` array per ac-03. Exit code:
+///   - parse failures present → non-zero
+///   - `--dry-run` AND dispositions non-empty → non-zero (CI gate)
+///   - successful non-dry-run rewrite → zero (matches existing canonicalise
+///     contract; surfaces the rewrote count in stdout)
+fn run_reconcile(layout: &OrbitLayout, dry_run: bool, json: bool) -> ExitCode {
+    let report: ReconcileReport = reconcile_all(layout, dry_run);
+
+    if json {
+        let mut out = String::from("{\"ok\":");
+        out.push_str(if report.has_failures() { "false" } else { "true" });
+        out.push_str(",\"dry_run\":");
+        out.push_str(if dry_run { "true" } else { "false" });
+        out.push_str(&format!(
+            ",\"rewrote\":{},\"unchanged\":{},\"parse_failed\":[",
+            report.rewrote, report.unchanged
+        ));
+        for (i, (path, msg)) in report.parse_failed.iter().enumerate() {
+            if i > 0 {
+                out.push(',');
+            }
+            out.push_str(&format!(
+                "{{\"path\":{:?},\"error\":{:?}}}",
+                path.display().to_string(),
+                msg
+            ));
+        }
+        out.push_str("],\"dispositions\":[");
+        for (i, d) in report.dispositions.iter().enumerate() {
+            if i > 0 {
+                out.push(',');
+            }
+            out.push_str(&format!(
+                "{{\"path\":{:?},\"kind\":{:?},\"field\":{:?},\"action\":{:?}}}",
+                d.path, d.kind, d.field, d.action
+            ));
+        }
+        out.push_str("]}");
+        println!("{out}");
+    } else {
+        let verb = if dry_run { "would rewrite" } else { "rewrote" };
+        println!(
+            "orbit canonicalise --reconcile: {verb} {} file(s), {} unchanged, {} parse-failed, {} disposition(s)",
+            report.rewrote,
+            report.unchanged,
+            report.parse_failed.len(),
+            report.dispositions.len(),
+        );
+        for d in &report.dispositions {
+            println!("  {} {} {} — {}", d.action, d.kind, d.field, d.path);
+        }
+        for (path, msg) in &report.parse_failed {
+            eprintln!("  parse failed: {} — {msg}", path.display());
+        }
+    }
+
+    if report.has_failures() {
+        return ExitCode::FAILURE;
+    }
+    if dry_run && report.has_dispositions() {
+        return ExitCode::FAILURE;
+    }
+    ExitCode::SUCCESS
 }
 
 /// One-shot per-spec-folder migration per choice 0021. Like canonicalise,

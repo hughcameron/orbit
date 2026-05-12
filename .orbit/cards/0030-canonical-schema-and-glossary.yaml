@@ -36,6 +36,11 @@ scenarios:
   when: an audit pass runs
   then: fields used in cards but absent from the schema are flagged as drift — the doc is mechanically tied to reality, not a write-once aspiration
   gate: false
+- name: Legacy field shapes have an on-ramp to the canonical schema
+  given: a card / spec / choice / memory authored against an earlier field shape that the strict canonical parser rejects
+  when: the author or agent wants to reach the canonical schema without hand-editing each file
+  then: '`orbit canonicalise --reconcile` renames or drops legacy fields per a built-in registry, quarantines unknown content into a sibling `<name>.legacy.yaml` sidecar, and leaves the strict ac-01 parse in force on every routine path — the schema is reachable from any starting point'
+  gate: false
 - name: Glossary stays scoped — bar for inclusion
   given: a candidate term proposed for the glossary
   when: it is reviewed
@@ -50,6 +55,7 @@ specs:
 - .orbit/specs/2026-05-09-card-vs-choice-discrimination/spec.yaml
 - .orbit/specs/2026-05-10-card-id-field-and-conventions/spec.yaml
 - .orbit/specs/2026-05-12-tree-views/spec.yaml
+- .orbit/specs/2026-05-12-reconcile-mode/spec.yaml
 relations:
 - card: 0026-executive-communication
   type: feeds

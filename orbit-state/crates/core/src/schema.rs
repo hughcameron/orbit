@@ -92,6 +92,19 @@ impl Memory {
     pub const FIELDS: &'static [&'static str] = &["key", "body", "timestamp", "labels"];
 }
 
+impl AcceptanceCriterion {
+    pub const FIELDS: &'static [&'static str] =
+        &["id", "description", "gate", "checked", "verification"];
+}
+
+impl Scenario {
+    pub const FIELDS: &'static [&'static str] = &["name", "given", "when", "then", "gate"];
+}
+
+impl Relation {
+    pub const FIELDS: &'static [&'static str] = &["card", "type", "reason"];
+}
+
 /// A discrete unit of work with numbered acceptance criteria. Substrate-written.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -487,6 +500,59 @@ unknown_field: oops
         let mut expected: Vec<String> = Memory::FIELDS.iter().map(|s| s.to_string()).collect();
         expected.sort();
         assert_eq!(got, expected, "Memory::FIELDS drifted from struct");
+    }
+
+    #[test]
+    fn acceptance_criterion_fields_matches_struct() {
+        // ac-04 verification: AcceptanceCriterion::FIELDS must equal the
+        // struct's serde top-level field set. Mirrors spec_fields_matches_struct
+        // — fully-populated fixture so skip_serializing_if doesn't drop fields.
+        let ac = AcceptanceCriterion {
+            id: "ac-01".into(),
+            description: "d".into(),
+            gate: false,
+            checked: false,
+            verification: Some("v".into()),
+        };
+        let value = serde_yaml::to_value(&ac).unwrap();
+        let got = top_level_keys(&value);
+        let mut expected: Vec<String> =
+            AcceptanceCriterion::FIELDS.iter().map(|s| s.to_string()).collect();
+        expected.sort();
+        assert_eq!(
+            got, expected,
+            "AcceptanceCriterion::FIELDS drifted from struct"
+        );
+    }
+
+    #[test]
+    fn scenario_fields_matches_struct() {
+        let scenario = Scenario {
+            name: "n".into(),
+            given: "g".into(),
+            when: "w".into(),
+            then: "t".into(),
+            gate: false,
+        };
+        let value = serde_yaml::to_value(&scenario).unwrap();
+        let got = top_level_keys(&value);
+        let mut expected: Vec<String> = Scenario::FIELDS.iter().map(|s| s.to_string()).collect();
+        expected.sort();
+        assert_eq!(got, expected, "Scenario::FIELDS drifted from struct");
+    }
+
+    #[test]
+    fn relation_fields_matches_struct() {
+        let relation = Relation {
+            card: "c".into(),
+            kind: RelationKind::Feeds,
+            reason: "r".into(),
+        };
+        let value = serde_yaml::to_value(&relation).unwrap();
+        let got = top_level_keys(&value);
+        let mut expected: Vec<String> = Relation::FIELDS.iter().map(|s| s.to_string()).collect();
+        expected.sort();
+        assert_eq!(got, expected, "Relation::FIELDS drifted from struct");
     }
 
     #[test]
