@@ -2,6 +2,25 @@
 
 All notable changes to orbit are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.4.11] - 2026-05-12
+
+Tree-views shipped — five new read-only navigation and synthesis verbs make the substrate's shape legible from the CLI and MCP without opening a single YAML file. Closes spec `2026-05-12-tree-views` (cards 0033, 0020). Surfacing wires land alongside the verbs so agents discover them at the right pipeline moments.
+
+### Added
+
+- `orbit card tree <id>` — local relations subgraph, depth-bounded, cycle-safe. Renders the cards/choices/specs/memories adjacent to a card so a session-start agent can see context without paging through files.
+- `orbit card specs <id>` — bidirectional drift detection on `card.specs[]` against `spec.cards[]`. Surfaces orphaned refs in either direction.
+- `orbit overview` — single-screen project synthesis: open specs, cards by maturity, recent memories, most-connected card, orphan cards. Bounded output regardless of project age.
+- `orbit graph [--format mermaid|graphviz]` — renders the full cards-specs graph to stdout, pasteable into markdown or a renderer.
+- `orbit audit drift` — permissive YAML scan against the canonical `Card` / `Spec` / `Choice` / `Memory` schemas. Surfaces unknown fields, missing required fields, and type mismatches that the canonical writer would silently rewrite.
+- `Card::FIELDS`, `Spec::FIELDS`, `Choice::FIELDS`, `Memory::FIELDS` — public field-name constants on each schema type, the load-bearing surface that `orbit audit drift` checks against.
+- `session.prime` gains a `next_step` field pointing at `orbit overview` so the very first verb after session start surfaces the substrate's shape.
+- `/orb:card` SKILL §4 suggests `orbit card tree` after authoring; `/orb:distill` SKILL §2 directs to `overview` + `card tree` *before* drafting.
+
+### Changed
+
+- Wire envelope error coverage extended — every new verb's failure modes round-trip through the canonical `{ ok: false, error: { code, message } }` envelope shape with CLI ↔ MCP parity.
+
 ## [0.4.10] - 2026-05-11
 
 Spec layout reverts to per-spec folders per choice 0021. `.orbit/specs/<id>.yaml + <id>.<sidecar>` becomes `.orbit/specs/<id>/spec.yaml + <id>/<sidecar>` across the substrate, the canonical writer, and every SKILL.md path string. Closes spec `2026-05-10-spec-folders-migration` (cards 0008).
