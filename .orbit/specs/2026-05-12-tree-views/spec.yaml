@@ -1,0 +1,36 @@
+id: 2026-05-12-tree-views
+goal: Ship navigation and synthesis verbs that make the existing orbit substrate readable as a tree of knowledge — card.tree, card.specs reverse-lookup, overview, graph render, drift audit — read-only, file-walking, no new tables
+cards:
+- 0030-canonical-schema-and-glossary
+status: open
+labels:
+- spec
+acceptance_criteria:
+- id: ac-01
+  description: '`orbit card tree <id>` returns the local subgraph from a card — outgoing and incoming `relations:` edges to depth N (default 2), rendered as nested text or `--json`. Walks files; resolves card slugs via the existing prefix-match. Cycle-safe.'
+  gate: true
+  checked: false
+- id: ac-02
+  description: '`orbit card specs <id>` lists the specs advancing a card — dereferences the card''s `specs:` array AND cross-checks against each spec''s `cards:` array, surfacing any one-way drift (card claims a spec the spec doesn''t back-reference, or vice versa).'
+  gate: false
+  checked: false
+- id: ac-03
+  description: '`orbit overview` produces a single-screen synthesis bounded by the same shape as `session prime`: open spec count + ids, cards-by-maturity counts (planned / emerging / established), recent memories (last K=10), most-connected card (highest relation degree), and orphans (cards with no specs AND no incoming relations).'
+  gate: true
+  checked: false
+- id: ac-04
+  description: '`orbit graph` emits a mermaid (default) or graphviz rendering of the cards-choices-specs graph to stdout — pasteable into markdown or a renderer. No file-write side-effect; `--filter` flags scope the output (e.g. `--card 0028 --depth 2`).'
+  gate: false
+  checked: false
+- id: ac-05
+  description: '`orbit audit drift` flags fields used in any card / spec / choice that are absent from the canonical schema (per card 0030''s drift-detection scenario), with file path, offending field, and a proposed disposition (map / drop / quarantine — matching card 0032''s vocabulary). Read-only; no rewrites.'
+  gate: false
+  checked: false
+- id: ac-06
+  description: All new verbs are read-only and walk files — they do NOT consult `state.db`. SQLite remains a verify-only correctness fixture until a query verb explicitly justifies promoting it. The parity test (`orbit-state/crates/cli/tests/parity.rs`) extends to cover each new verb's `--json` envelope against MCP.
+  gate: true
+  checked: false
+- id: ac-07
+  description: Surfacing wired into the agent path — `session prime` references `orbit overview` so a fresh session can reach the synthesis layer in one step; relevant SKILL.md files (at minimum `setup`, `drive`, `rally`) name the new verbs where browsing the tree is the natural next move. Without this wire the verbs exist but nobody reaches for them.
+  gate: true
+  checked: false
