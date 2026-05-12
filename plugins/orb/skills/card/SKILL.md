@@ -93,6 +93,8 @@ references:                          # optional — prior art and inspiration
 
 Before finalising, run a keyword scan (see `/orb:keyword-scan`) against `.orbit/cards/` and `.orbit/specs/` using terms from the feature name and scenarios. If an existing card already describes this capability, surface it — the author may want to update the existing card rather than create a new one.
 
+After authoring a card and pointing the author at it (via `orbit card show <slug>`), suggest **`orbit card tree <slug>`** as the natural next step — it shows the local relations subgraph (depth 2 default) so the author can see how the new card sits in the existing knowledge tree without grepping.
+
 ### 5. Quality Check
 
 Verify the card against INVEST criteria:

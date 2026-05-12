@@ -30,12 +30,12 @@ acceptance_criteria:
 - id: ac-06
   description: 'All new verbs are read-only and walk files — they do NOT consult `state.db`. Each verb ships on both CLI and MCP surfaces calling the same Rust core, with the canonical `<verb>: <category>: <sentence>` error format. Parity tests in `orbit-state/crates/cli/tests/parity.rs` and `orbit-state/crates/mcp/tests/parity.rs` cover each new verb''s `--json` envelope. SQLite remains a verify-only correctness fixture until a query verb explicitly justifies promoting it.'
   gate: true
-  checked: false
+  checked: true
 - id: ac-07
   description: Surfacing wired into the agent path — `session prime` output references `orbit overview` so a fresh session reaches the synthesis layer in one step (this is the load-bearing wire). At least one author-facing SKILL.md additionally names the navigation verbs where browsing the tree is the genuine next move; candidates are `/orb:card` (after `card show`, suggest `card tree`) and `/orb:distill` (before authoring a new card, suggest checking the existing tree for adjacent capabilities). Without these wires the verbs exist but nobody reaches for them.
   gate: true
-  checked: false
+  checked: true
 - id: ac-08
   description: 'Structured error envelopes — each new verb emits the canonical `<verb>: <category>: <sentence>` error envelope (matching `orbit card show <unknown-id>` today) for at least three error paths: (a) unknown id lookup, (b) broken referenced file (e.g. a card''s `specs:` entry points to a missing file), (c) malformed YAML encountered during a walk. One parity-tested case per path per verb where applicable.'
   gate: true
-  checked: false
+  checked: true

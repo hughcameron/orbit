@@ -176,6 +176,26 @@ pub fn expected_envelope_for_card_tree_unknown(cards_dir: &Path) -> String {
     envelope_err_string(&err)
 }
 
+/// Expected error envelope for `card specs 9999` (unknown id).
+pub fn expected_envelope_for_card_specs_unknown(cards_dir: &Path) -> String {
+    use orbit_state_core::{envelope_err_string, Error};
+    let err = Error::not_found(
+        "card.specs",
+        format!("no entry matching `9999-*` in {}", cards_dir.display()),
+    );
+    envelope_err_string(&err)
+}
+
+/// Expected error envelope for `graph --card 9999` (unknown id).
+pub fn expected_envelope_for_graph_unknown(cards_dir: &Path) -> String {
+    use orbit_state_core::{envelope_err_string, Error};
+    let err = Error::not_found(
+        "graph",
+        format!("no entry matching `9999-*` in {}", cards_dir.display()),
+    );
+    envelope_err_string(&err)
+}
+
 /// Populate `<root>/.orbit/` with one card (`0001-alpha`) that lists a spec
 /// (`s1`), and the spec back-references the card. Used by card.specs parity
 /// tests for the healthy bidirectional case.

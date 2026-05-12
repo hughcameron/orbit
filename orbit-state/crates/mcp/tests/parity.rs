@@ -199,6 +199,38 @@ fn card_tree_mcp_envelope_matches_canonical_envelope() {
 }
 
 #[test]
+fn card_specs_mcp_unknown_id_returns_error_envelope_with_is_error() {
+    let dir = tempfile::tempdir().unwrap();
+    common::populate_two_related_cards(dir.path());
+    let cards_dir = dir.path().join(".orbit/cards");
+
+    let inner = run_mcp_tools_call(
+        dir.path(),
+        json!({ "name": "card.specs", "arguments": { "slug": "9999" } }),
+    );
+    let result = inner.get("result").expect("has result");
+    assert_eq!(result.get("isError").and_then(Value::as_bool), Some(true));
+    let envelope = inner_envelope_text(&inner);
+    assert_eq!(envelope, common::expected_envelope_for_card_specs_unknown(&cards_dir));
+}
+
+#[test]
+fn graph_mcp_unknown_card_returns_error_envelope_with_is_error() {
+    let dir = tempfile::tempdir().unwrap();
+    common::populate_two_related_cards(dir.path());
+    let cards_dir = dir.path().join(".orbit/cards");
+
+    let inner = run_mcp_tools_call(
+        dir.path(),
+        json!({ "name": "graph", "arguments": { "card": "9999" } }),
+    );
+    let result = inner.get("result").expect("has result");
+    assert_eq!(result.get("isError").and_then(Value::as_bool), Some(true));
+    let envelope = inner_envelope_text(&inner);
+    assert_eq!(envelope, common::expected_envelope_for_graph_unknown(&cards_dir));
+}
+
+#[test]
 fn card_tree_mcp_unknown_id_returns_error_envelope_with_is_error() {
     let dir = tempfile::tempdir().unwrap();
     common::populate_two_related_cards(dir.path());

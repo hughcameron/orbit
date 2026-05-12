@@ -47,6 +47,8 @@ Distill works in three phases: **Draft → Review → Write.** State this upfron
 
 ### 2. Draft — Extract All Cards
 
+Before drafting, run **`orbit overview`** to see the project's existing shape (cards-by-maturity, most-connected card, orphans) and **`orbit card tree <id>`** on any card the source material seems adjacent to — this surfaces capabilities the new draft might overlap with, before the draft is written. The substrate is the canonical inventory; distilling against it avoids duplicates.
+
 Analyse the source material and identify distinct features. A "feature" is a **capability the product provides** — something a user can do or observe.
 
 **The first-principles lens:**

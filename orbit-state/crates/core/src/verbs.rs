@@ -731,6 +731,10 @@ pub struct SessionPrimeResult {
     pub memories: Vec<Memory>,
     /// Hard upper bound on items: 40 + 2*open_specs + min(memory_cap, 10).
     pub item_bound: usize,
+    /// Next-step suggestion. Per tree-views ac-07 this references `orbit
+    /// overview` so a fresh session reaches the synthesis layer in one
+    /// step — the load-bearing wire from card 0033's surfacing scenario.
+    pub next_step: String,
 }
 
 /// Reduced view of a task — its current state derived from the last event
@@ -2805,6 +2809,7 @@ fn session_prime(layout: &OrbitLayout, args: &SessionPrimeArgs) -> Result<Sessio
         open_specs,
         memories,
         item_bound,
+        next_step: "Run `orbit overview` for a single-screen project synthesis (open specs, cards-by-maturity, recent memories, most-connected card, orphans).".into(),
     })
 }
 

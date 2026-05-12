@@ -889,6 +889,10 @@ fn render_session_prime(result: &SessionPrimeResult) {
             println!("  {}: {}", m.key, first_line(&m.body));
         }
     }
+    if !result.next_step.is_empty() {
+        println!();
+        println!("Next: {}", result.next_step);
+    }
 }
 
 fn render_memory_remember(result: &MemoryRememberResult) {

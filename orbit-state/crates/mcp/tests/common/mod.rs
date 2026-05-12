@@ -159,6 +159,24 @@ pub fn expected_envelope_for_card_tree_unknown(cards_dir: &Path) -> String {
     envelope_err_string(&err)
 }
 
+pub fn expected_envelope_for_card_specs_unknown(cards_dir: &Path) -> String {
+    use orbit_state_core::{envelope_err_string, Error};
+    let err = Error::not_found(
+        "card.specs",
+        format!("no entry matching `9999-*` in {}", cards_dir.display()),
+    );
+    envelope_err_string(&err)
+}
+
+pub fn expected_envelope_for_graph_unknown(cards_dir: &Path) -> String {
+    use orbit_state_core::{envelope_err_string, Error};
+    let err = Error::not_found(
+        "graph",
+        format!("no entry matching `9999-*` in {}", cards_dir.display()),
+    );
+    envelope_err_string(&err)
+}
+
 /// Populate `<root>/.orbit/` with one card (`0001-alpha`) listing a spec
 /// (`s1`) that back-references it. Used by card.specs parity tests.
 pub fn populate_card_with_linked_spec(root: &Path) {
