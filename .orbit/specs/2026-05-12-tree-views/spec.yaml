@@ -26,7 +26,7 @@ acceptance_criteria:
 - id: ac-05
   description: '`orbit audit drift` performs a permissive YAML scan over `.orbit/cards/`, `.orbit/specs/`, `.orbit/choices/`, and `.orbit/memories/`, comparing each top-level field against a canonical field set declared as `const FIELDS: &[&str]` per struct (`Card::FIELDS`, `Spec::FIELDS`, `Choice::FIELDS`, `Memory::FIELDS` in `orbit-state/crates/core/src/schema.rs`), with a unit test per struct asserting the constant matches its serde representation so the audit field set cannot silently drift from the struct definition. For each unknown field, reports file path, field name, and a proposed disposition (map / drop / quarantine — matching card 0032''s vocabulary). Differs from `orbit verify`: permissive (does not bail at first parse failure) and surfaces pre-canonical content like brownfield legacy files; read-only, no rewrites.'
   gate: false
-  checked: false
+  checked: true
 - id: ac-06
   description: 'All new verbs are read-only and walk files — they do NOT consult `state.db`. Each verb ships on both CLI and MCP surfaces calling the same Rust core, with the canonical `<verb>: <category>: <sentence>` error format. Parity tests in `orbit-state/crates/cli/tests/parity.rs` and `orbit-state/crates/mcp/tests/parity.rs` cover each new verb''s `--json` envelope. SQLite remains a verify-only correctness fixture until a query verb explicitly justifies promoting it.'
   gate: true

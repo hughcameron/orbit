@@ -105,6 +105,8 @@ pub enum VerbRequest {
     Overview(OverviewArgs),
     #[serde(rename = "graph")]
     Graph(GraphArgs),
+    #[serde(rename = "audit.drift")]
+    AuditDrift(AuditDriftArgs),
     #[serde(rename = "choice.show")]
     ChoiceShow(ChoiceShowArgs),
     #[serde(rename = "choice.list")]
@@ -384,6 +386,13 @@ pub enum GraphFormat {
     Graphviz,
 }
 
+/// Args for `audit.drift` — permissive YAML scan that surfaces top-level
+/// fields absent from the canonical schema. No flags at v0.1; the verb
+/// walks the full substrate.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct AuditDriftArgs {}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct ChoiceShowArgs {
@@ -487,6 +496,8 @@ pub enum VerbResponse {
     Overview(OverviewResult),
     #[serde(rename = "graph")]
     Graph(GraphResult),
+    #[serde(rename = "audit.drift")]
+    AuditDrift(AuditDriftResult),
     #[serde(rename = "choice.show")]
     ChoiceShow(ChoiceShowResult),
     #[serde(rename = "choice.list")]
@@ -674,6 +685,22 @@ pub struct GraphResult {
     pub text: String,
 }
 
+/// Result for `audit.drift` — one entry per unknown top-level field across
+/// all walked files. Empty `drift` means the substrate is clean against the
+/// canonical schema.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct AuditDriftResult {
+    pub drift: Vec<DriftEntry>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct DriftEntry {
+    pub path: String,
+    pub kind: String,
+    pub field: String,
+    pub disposition: String,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ChoiceShowResult {
     pub choice: Choice,
@@ -798,6 +825,7 @@ pub fn execute(layout: &OrbitLayout, request: &VerbRequest) -> Result<VerbRespon
         VerbRequest::CardSpecs(args) => card_specs(layout, args).map(VerbResponse::CardSpecs),
         VerbRequest::Overview(args) => overview(layout, args).map(VerbResponse::Overview),
         VerbRequest::Graph(args) => graph(layout, args).map(VerbResponse::Graph),
+        VerbRequest::AuditDrift(args) => audit_drift(layout, args).map(VerbResponse::AuditDrift),
         VerbRequest::ChoiceShow(args) => choice_show(layout, args).map(VerbResponse::ChoiceShow),
         VerbRequest::ChoiceList(args) => choice_list(layout, args).map(VerbResponse::ChoiceList),
         VerbRequest::ChoiceSearch(args) => {
@@ -2296,6 +2324,95 @@ fn overview(layout: &OrbitLayout, args: &OverviewArgs) -> Result<OverviewResult>
         orphans: orphans_all,
         orphan_overflow,
     })
+}
+
+fn audit_drift(layout: &OrbitLayout, _args: &AuditDriftArgs) -> Result<AuditDriftResult> {
+    const VERB: &str = "audit.drift";
+    const DEFAULT_DISPOSITION: &str = "quarantine";
+
+    let mut drift: Vec<DriftEntry> = Vec::new();
+
+    // Helper: scan one file as untyped YAML, diff its top-level keys
+    // against the known field set. parse-failed files surface as a single
+    // drift entry with a special field name so callers see the file at all.
+    let scan = |path: &Path, kind: &str, known: &[&str], out: &mut Vec<DriftEntry>| -> Result<()> {
+        let display_path = relativise_spec_path(path, &layout.root);
+        let text = match std::fs::read_to_string(path) {
+            Ok(t) => t,
+            Err(e) => {
+                return Err(Error::unavailable(
+                    VERB,
+                    format!("read {}: {e}", path.display()),
+                ));
+            }
+        };
+        let value: serde_yaml::Value = match serde_yaml::from_str(&text) {
+            Ok(v) => v,
+            Err(e) => {
+                out.push(DriftEntry {
+                    path: display_path,
+                    kind: kind.to_string(),
+                    field: format!("<parse-failed: {e}>"),
+                    disposition: DEFAULT_DISPOSITION.to_string(),
+                });
+                return Ok(());
+            }
+        };
+        let mapping = match value.as_mapping() {
+            Some(m) => m,
+            None => {
+                out.push(DriftEntry {
+                    path: display_path,
+                    kind: kind.to_string(),
+                    field: "<root-not-mapping>".into(),
+                    disposition: DEFAULT_DISPOSITION.to_string(),
+                });
+                return Ok(());
+            }
+        };
+        for (key, _) in mapping {
+            let key_str = match key.as_str() {
+                Some(s) => s,
+                None => continue,
+            };
+            if !known.contains(&key_str) {
+                out.push(DriftEntry {
+                    path: display_path.clone(),
+                    kind: kind.to_string(),
+                    field: key_str.to_string(),
+                    disposition: DEFAULT_DISPOSITION.to_string(),
+                });
+            }
+        }
+        Ok(())
+    };
+
+    for path in layout
+        .list_card_files()
+        .map_err(|e| Error::unavailable(VERB, format!("list cards: {e}")))?
+    {
+        scan(&path, "card", Card::FIELDS, &mut drift)?;
+    }
+    for path in layout
+        .list_spec_files()
+        .map_err(|e| Error::unavailable(VERB, format!("list specs: {e}")))?
+    {
+        scan(&path, "spec", Spec::FIELDS, &mut drift)?;
+    }
+    for path in layout
+        .list_choice_files()
+        .map_err(|e| Error::unavailable(VERB, format!("list choices: {e}")))?
+    {
+        scan(&path, "choice", Choice::FIELDS, &mut drift)?;
+    }
+    for path in layout
+        .list_memory_files()
+        .map_err(|e| Error::unavailable(VERB, format!("list memories: {e}")))?
+    {
+        scan(&path, "memory", Memory::FIELDS, &mut drift)?;
+    }
+
+    Ok(AuditDriftResult { drift })
 }
 
 fn graph(layout: &OrbitLayout, args: &GraphArgs) -> Result<GraphResult> {

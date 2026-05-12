@@ -23,9 +23,9 @@ use orbit_state_core::layout::OrbitLayout;
 use orbit_state_core::Error as OrbitError;
 use orbit_state_core::{
     canonicalise_all, envelope_err_string, envelope_ok_string, execute, CanonicaliseReport,
-    CardListArgs, CardSearchArgs, CardShowArgs, CardShowResult, CardSpecsArgs, CardSpecsResult,
-    CardTreeArgs, CardTreeEdge, CardTreeResult, ChoiceListArgs, ChoiceListResult, GraphArgs,
-    GraphFormat, GraphResult, OverviewArgs, OverviewResult,
+    AuditDriftArgs, AuditDriftResult, CardListArgs, CardSearchArgs, CardShowArgs, CardShowResult,
+    CardSpecsArgs, CardSpecsResult, CardTreeArgs, CardTreeEdge, CardTreeResult, ChoiceListArgs,
+    ChoiceListResult, GraphArgs, GraphFormat, GraphResult, OverviewArgs, OverviewResult,
     ChoiceSearchArgs, ChoiceShowArgs, ChoiceShowResult, MemoryListArgs, MemoryListResult,
     MemoryRememberArgs, MemoryRememberResult, MemorySearchArgs, SessionPrimeArgs,
     SessionPrimeResult, SpecCloseArgs, SpecCloseResult, SpecCreateArgs, SpecCreateResult,
@@ -109,6 +109,11 @@ enum Command {
         #[arg(long, default_value = "mermaid")]
         format: String,
     },
+    /// Audit verbs (drift) — permissive scans against the canonical schema.
+    Audit {
+        #[command(subcommand)]
+        action: AuditAction,
+    },
     /// Substrate hygiene check — round-trip every canonical file (ac-16) and
     /// rebuild the index from files (ac-17). Exits non-zero on any drift.
     /// CI invokes this once per commit as the merge gate.
@@ -169,6 +174,13 @@ enum CardAction {
     /// Surfaces drift where the card's `specs:` and the spec's `cards:`
     /// arrays disagree.
     Specs { slug: String },
+}
+
+#[derive(Debug, Subcommand)]
+enum AuditAction {
+    /// Permissive YAML scan that surfaces top-level fields absent from the
+    /// canonical schema. Read-only; no rewrites.
+    Drift,
 }
 
 #[derive(Debug, Subcommand)]
@@ -793,6 +805,9 @@ fn build_request(layout: &OrbitLayout, command: &Command) -> Result<VerbRequest,
         Command::Overview { memory_cap } => VerbRequest::Overview(OverviewArgs {
             memory_cap: *memory_cap,
         }),
+        Command::Audit { action } => match action {
+            AuditAction::Drift => VerbRequest::AuditDrift(AuditDriftArgs::default()),
+        },
         Command::Graph { card, depth, format } => {
             let parsed_format = match format.as_str() {
                 "mermaid" => GraphFormat::Mermaid,
@@ -849,6 +864,7 @@ fn render_human(response: &VerbResponse) {
         VerbResponse::CardSpecs(result) => render_card_specs(result),
         VerbResponse::Overview(result) => render_overview(result),
         VerbResponse::Graph(result) => render_graph(result),
+        VerbResponse::AuditDrift(result) => render_audit_drift(result),
         VerbResponse::ChoiceShow(result) => render_choice_show(result),
         VerbResponse::ChoiceList(result) | VerbResponse::ChoiceSearch(result) => {
             render_choice_list(result)
@@ -946,6 +962,20 @@ fn render_tree_edge(edge: &CardTreeEdge, arrow: &str, indent: usize) {
 fn render_graph(result: &GraphResult) {
     // Print the rendered text verbatim — it's the share-or-paste payload.
     print!("{}", result.text);
+}
+
+fn render_audit_drift(result: &AuditDriftResult) {
+    if result.drift.is_empty() {
+        println!("audit.drift: clean (no unknown fields against the canonical schema)");
+        return;
+    }
+    println!("audit.drift: {} drift entries", result.drift.len());
+    for entry in &result.drift {
+        println!(
+            "  {}\t{}\t{}\t[{}]",
+            entry.path, entry.kind, entry.field, entry.disposition
+        );
+    }
 }
 
 fn render_overview(result: &OverviewResult) {

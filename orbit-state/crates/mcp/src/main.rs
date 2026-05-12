@@ -415,6 +415,15 @@ fn tool_descriptors() -> Vec<Value> {
             }
         }),
         json!({
+            "name": "audit.drift",
+            "description": "Permissive YAML scan that surfaces top-level fields absent from the canonical schema. Read-only; no rewrites.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {},
+                "additionalProperties": false
+            }
+        }),
+        json!({
             "name": "choice.show",
             "description": "Show a choice by id.",
             "inputSchema": {

@@ -481,6 +481,34 @@ fn card_tree_cli_unknown_id_emits_canonical_err_envelope() {
 }
 
 #[test]
+fn audit_drift_cli_json_matches_canonical_envelope() {
+    let dir = tempfile::tempdir().unwrap();
+    common::populate_card_with_drift(dir.path());
+
+    let cli_bin = env!("CARGO_BIN_EXE_orbit");
+    let output = Command::new(cli_bin)
+        .args([
+            "--root", dir.path().to_str().unwrap(),
+            "--json", "audit", "drift",
+        ])
+        .stdin(Stdio::null())
+        .output()
+        .expect("run orbit cli");
+
+    assert!(
+        output.status.success(),
+        "CLI exited non-zero: stdout={} stderr={}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr),
+    );
+
+    let stdout = String::from_utf8(output.stdout).expect("stdout is utf-8");
+    let actual = stdout.trim_end_matches('\n');
+    let expected = common::expected_envelope_for_audit_drift_one_unknown();
+    assert_eq!(actual, expected, "CLI envelope diverged from canonical");
+}
+
+#[test]
 fn graph_cli_mermaid_json_matches_canonical_envelope() {
     let dir = tempfile::tempdir().unwrap();
     common::populate_two_related_cards(dir.path());

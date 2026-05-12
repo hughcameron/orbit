@@ -42,6 +42,56 @@ pub struct SchemaVersion {
 // Spec
 // ============================================================================
 
+impl Spec {
+    /// Canonical top-level field set for the audit-drift verb (see
+    /// `orbit audit drift`). Kept in lockstep with the struct via the
+    /// `spec_fields_matches_struct` unit test in this module — adding a
+    /// new field to `Spec` requires extending both the const and the
+    /// test fixture, so the audit's allow-set cannot silently drift from
+    /// the canonical schema.
+    pub const FIELDS: &'static [&'static str] = &[
+        "id",
+        "goal",
+        "cards",
+        "status",
+        "labels",
+        "acceptance_criteria",
+    ];
+}
+
+impl Card {
+    pub const FIELDS: &'static [&'static str] = &[
+        "id",
+        "feature",
+        "as_a",
+        "i_want",
+        "so_that",
+        "goal",
+        "maturity",
+        "scenarios",
+        "specs",
+        "relations",
+        "references",
+        "notes",
+    ];
+}
+
+impl Choice {
+    pub const FIELDS: &'static [&'static str] = &[
+        "id",
+        "title",
+        "status",
+        "date_created",
+        "date_modified",
+        "body",
+        "references",
+    ];
+}
+
+impl Memory {
+    pub const FIELDS: &'static [&'static str] = &["key", "body", "timestamp", "labels"];
+}
+
 /// A discrete unit of work with numbered acceptance criteria. Substrate-written.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -328,6 +378,115 @@ unknown_field: oops
         let json = r#"{"task_id":"t1","spec_id":"s1","event":"open","timestamp":"2026-05-07T00:00:00Z","unknown_field":"oops"}"#;
         let err = serde_json::from_str::<TaskEvent>(json).unwrap_err();
         assert!(err.to_string().contains("unknown"));
+    }
+
+    /// Helper: extract sorted top-level keys from a serde_yaml::Value mapping.
+    fn top_level_keys(value: &serde_yaml::Value) -> Vec<String> {
+        let mut out: Vec<String> = value
+            .as_mapping()
+            .expect("expected mapping")
+            .iter()
+            .filter_map(|(k, _)| k.as_str().map(String::from))
+            .collect();
+        out.sort();
+        out
+    }
+
+    #[test]
+    fn spec_fields_matches_struct() {
+        // ac-05 verification: Spec::FIELDS must equal the struct's serde
+        // top-level field set. The test populates a fully-populated Spec
+        // (every Option=Some, every Vec non-empty) so skip_serializing_if
+        // doesn't drop fields, serialises to YAML, and compares the key
+        // set against the constant. Adding a new field to Spec requires
+        // extending this fixture (the struct literal won't compile
+        // otherwise) AND the FIELDS const — drift between the two trips
+        // this assertion.
+        let spec = Spec {
+            id: "id".into(),
+            goal: "goal".into(),
+            cards: vec!["c".into()],
+            status: SpecStatus::Open,
+            labels: vec!["l".into()],
+            acceptance_criteria: vec![AcceptanceCriterion {
+                id: "ac-01".into(),
+                description: "d".into(),
+                gate: false,
+                checked: false,
+                verification: Some("v".into()),
+            }],
+        };
+        let value = serde_yaml::to_value(&spec).unwrap();
+        let got = top_level_keys(&value);
+        let mut expected: Vec<String> = Spec::FIELDS.iter().map(|s| s.to_string()).collect();
+        expected.sort();
+        assert_eq!(got, expected, "Spec::FIELDS drifted from struct");
+    }
+
+    #[test]
+    fn card_fields_matches_struct() {
+        let card = Card {
+            id: Some("0001-x".into()),
+            feature: "f".into(),
+            as_a: Some("a".into()),
+            i_want: Some("i".into()),
+            so_that: Some("s".into()),
+            goal: "g".into(),
+            maturity: CardMaturity::Planned,
+            scenarios: vec![Scenario {
+                name: "n".into(),
+                given: "g".into(),
+                when: "w".into(),
+                then: "t".into(),
+                gate: false,
+            }],
+            specs: vec!["sp".into()],
+            relations: vec![Relation {
+                card: "c".into(),
+                kind: RelationKind::Feeds,
+                reason: "r".into(),
+            }],
+            references: vec!["r".into()],
+            notes: vec!["n".into()],
+        };
+        let value = serde_yaml::to_value(&card).unwrap();
+        let got = top_level_keys(&value);
+        let mut expected: Vec<String> = Card::FIELDS.iter().map(|s| s.to_string()).collect();
+        expected.sort();
+        assert_eq!(got, expected, "Card::FIELDS drifted from struct");
+    }
+
+    #[test]
+    fn choice_fields_matches_struct() {
+        let choice = Choice {
+            id: "0001".into(),
+            title: "t".into(),
+            status: ChoiceStatus::Accepted,
+            date_created: "2026-05-12".into(),
+            date_modified: Some("2026-05-12".into()),
+            body: "b".into(),
+            references: vec!["r".into()],
+        };
+        let value = serde_yaml::to_value(&choice).unwrap();
+        let got = top_level_keys(&value);
+        let mut expected: Vec<String> = Choice::FIELDS.iter().map(|s| s.to_string()).collect();
+        expected.sort();
+        assert_eq!(got, expected, "Choice::FIELDS drifted from struct");
+    }
+
+    #[test]
+    fn memory_fields_matches_struct() {
+        let memory = Memory {
+            key: "k".into(),
+            body: "b".into(),
+            timestamp: "2026-05-12T00:00:00Z".into(),
+            labels: vec!["l".into()],
+        };
+        let value = serde_yaml::to_value(&memory).unwrap();
+        let got = top_level_keys(&value);
+        let mut expected: Vec<String> = Memory::FIELDS.iter().map(|s| s.to_string()).collect();
+        expected.sort();
+        assert_eq!(got, expected, "Memory::FIELDS drifted from struct");
     }
 
     #[test]

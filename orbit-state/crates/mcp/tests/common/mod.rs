@@ -178,6 +178,33 @@ pub fn populate_card_with_linked_spec(root: &Path) {
     .unwrap();
 }
 
+/// Populate `<root>/.orbit/cards/0001-alpha.yaml` with a top-level unknown
+/// field. Used by audit.drift parity tests.
+pub fn populate_card_with_drift(root: &Path) {
+    let cards_dir = root.join(".orbit/cards");
+    std::fs::create_dir_all(&cards_dir).unwrap();
+    std::fs::write(
+        cards_dir.join("0001-alpha.yaml"),
+        "id: 0001-alpha\nfeature: alpha\ngoal: alpha goal\nmaturity: planned\nlegacy_field: x\n",
+    )
+    .unwrap();
+}
+
+/// Expected canonical envelope for `audit.drift` against the
+/// card-with-drift fixture.
+pub fn expected_envelope_for_audit_drift_one_unknown() -> String {
+    use orbit_state_core::{AuditDriftResult, DriftEntry, VerbResponse};
+    let response = VerbResponse::AuditDrift(AuditDriftResult {
+        drift: vec![DriftEntry {
+            path: ".orbit/cards/0001-alpha.yaml".into(),
+            kind: "card".into(),
+            field: "legacy_field".into(),
+            disposition: "quarantine".into(),
+        }],
+    });
+    orbit_state_core::envelope_ok_string(&response).expect("infallible")
+}
+
 /// Expected canonical envelope for `graph` (mermaid, unscoped) against
 /// the two-related-cards fixture.
 pub fn expected_envelope_for_graph_mermaid_two_related_cards() -> String {
