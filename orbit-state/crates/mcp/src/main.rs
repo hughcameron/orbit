@@ -402,6 +402,19 @@ fn tool_descriptors() -> Vec<Value> {
             }
         }),
         json!({
+            "name": "graph",
+            "description": "Render the cards-specs graph as mermaid (default) or graphviz — pasteable into markdown or a renderer. Optional --card scopes to one card's neighbourhood at the given depth.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "card": { "type": "string" },
+                    "depth": { "type": "integer", "minimum": 0 },
+                    "format": { "type": "string", "enum": ["mermaid", "graphviz"] }
+                },
+                "additionalProperties": false
+            }
+        }),
+        json!({
             "name": "choice.show",
             "description": "Show a choice by id.",
             "inputSchema": {

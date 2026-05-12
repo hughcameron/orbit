@@ -196,6 +196,23 @@ pub fn populate_card_with_linked_spec(root: &Path) {
     .unwrap();
 }
 
+/// Expected canonical envelope for `graph` (mermaid, unscoped) against
+/// the two-related-cards fixture.
+pub fn expected_envelope_for_graph_mermaid_two_related_cards() -> String {
+    use orbit_state_core::{GraphResult, VerbResponse};
+    let text = String::from(
+        "graph LR\n\
+         \x20\x20c_0001_alpha[\"0001-alpha: alpha\"]\n\
+         \x20\x20c_0002_beta[\"0002-beta: beta\"]\n\
+         \x20\x20c_0001_alpha -->|feeds| c_0002_beta\n",
+    );
+    let response = VerbResponse::Graph(GraphResult {
+        format: "mermaid".into(),
+        text,
+    });
+    orbit_state_core::envelope_ok_string(&response).expect("infallible")
+}
+
 /// Expected canonical envelope for `overview` against the
 /// two-related-cards fixture. Both cards `planned`; alpha feeds beta.
 /// Most-connected resolves to alpha by tie-break (lowest numeric id).

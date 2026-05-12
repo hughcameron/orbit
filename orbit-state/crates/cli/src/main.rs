@@ -24,8 +24,8 @@ use orbit_state_core::Error as OrbitError;
 use orbit_state_core::{
     canonicalise_all, envelope_err_string, envelope_ok_string, execute, CanonicaliseReport,
     CardListArgs, CardSearchArgs, CardShowArgs, CardShowResult, CardSpecsArgs, CardSpecsResult,
-    CardTreeArgs, CardTreeEdge, CardTreeResult, ChoiceListArgs, ChoiceListResult, OverviewArgs,
-    OverviewResult,
+    CardTreeArgs, CardTreeEdge, CardTreeResult, ChoiceListArgs, ChoiceListResult, GraphArgs,
+    GraphFormat, GraphResult, OverviewArgs, OverviewResult,
     ChoiceSearchArgs, ChoiceShowArgs, ChoiceShowResult, MemoryListArgs, MemoryListResult,
     MemoryRememberArgs, MemoryRememberResult, MemorySearchArgs, SessionPrimeArgs,
     SessionPrimeResult, SpecCloseArgs, SpecCloseResult, SpecCreateArgs, SpecCreateResult,
@@ -94,6 +94,20 @@ enum Command {
     Overview {
         #[arg(long)]
         memory_cap: Option<usize>,
+    },
+    /// Render the cards-specs graph to stdout as mermaid (default) or
+    /// graphviz — pasteable into markdown or a renderer.
+    Graph {
+        /// Scope the render to one card and its neighbourhood.
+        #[arg(long)]
+        card: Option<String>,
+        /// Depth in hops from `--card`. Default 2; only meaningful when
+        /// `--card` is set.
+        #[arg(long, default_value_t = 2)]
+        depth: u32,
+        /// Output format. `mermaid` or `graphviz`.
+        #[arg(long, default_value = "mermaid")]
+        format: String,
     },
     /// Substrate hygiene check — round-trip every canonical file (ac-16) and
     /// rebuild the index from files (ac-17). Exits non-zero on any drift.
@@ -779,6 +793,23 @@ fn build_request(layout: &OrbitLayout, command: &Command) -> Result<VerbRequest,
         Command::Overview { memory_cap } => VerbRequest::Overview(OverviewArgs {
             memory_cap: *memory_cap,
         }),
+        Command::Graph { card, depth, format } => {
+            let parsed_format = match format.as_str() {
+                "mermaid" => GraphFormat::Mermaid,
+                "graphviz" => GraphFormat::Graphviz,
+                other => {
+                    return Err(OrbitError::malformed(
+                        "graph",
+                        format!("format must be 'mermaid' or 'graphviz', got '{other}'"),
+                    ));
+                }
+            };
+            VerbRequest::Graph(GraphArgs {
+                card: card.clone(),
+                depth: *depth,
+                format: parsed_format,
+            })
+        }
         Command::Verify => unreachable!(
             "Command::Verify is short-circuited in main() before reaching build_request"
         ),
@@ -817,6 +848,7 @@ fn render_human(response: &VerbResponse) {
         VerbResponse::CardTree(result) => render_card_tree(result),
         VerbResponse::CardSpecs(result) => render_card_specs(result),
         VerbResponse::Overview(result) => render_overview(result),
+        VerbResponse::Graph(result) => render_graph(result),
         VerbResponse::ChoiceShow(result) => render_choice_show(result),
         VerbResponse::ChoiceList(result) | VerbResponse::ChoiceSearch(result) => {
             render_choice_list(result)
@@ -909,6 +941,11 @@ fn render_tree_edge(edge: &CardTreeEdge, arrow: &str, indent: usize) {
     for child in &edge.target.incoming {
         render_tree_edge(child, "←", indent + 1);
     }
+}
+
+fn render_graph(result: &GraphResult) {
+    // Print the rendered text verbatim — it's the share-or-paste payload.
+    print!("{}", result.text);
 }
 
 fn render_overview(result: &OverviewResult) {

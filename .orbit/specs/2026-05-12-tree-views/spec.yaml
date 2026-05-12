@@ -22,7 +22,7 @@ acceptance_criteria:
 - id: ac-04
   description: '`orbit graph` emits a mermaid (default) or graphviz rendering of the cards-choices-specs graph to stdout — pasteable into markdown or a renderer. No file-write side-effect. Supported flags: `--card <id>` (scope to one card and its neighbourhood), `--depth <N>` (default 2, applies only with `--card`), `--format <mermaid|graphviz>` (default mermaid). Other filters are out of scope for this spec. The unscoped default render (no `--card`) is permitted to exceed single-screen — it serves the share-or-paste use case, not the synthesis use case; the bounded contract applies to `overview`, not `graph`.'
   gate: false
-  checked: false
+  checked: true
 - id: ac-05
   description: '`orbit audit drift` performs a permissive YAML scan over `.orbit/cards/`, `.orbit/specs/`, `.orbit/choices/`, and `.orbit/memories/`, comparing each top-level field against a canonical field set declared as `const FIELDS: &[&str]` per struct (`Card::FIELDS`, `Spec::FIELDS`, `Choice::FIELDS`, `Memory::FIELDS` in `orbit-state/crates/core/src/schema.rs`), with a unit test per struct asserting the constant matches its serde representation so the audit field set cannot silently drift from the struct definition. For each unknown field, reports file path, field name, and a proposed disposition (map / drop / quarantine — matching card 0032''s vocabulary). Differs from `orbit verify`: permissive (does not bail at first parse failure) and surfaces pre-canonical content like brownfield legacy files; read-only, no rewrites.'
   gate: false

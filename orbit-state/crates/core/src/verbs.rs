@@ -103,6 +103,8 @@ pub enum VerbRequest {
     CardSpecs(CardSpecsArgs),
     #[serde(rename = "overview")]
     Overview(OverviewArgs),
+    #[serde(rename = "graph")]
+    Graph(GraphArgs),
     #[serde(rename = "choice.show")]
     ChoiceShow(ChoiceShowArgs),
     #[serde(rename = "choice.list")]
@@ -350,6 +352,38 @@ pub struct OverviewArgs {
     pub memory_cap: Option<usize>,
 }
 
+/// Args for `graph` — render the cards/specs graph to mermaid or graphviz.
+///
+/// The unscoped default render is intentionally permitted to exceed
+/// single-screen — it serves the share-or-paste use case, not the synthesis
+/// use case (the bounded contract applies to `overview`, not here).
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct GraphArgs {
+    /// Scope the render to one card and its neighbourhood. When set, the
+    /// graph is the union of nodes within `depth` hops of this card.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub card: Option<String>,
+    /// Depth in hops from `card`. Default 2; only meaningful with `card`.
+    #[serde(default = "default_graph_depth")]
+    pub depth: u32,
+    /// Output format. Default mermaid.
+    #[serde(default)]
+    pub format: GraphFormat,
+}
+
+fn default_graph_depth() -> u32 {
+    2
+}
+
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum GraphFormat {
+    #[default]
+    Mermaid,
+    Graphviz,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct ChoiceShowArgs {
@@ -451,6 +485,8 @@ pub enum VerbResponse {
     CardSpecs(CardSpecsResult),
     #[serde(rename = "overview")]
     Overview(OverviewResult),
+    #[serde(rename = "graph")]
+    Graph(GraphResult),
     #[serde(rename = "choice.show")]
     ChoiceShow(ChoiceShowResult),
     #[serde(rename = "choice.list")]
@@ -630,6 +666,14 @@ pub struct MostConnectedCard {
     pub degree: usize,
 }
 
+/// Result for `graph` — the rendered text plus the format it's in. The
+/// caller pastes `text` into a markdown block or graphviz tool.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct GraphResult {
+    pub format: String,
+    pub text: String,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ChoiceShowResult {
     pub choice: Choice,
@@ -753,6 +797,7 @@ pub fn execute(layout: &OrbitLayout, request: &VerbRequest) -> Result<VerbRespon
         VerbRequest::CardTree(args) => card_tree(layout, args).map(VerbResponse::CardTree),
         VerbRequest::CardSpecs(args) => card_specs(layout, args).map(VerbResponse::CardSpecs),
         VerbRequest::Overview(args) => overview(layout, args).map(VerbResponse::Overview),
+        VerbRequest::Graph(args) => graph(layout, args).map(VerbResponse::Graph),
         VerbRequest::ChoiceShow(args) => choice_show(layout, args).map(VerbResponse::ChoiceShow),
         VerbRequest::ChoiceList(args) => choice_list(layout, args).map(VerbResponse::ChoiceList),
         VerbRequest::ChoiceSearch(args) => {
@@ -2251,6 +2296,181 @@ fn overview(layout: &OrbitLayout, args: &OverviewArgs) -> Result<OverviewResult>
         orphans: orphans_all,
         orphan_overflow,
     })
+}
+
+fn graph(layout: &OrbitLayout, args: &GraphArgs) -> Result<GraphResult> {
+    const VERB: &str = "graph";
+
+    let cards = load_all_cards(layout, VERB)?;
+    let forward = build_forward_edges(&cards);
+
+    // Decide which cards to include.
+    let scope: BTreeMap<String, &Card> = match &args.card {
+        Some(query) => {
+            validate_card_slug(VERB, query)?;
+            let resolved = resolve_numeric_slug(VERB, &layout.cards_dir(), query)?
+                .unwrap_or_else(|| query.clone());
+            if !cards.contains_key(&resolved) {
+                return Err(Error::not_found(
+                    VERB,
+                    format!("no card at {}", layout.card_file(&resolved).display()),
+                ));
+            }
+            let reverse = build_reverse_edges(&cards);
+            let included = bfs_card_neighbourhood(&resolved, &forward, &reverse, args.depth);
+            cards
+                .iter()
+                .filter(|(slug, _)| included.contains(*slug))
+                .map(|(s, c)| (s.clone(), c))
+                .collect()
+        }
+        None => cards.iter().map(|(s, c)| (s.clone(), c)).collect(),
+    };
+
+    // Card → spec edges come from card.specs[]. Specs become nodes only
+    // when at least one in-scope card lists them.
+    let mut spec_nodes: BTreeMap<String, String> = BTreeMap::new();
+    let mut card_spec_edges: Vec<(String, String)> = Vec::new();
+    for (slug, card) in &scope {
+        for spec_path in &card.specs {
+            let spec_id = spec_id_from_listed_path(spec_path);
+            spec_nodes.entry(spec_id.clone()).or_insert_with(|| spec_path.clone());
+            card_spec_edges.push((slug.clone(), spec_id));
+        }
+    }
+
+    let text = match args.format {
+        GraphFormat::Mermaid => render_mermaid(&scope, &spec_nodes, &card_spec_edges),
+        GraphFormat::Graphviz => render_graphviz(&scope, &spec_nodes, &card_spec_edges),
+    };
+    let format = match args.format {
+        GraphFormat::Mermaid => "mermaid",
+        GraphFormat::Graphviz => "graphviz",
+    };
+    Ok(GraphResult {
+        format: format.to_string(),
+        text,
+    })
+}
+
+/// BFS from `root` over forward + reverse edges to gather the set of cards
+/// reachable within `depth` hops in either direction. Bounded by
+/// HashSet-of-visited; ignores edges to slugs absent from the loaded card
+/// set (dangling references).
+fn bfs_card_neighbourhood(
+    root: &str,
+    forward: &BTreeMap<String, Vec<(String, String, String)>>,
+    reverse: &BTreeMap<String, Vec<(String, String, String)>>,
+    depth: u32,
+) -> std::collections::HashSet<String> {
+    let mut included = std::collections::HashSet::new();
+    let mut frontier: Vec<String> = vec![root.to_string()];
+    included.insert(root.to_string());
+    for _ in 0..depth {
+        let mut next: Vec<String> = Vec::new();
+        for slug in &frontier {
+            if let Some(edges) = forward.get(slug) {
+                for (target, _, _) in edges {
+                    if included.insert(target.clone()) {
+                        next.push(target.clone());
+                    }
+                }
+            }
+            if let Some(edges) = reverse.get(slug) {
+                for (source, _, _) in edges {
+                    if included.insert(source.clone()) {
+                        next.push(source.clone());
+                    }
+                }
+            }
+        }
+        if next.is_empty() {
+            break;
+        }
+        frontier = next;
+    }
+    included
+}
+
+/// Sanitise a slug for use as a mermaid node id (alphanumeric + underscore).
+fn mermaid_id(prefix: char, slug: &str) -> String {
+    let body: String = slug
+        .chars()
+        .map(|c| if c.is_ascii_alphanumeric() { c } else { '_' })
+        .collect();
+    format!("{prefix}_{body}")
+}
+
+fn render_mermaid(
+    cards: &BTreeMap<String, &Card>,
+    spec_nodes: &BTreeMap<String, String>,
+    card_spec_edges: &[(String, String)],
+) -> String {
+    let mut out = String::from("graph LR\n");
+    // Card nodes.
+    for (slug, card) in cards {
+        let id = mermaid_id('c', slug);
+        let label = format!("{slug}: {}", card.feature);
+        out.push_str(&format!("  {id}[\"{label}\"]\n", id = id, label = label.replace('"', "'")));
+    }
+    // Spec nodes.
+    for spec_id in spec_nodes.keys() {
+        let id = mermaid_id('s', spec_id);
+        out.push_str(&format!("  {id}([\"{spec_id}\"])\n"));
+    }
+    // Card → card edges (only when both endpoints are in scope).
+    for (slug, card) in cards {
+        let from = mermaid_id('c', slug);
+        for relation in &card.relations {
+            if !cards.contains_key(&relation.card) {
+                continue;
+            }
+            let to = mermaid_id('c', &relation.card);
+            let label = relation_kind_str(&relation.kind);
+            out.push_str(&format!("  {from} -->|{label}| {to}\n"));
+        }
+    }
+    // Card → spec edges.
+    for (card_slug, spec_id) in card_spec_edges {
+        let from = mermaid_id('c', card_slug);
+        let to = mermaid_id('s', spec_id);
+        out.push_str(&format!("  {from} -.-> {to}\n"));
+    }
+    out
+}
+
+fn render_graphviz(
+    cards: &BTreeMap<String, &Card>,
+    spec_nodes: &BTreeMap<String, String>,
+    card_spec_edges: &[(String, String)],
+) -> String {
+    let mut out = String::from("digraph orbit {\n  rankdir=LR;\n");
+    for (slug, card) in cards {
+        let label = format!("{slug}\\n{}", card.feature).replace('"', "\\\"");
+        out.push_str(&format!("  \"{slug}\" [label=\"{label}\", shape=box];\n"));
+    }
+    for spec_id in spec_nodes.keys() {
+        out.push_str(&format!("  \"{spec_id}\" [shape=ellipse];\n"));
+    }
+    for (slug, card) in cards {
+        for relation in &card.relations {
+            if !cards.contains_key(&relation.card) {
+                continue;
+            }
+            let label = relation_kind_str(&relation.kind);
+            out.push_str(&format!(
+                "  \"{slug}\" -> \"{target}\" [label=\"{label}\"];\n",
+                target = relation.card
+            ));
+        }
+    }
+    for (card_slug, spec_id) in card_spec_edges {
+        out.push_str(&format!(
+            "  \"{card_slug}\" -> \"{spec_id}\" [style=dashed];\n"
+        ));
+    }
+    out.push_str("}\n");
+    out
 }
 
 /// Parse the leading numeric prefix of a card slug (e.g. `"0033"` from
