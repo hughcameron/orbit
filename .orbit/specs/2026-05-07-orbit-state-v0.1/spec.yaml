@@ -1,7 +1,7 @@
 id: 2026-05-07-orbit-state-v0.1
 goal: orbit-state v0.1 — Rust + SQLite + MCP substrate
 cards: []
-status: open
+status: closed
 labels:
 - spec
 acceptance_criteria:
@@ -76,11 +76,11 @@ acceptance_criteria:
 - id: ac-18
   description: ≥1 week dogfood window in orbit repo — strict no-fallback to bd; restartable on verb breakage
   gate: true
-  checked: false
+  checked: true
 - id: ac-19
   description: v0.1.0 git tag pushed — internal-only (no GitHub Release); multi-machine binaries (mac + beelink); .beads-archive/ gitignored, .beads/ absent; README early-release notice present
   gate: false
-  checked: false
+  checked: true
 - id: ac-20
   description: .orbit/.gitignore ships with contracted ignore set (state.db/schema-version/locks/ ignored; cards/choices/specs/memories tracked); README install instructions for both platforms
   gate: false
@@ -88,7 +88,7 @@ acceptance_criteria:
 - id: ac-21
   description: Week-1 cross-compile gate — skeleton binary builds on mac + beelink; MUST link SQLite (rusqlite); nm/otool verifies SQLite symbols
   gate: true
-  checked: false
+  checked: true
 - id: ac-22
   description: Pre-dogfood atomic main-branch cutover — Migration A + B in single commit; .beads/ deletion + .gitignore for .beads-archive/ in same commit; no orbit-version skill runs against main pre-cutover; dogfood window timer starts at cutover commit
   gate: true

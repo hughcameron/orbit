@@ -4,7 +4,7 @@ as_a: agent or contributor onboarding orbit into a project that already has spec
 i_want: a one-shot verb that migrates legacy spec.yaml field shapes into the canonical schema without hand-editing each file
 so_that: orbit's strict ac-01 parse doesn't block adoption in projects whose spec content was authored before the current schema, and semantic value in unknown fields isn't silently destroyed in the process
 goal: a project with N legacy spec.yaml files reaches `orbit verify` clean in one verb invocation; unknown fields are mapped onto canonical equivalents, dropped with a recorded migration disposition, or quarantined into a sidecar so semantic content isn't silently lost; the canonical strict-parse invariant (ac-01) is preserved unchanged
-maturity: planned
+maturity: emerging
 scenarios:
 - name: Verb reports planned changes before rewriting any file
   given: a project with legacy spec.yaml files containing unknown fields

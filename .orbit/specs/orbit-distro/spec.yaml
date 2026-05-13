@@ -2,7 +2,7 @@ id: orbit-distro
 goal: Move orbit from hughcameron/orbit to meridian-online/orbit and onboard it to the meridian distribution pipeline so the orbit binary is installable in one step (brew/install-script) on a fresh mac or linux box, no Rust toolchain required
 cards:
 - 0027-brew-installable
-status: open
+status: closed
 labels:
 - spec
 acceptance_criteria:
@@ -21,7 +21,7 @@ acceptance_criteria:
 - id: ac-04
   description: On a fresh macOS box, `brew tap meridian-online/tap && brew install orbit` installs the orbit binary to PATH; `orbit --version` prints the released version; `orbit session prime` succeeds in any /setup'd project
   gate: true
-  checked: false
+  checked: true
 - id: ac-05
   description: Linux install path documented and working — either Linuxbrew via the same tap, or an install script (e.g. `curl -sSL install.meridian.online/orbit | sh`) that downloads the matching release archive and places `orbit` on PATH. Whichever channel ships is documented as the primary linux path in README.md.
   gate: false
@@ -45,4 +45,4 @@ acceptance_criteria:
 - id: ac-10
   description: End-to-end smoke pass — first release tag pushed from meridian-online/orbit cuts cleanly through the pipeline (binaries built, GitHub release created, homebrew-tap updated, install-script updated if used); a fresh macOS box AND a fresh linux box each install via the documented path and run `orbit session prime` cleanly in a freshly-/setup'd project
   gate: true
-  checked: false
+  checked: true

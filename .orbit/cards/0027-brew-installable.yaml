@@ -4,7 +4,7 @@ as_a: someone trying orbit for the first time, or moving to a new machine
 i_want: to install orbit (the binary substrate plus the orb plugin path) in a single command, without needing rustup, cargo, or a clone of the orbit repo
 so_that: the path from "I want to try orbit" to "orbit session prime returns context" is one minute, not thirty; missing-binary failures stop being the first experience on a fresh box
 goal: orbit ships pinned binaries through meridian-online's release pipeline (homebrew tap + install script) so end-users never compile from source; cargo-install remains the contributor path, not the user path
-maturity: planned
+maturity: established
 scenarios:
 - name: Fresh macOS — brew install, single command
   given: a macOS laptop with no Rust toolchain
@@ -38,6 +38,7 @@ scenarios:
   gate: false
 specs:
 - .orbit/specs/orbit-distro.yaml
+- .orbit/specs/orbit-distro/spec.yaml
 relations:
 - card: 0020-orbit-state
   type: depends-on

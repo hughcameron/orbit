@@ -4,7 +4,7 @@ as_a: orbit author or agent
 i_want: a small set of read-only verbs that surface the cards-choices-specs-memories graph as a tree of knowledge — subgraph from any card, reverse-lookups, single-screen overview, visual render, drift audit
 so_that: the substrate's reach is *experienced* not just *stored* — I see the state of the project at a glance, find what touches what without grep, and notice drift mechanically rather than by accident
 goal: the orbit substrate is readable as a tree of knowledge; project state is one verb away; the graph that cards / specs / choices form is traversable from any node; synthesis stays bounded as the project ages — so the value held in the substrate is reachable without digging
-maturity: planned
+maturity: emerging
 scenarios:
 - name: Subgraph view from any card
   given: I am reading or working on a particular card
