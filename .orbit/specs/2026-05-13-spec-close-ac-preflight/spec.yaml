@@ -14,17 +14,17 @@ acceptance_criteria:
 - id: ac-02
   description: '`orbit spec close <id>` computes the unchecked-blocking set as `{ ac : ac.checked == false && ac.time_gated == false }`. If the set is non-empty, the verb returns `Error::conflict` with verb `"spec.close"` and a sentence-form message listing the offending AC ids; gate ACs in the set are flagged separately within the same message (e.g. `"3 unchecked AC(s) in spec ''<id>'': ac-04, ac-07, ac-15 (gate: ac-04)"`). No files are written when the guard fires. The new guard sits in `spec_close` at `verbs.rs:1097`, adjacent to the existing unfinished-tasks check at line 1147; ordering of the two checks is the implementing agent''s call but is named in a code comment.'
   gate: true
-  checked: false
+  checked: true
   verification: New unit test `spec_close_rejects_unchecked_acs` constructs a spec with one or more unchecked non-time-gated ACs and asserts the verb returns `Error::conflict`, the spec status is unchanged on disk, no linked card is mutated, and the message names every offending AC id. New unit test `spec_close_unchecked_gate_ac_flagged_in_error` asserts gate ACs appear in a distinguished position within the error message (regex or substring assertion). Both tests live alongside `spec_close_rejects_unfinished_tasks` at `verbs.rs:3941`.
 - id: ac-03
   description: '`orbit spec close --force <id>` proceeds despite unchecked non-time-gated ACs. The close happens (status flips to closed, linked-card `specs` arrays are updated atomically per the existing transactional discipline). The successful response payload names the bypassed AC ids in a dedicated field (e.g. `forced_unchecked: ["ac-04", "ac-15"]`) so the audit trail is preserved in the structured response, not only in shell history.'
   gate: false
-  checked: false
+  checked: true
   verification: 'New unit test `spec_close_force_proceeds_despite_unchecked` asserts: (a) status flips to `Closed`, (b) the linked card''s `specs` array is updated, (c) the response payload identifies the bypassed AC ids. Run via `cargo test`.'
 - id: ac-04
   description: 'ACs with `time_gated: true` are excluded from the unchecked-blocking set. A spec with all non-time-gated ACs checked plus one or more unchecked `time_gated: true` ACs closes cleanly without `--force`. The successful close response names the deferred ACs in a dedicated field (e.g. `time_gated_open: ["ac-18"]`) so the deliberate-deferral is recorded structurally.'
   gate: false
-  checked: false
+  checked: true
   verification: 'New unit test `spec_close_time_gated_acs_do_not_block` constructs a spec with mixed checked / unchecked-time-gated ACs (all non-time-gated checked) and asserts: (a) close succeeds without `--force`, (b) status flips to `Closed`, (c) response identifies the time-gated-open AC ids.'
 - id: ac-05
   description: 'CLI and MCP surfaces honour the new behaviour identically. The `--force` flag exists on both. Parity tests cover the three new branches: unchecked-AC rejection (ac-02), force-proceeds (ac-03), and time-gated allowance (ac-04). State mutations (canonical files + state.db) are byte-identical between surfaces; error structure is identical (category `conflict`, sentence-form message).'
@@ -34,12 +34,12 @@ acceptance_criteria:
 - id: ac-06
   description: The existing unfinished-tasks guard at `verbs.rs:1147` is unchanged in behaviour. The existing `spec_close_rejects_unfinished_tasks` test continues to pass without modifying its assertions (test fixtures may need updated ACs but the behaviour assertion is untouched). A code comment in `spec_close` names the ordering choice between the two guards and the rationale (e.g. "tasks first because they're append-only and faster to read" or the reverse — whichever is chosen).
   gate: false
-  checked: false
+  checked: true
   verification: '`cargo test spec_close_rejects_unfinished_tasks` passes after fixture updates; assertion lines are unchanged from the pre-change version. The implementing agent leaves a comment at the choice point.'
 - id: ac-07
   description: 'The happy path is preserved end-to-end. A spec with every AC `checked: true` (or unchecked + `time_gated: true`) closes exactly as today: no new prompts, no new flags required, status flips, the linked card''s `specs` array is updated. The `SpecCloseResult` response struct gains the new fields (`forced_unchecked: Vec<String>`, `time_gated_open: Vec<String>`) with `#[serde(default, skip_serializing_if = "Vec::is_empty")]` so happy-path responses remain byte-identical to the current shape; the struct does not gain `#[serde(deny_unknown_fields)]` (it lacks the decorator pre-change, verified at `orbit-state/crates/core/src/verbs.rs`), preserving forward-additive read compatibility for existing consumers.'
   gate: false
-  checked: false
+  checked: true
   verification: 'Existing tests `spec_close_flips_status_and_appends_to_linked_cards` (`verbs.rs:3454`), `spec_close_idempotent_when_card_already_has_ref` (`verbs.rs:3506`), and `spec_close_full_lifecycle_integration` (`verbs.rs:3973`) continue to pass after fixture updates that add `checked: true` to existing ACs. No assertion changes.'
 - id: ac-08
   description: '`/orb:drive`''s close step surfaces the unchecked-AC error to the author before invoking close, naming the offending AC ids. If the author elects to proceed despite the gap, the drive invokes `orbit spec close --force` and captures a sentence-form rationale in the drive''s notes (or commit message) — so the substrate guard is honoured at the agent layer too. The wire is documentary in the skill prompt; enforcement happens at the substrate via ac-02 and ac-03.'

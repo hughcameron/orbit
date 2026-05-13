@@ -329,8 +329,18 @@ enum SpecAction {
         ac_uncheck: Option<String>,
     },
     /// Close a spec; transactionally appends to linked cards' `specs` arrays.
+    ///
+    /// Refuses to close when any non-time-gated AC remains unchecked, per
+    /// spec 2026-05-13-spec-close-ac-preflight. Pass `--force` to bypass
+    /// the AC pre-flight; bypassed AC ids surface in the structured
+    /// response under `forced_unchecked`. Time-gated ACs (declared
+    /// `time_gated: true`) never block close.
     Close {
         id: String,
+        /// Bypass the unchecked-AC guard. Use deliberately — bypassed AC
+        /// ids are recorded in the response payload.
+        #[arg(long)]
+        force: bool,
     },
     /// One-shot migration from flat sidecar layout to per-spec folders per
     /// choice 0021. For each `.orbit/specs/<id>.yaml`, creates `<id>/` and
@@ -773,7 +783,9 @@ fn build_request(layout: &OrbitLayout, command: &Command) -> Result<VerbRequest,
                     acceptance_criteria,
                 })
             }
-            SpecAction::Close { id } => VerbRequest::SpecClose(SpecCloseArgs { id: id.clone() }),
+            SpecAction::Close { id, force } => {
+                VerbRequest::SpecClose(SpecCloseArgs { id: id.clone(), force: *force })
+            }
             SpecAction::MigrateLayout { .. } => unreachable!(
                 "spec migrate-layout is short-circuited in main() before reaching build_request"
             ),
