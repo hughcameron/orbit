@@ -2,6 +2,29 @@
 
 All notable changes to orbit are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.4.13] - 2026-05-14
+
+`orbit spec close` gains an AC pre-flight: it refuses to flip a spec to closed while any non-time-gated AC remains `checked: false`, mirroring the existing unfinished-tasks guard. A new `time_gated: bool` field on `AcceptanceCriterion` carves out ACs that are legitimately expected to remain unchecked at close (post-deploy observation windows, operator sign-off awaiting calendar) so they don't have to be force-closed. Closes spec `2026-05-13-spec-close-ac-preflight` (card 0034). Dogfooded on its own delivery: the spec's release-smoke AC (ac-09) is itself `time_gated: true`, so this spec closed via the new path rather than `--force`.
+
+The change is forward-compatible: every existing spec parses unchanged via `#[serde(default)]`, no canonical-output churn (skip-if-false on serialise keeps existing AC YAML byte-identical), and the close-response gains optional fields with `skip_serializing_if = "Vec::is_empty"` so happy-path responses are byte-identical to the previous shape.
+
+### Added
+
+- `AcceptanceCriterion.time_gated: bool` (default `false`) — declares an AC as legitimately deferred at close. `orbit spec close` excludes these from the unchecked-blocking set and reports them in the structured response under `time_gated_open`.
+- `orbit spec close --force` — deliberate opt-in that bypasses the AC pre-flight when ACs are genuinely unfinished and the close is intentional (review NO-GO, scoped deferral). Bypassed AC ids surface in the response's `forced_unchecked` field, so the audit trail lives in the substrate, not only in shell history. The flag does not bypass the unfinished-tasks guard or the already-closed guard.
+- `SpecCloseResult` gains `forced_unchecked: Vec<String>` and `time_gated_open: Vec<String>`, both `skip_serializing_if = "Vec::is_empty"`. The struct intentionally lacks `deny_unknown_fields`, preserving forward-additive read compatibility for callers that cache an older response shape.
+- Card `0034-spec-close-ac-preflight` — capability description, closed by this release.
+- Card `0035-ac-taxonomy` — follow-up filed during design: generalises `time_gated: bool` to a categorical AC type (code / operational / observation / …) that informs close semantics, review evidence, and drive strategy. Deferred until the brownfield migration path (card 0032) and the canonical-schema work (card 0030) are ready to receive a richer enum.
+
+### Changed
+
+- `/orb:drive` close step (`plugins/orb/skills/drive/SKILL.md`) names the AC pre-flight as reconcile-first (forgot-to-tick is the common case), names `--force` as the deliberate escape with rationale-capture discipline (`orbit spec note` before `--force`), and documents time-gated ACs as the never-blocks-close category. Documentary wire; enforcement remains in the substrate.
+- Card 0028 (`four-pillars`) `i_want` line re-framed from schema-field to relations-graph framing — matches the goal and scenarios already in place.
+
+### Fixed
+
+- `spec.close`'s response is now structurally explicit about deliberate-deferral. Previously a spec could be closed with unchecked ACs and no record of which ACs were left open; the new `forced_unchecked` and `time_gated_open` fields surface both categories in the structured response.
+
 ## [0.4.12] - 2026-05-13
 
 Reconcile mode shipped — `orbit canonicalise --reconcile` is the on-ramp from legacy yaml field shapes to the canonical schema. A permissive read lives in a new `reconcile.rs` module gated behind the flag; every schema struct keeps `deny_unknown_fields`, so routine paths (`orbit verify`, `orbit canonicalise` without `--reconcile`, every other verb) stay strict. Closes spec `2026-05-12-reconcile-mode` (card 0032).
