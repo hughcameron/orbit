@@ -36,7 +36,8 @@ scenarios:
   when: enforcement is examined
   then: the behaviour exists on both CLI and MCP surfaces (parity), is covered by unit tests at the verb level alongside the existing unfinished-tasks tests, and /orb:drive's close step names the pre-flight so a driving agent understands the gate before hitting it — without these wires the guard ships but is silently bypassable on one surface or invisible to the agent that needs it
   gate: true
-specs: []
+specs:
+- .orbit/specs/2026-05-13-spec-close-ac-preflight/spec.yaml
 relations:
 - card: 0020-orbit-state
   type: feeds
