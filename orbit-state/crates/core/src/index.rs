@@ -541,6 +541,7 @@ mod tests {
                 gate: true,
                 checked: true,
                 verification: None,
+                time_gated: false,
             }],
         };
         layout.ensure_spec_dir("0001").unwrap();

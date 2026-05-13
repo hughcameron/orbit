@@ -724,6 +724,7 @@ fn bd_issue_to_spec(issue: &BdRecord) -> Spec {
                             gate,
                             checked,
                             verification: None,
+                            time_gated: false,
                         });
                     }
                 }

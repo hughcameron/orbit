@@ -3390,6 +3390,7 @@ mod tests {
                 gate: false,
                 checked: false,
                 verification: None,
+                time_gated: false,
             }],
         };
         layout.ensure_spec_dir("0001").unwrap();

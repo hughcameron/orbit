@@ -9,7 +9,7 @@ acceptance_criteria:
 - id: ac-01
   description: '`AcceptanceCriterion` in `orbit-state/crates/core/src/schema.rs` gains a `time_gated: bool` field, default `false`, with `#[serde(default)]` so existing specs parse unchanged. `AcceptanceCriterion::FIELDS` (currently `["id", "description", "gate", "checked", "verification"]`) is extended with `"time_gated"` in declaration order, and the existing `acceptance_criterion_fields_matches_struct` unit test continues to pass after the addition (the test is the FIELDS-drift gate).'
   gate: true
-  checked: false
+  checked: true
   verification: '`cargo test acceptance_criterion_fields_matches_struct` passes after the additions. A round-trip test (new) constructs an `AcceptanceCriterion` with `time_gated: true`, serialises to canonical YAML, deserialises, and asserts byte-identical equality. An existing spec.yaml without the `time_gated` field on any AC parses cleanly and the deserialised ACs carry `time_gated: false`.'
 - id: ac-02
   description: '`orbit spec close <id>` computes the unchecked-blocking set as `{ ac : ac.checked == false && ac.time_gated == false }`. If the set is non-empty, the verb returns `Error::conflict` with verb `"spec.close"` and a sentence-form message listing the offending AC ids; gate ACs in the set are flagged separately within the same message (e.g. `"3 unchecked AC(s) in spec ''<id>'': ac-04, ac-07, ac-15 (gate: ac-04)"`). No files are written when the guard fires. The new guard sits in `spec_close` at `verbs.rs:1097`, adjacent to the existing unfinished-tasks check at line 1147; ordering of the two checks is the implementing agent''s call but is named in a code comment.'
@@ -51,3 +51,4 @@ acceptance_criteria:
   gate: true
   checked: false
   verification: 'Sequencing: (1) ac-01 lands — `time_gated` field exists in the canonical schema; (2) this AC (ac-09) is amended in spec.yaml to add `time_gated: true` (substrate now accepts the field); (3) remaining ACs ship; (4) `orbit spec close` closes the spec cleanly because ac-09 is time-gated (no `--force`); (5) release runs via `/orb:release` — Cargo.toml bump, tag, brew tap update; (6) smoke on the released binary: `brew upgrade orbit` shows the new tag, then `orbit spec close <test-spec-with-unchecked-ac>` returns `Error::conflict`, `orbit spec close --force <same-spec>` succeeds, `orbit spec close <test-spec-with-only-time-gated-unchecked>` succeeds without `--force`; (7) smoke result captured in a follow-up memory or commit message, and ac-09''s `checked:` is flipped to `true` in a small follow-up commit. The flow validates the feature end-to-end on its own delivery without `--force` theatre.'
+  time_gated: true

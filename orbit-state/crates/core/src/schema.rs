@@ -94,7 +94,7 @@ impl Memory {
 
 impl AcceptanceCriterion {
     pub const FIELDS: &'static [&'static str] =
-        &["id", "description", "gate", "checked", "verification"];
+        &["id", "description", "gate", "checked", "verification", "time_gated"];
 }
 
 impl Scenario {
@@ -144,6 +144,14 @@ pub struct AcceptanceCriterion {
     pub checked: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub verification: Option<String>,
+    /// `true` when the AC is legitimately expected to remain unchecked at
+    /// spec.close (post-deploy observation, operator sign-off awaiting
+    /// calendar, etc.). spec.close excludes `time_gated: true` ACs from
+    /// the unchecked-blocking set per spec 2026-05-13-spec-close-ac-preflight.
+    /// Skip-if-false on serialise keeps existing canonical output byte-
+    /// identical (the vast majority of ACs are not time-gated).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub time_gated: bool,
 }
 
 // ============================================================================
@@ -427,6 +435,7 @@ unknown_field: oops
                 gate: false,
                 checked: false,
                 verification: Some("v".into()),
+                time_gated: false,
             }],
         };
         let value = serde_yaml::to_value(&spec).unwrap();
@@ -513,6 +522,7 @@ unknown_field: oops
             gate: false,
             checked: false,
             verification: Some("v".into()),
+            time_gated: true,
         };
         let value = serde_yaml::to_value(&ac).unwrap();
         let got = top_level_keys(&value);
@@ -569,10 +579,40 @@ unknown_field: oops
                 gate: true,
                 checked: false,
                 verification: Some("v1".into()),
+                time_gated: false,
             }],
         };
         let yaml = serde_yaml::to_string(&spec).unwrap();
         let parsed: Spec = serde_yaml::from_str(&yaml).unwrap();
         assert_eq!(spec, parsed);
+    }
+
+    #[test]
+    fn acceptance_criterion_round_trips_time_gated_true() {
+        // ac-01 verification: round-trip an AC with time_gated: true,
+        // serialise to canonical YAML, deserialise, assert byte-identical
+        // equality on the struct.
+        let ac = AcceptanceCriterion {
+            id: "ac-18".into(),
+            description: "Post-cutover monitoring — 7-day live behaviour window".into(),
+            gate: false,
+            checked: false,
+            verification: Some("operator dashboard review for 7 calendar days".into()),
+            time_gated: true,
+        };
+        let yaml = serde_yaml::to_string(&ac).unwrap();
+        let parsed: AcceptanceCriterion = serde_yaml::from_str(&yaml).unwrap();
+        assert_eq!(ac, parsed);
+        // Sanity: the field surfaces in the serialised YAML.
+        assert!(yaml.contains("time_gated: true"), "time_gated must serialise: {yaml}");
+    }
+
+    #[test]
+    fn acceptance_criterion_parses_legacy_yaml_without_time_gated() {
+        // ac-01 verification: existing spec.yaml content without the
+        // time_gated field parses cleanly and deserialises with time_gated: false.
+        let legacy_yaml = "id: ac-01\ndescription: legacy\ngate: false\nchecked: false\n";
+        let parsed: AcceptanceCriterion = serde_yaml::from_str(legacy_yaml).unwrap();
+        assert_eq!(parsed.time_gated, false);
     }
 }
