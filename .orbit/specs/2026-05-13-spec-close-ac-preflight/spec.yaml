@@ -2,7 +2,7 @@ id: 2026-05-13-spec-close-ac-preflight
 goal: '`orbit spec close` pre-flights acceptance-criterion state — it refuses to flip a spec to closed while any non-time-gated AC remains unchecked, returning `Error::conflict` with the offending ids (gate ACs flagged separately) and mirroring the existing unfinished-tasks guard at `verbs.rs:1147`. A deliberate `--force` flag is the only opt-in. Time-gated ACs (declared via a new `time_gated: bool` field on `AcceptanceCriterion`, default `false`, `#[serde(default)]` so existing specs are unaffected) are reported in the close output as deferred-OK but do not block. The happy path is unchanged. Intent contract: see the "What good looks like" paragraph at `.orbit/specs/2026-05-13-spec-close-ac-preflight/interview.md`.'
 cards:
 - 0034-spec-close-ac-preflight
-status: open
+status: closed
 labels:
 - spec
 acceptance_criteria:
