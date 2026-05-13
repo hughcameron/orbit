@@ -1,0 +1,54 @@
+id: 0034-spec-close-ac-preflight
+feature: spec.close AC pre-flight — closure refuses to slip past unchecked acceptance criteria
+as_a: orbit author or driving agent
+i_want: '`orbit spec close` to inspect acceptance-criterion state before flipping `status: closed` and to surface any unchecked ACs at the close boundary — mirroring the existing unfinished-tasks guard'
+so_that: a spec cannot drift to closed while ACs remain unchecked — the gap is named where it can still be reconciled (tick the work off as done, or hold the close until it is) rather than discovered later in a memory, a retro, or by a downstream reader
+goal: '`orbit spec close` reads the spec''s acceptance_criteria, identifies entries with `checked: false`, and surfaces them by id before status flips; closure does not slip past unchecked ACs silently — exact disposition (warn-and-confirm vs hard-conflict + opt-in flag) to be settled at /orb:design'
+maturity: planned
+scenarios:
+- name: Unchecked ACs surface at the close boundary
+  given: 'a spec with one or more `checked: false` acceptance criteria and no unfinished child tasks'
+  when: '`orbit spec close <id>` runs'
+  then: the verb names the unchecked ACs by id (and flags gate ACs separately) and the spec does not silently transition to closed
+  gate: true
+- name: Clean spec closes without new ceremony
+  given: 'a spec with every AC `checked: true` and no unfinished tasks'
+  when: '`orbit spec close <id>` runs'
+  then: closure proceeds exactly as today — no new prompts, no new flags required, no behaviour change for the happy path
+  gate: true
+- name: AC pre-flight mirrors task pre-flight
+  given: spec.close already rejects when child tasks are unfinished (verbs.rs around line 1147 — `Error::conflict` with sentence-form listing the unfinished ids)
+  when: the AC pre-flight ships
+  then: the surface mirrors the existing pattern — same error category, same sentence shape, same caller experience — so callers (CLI, MCP, /orb:drive) gain a sibling gate rather than a new mental model
+  gate: false
+- name: Gate ACs carry extra weight in the surfacing
+  given: 'a spec with one or more unchecked ACs where `gate: true`'
+  when: the pre-flight runs
+  then: gate ACs are called out separately in the output — closing with an unchecked gate is a stronger signal of premature closure than a non-gate AC, even when the disposition (warn vs block) is the same
+  gate: false
+- name: The premature-close pattern is detectable in the abstract
+  given: a future umbrella spec with dozens of ACs reaches the close boundary and one AC was overlooked during the close-out sweep
+  when: '`orbit spec close <id>` runs'
+  then: pre-flight catches the slip — the author sees "ac-15 unchecked" before status flips, and the close is either reconciled deliberately or deferred — instead of the spec being recorded as closed and the discrepancy surfacing weeks later when a reader spots `[ ] ac-15`
+  gate: false
+- name: Wired into the framework
+  given: AC pre-flight ships on spec.close
+  when: enforcement is examined
+  then: the behaviour exists on both CLI and MCP surfaces (parity), is covered by unit tests at the verb level alongside the existing unfinished-tasks tests, and /orb:drive's close step names the pre-flight so a driving agent understands the gate before hitting it — without these wires the guard ships but is silently bypassable on one surface or invisible to the agent that needs it
+  gate: true
+specs: []
+relations:
+- card: 0020-orbit-state
+  type: feeds
+  reason: serves pillar 3 (state-persistence) — close is a substrate-state-mutation verb, and integrity at the close boundary is what the substrate's value depends on; the existing unfinished-tasks guard establishes the precedent, AC pre-flight extends it to the other half of the spec contract
+- card: 0009-mission-resilience
+  type: feeds
+  reason: drives maintain spec contract fidelity through mid-flight disruptions; AC pre-flight is the close-boundary counterpart — drives can drift mid-flight without re-anchoring, and AC pre-flight catches whether the drift was actually closed out before the spec flips to done
+- card: 0026-executive-communication
+  type: feeds
+  reason: serves pillar 1 (executive interaction) — the author does not need to remember to audit AC state before each close; the substrate audits and surfaces concisely, paying the compression cost so the author can trust the close transition
+references:
+- 'orbit-state/crates/core/src/verbs.rs:1097 (spec_close): the existing unfinished-tasks pre-flight at line 1147 — `Error::conflict`, sentence-form list of offenders — is the pattern AC pre-flight should mirror'
+- 'orbit-state/crates/core/src/schema.rs:138 (AcceptanceCriterion): `checked: bool` and `gate: bool` are already substrate-canonical; the data is present, only the close-time read is missing'
+notes:
+- 'trigger: 2026-05-13 session closed two umbrella specs (orbit-state-v0.1 and orbit-distro) and Hugh flagged the orbit-distro close as premature — even though every AC happened to be marked `checked: true` in the YAML, there was no mechanism that would have caught a slip if one AC had been overlooked; close-readiness was entirely a human/agent judgement, not a substrate check. This card captures the gap that prompted that observation.'
