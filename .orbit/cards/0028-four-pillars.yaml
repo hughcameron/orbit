@@ -1,7 +1,7 @@
 id: 0028-four-pillars
 feature: Four pillars — the load-bearing user outcomes orbit exists to deliver
 as_a: orbit author / contributor / agent
-i_want: a named, single-source articulation of the four user outcomes orbit optimises for, with every card citing which pillar(s) it serves
+i_want: 'a named, single-source articulation of the four user outcomes orbit optimises for, with pillar-defining cards forming a relations graph that other cards may opt into via `relations: feeds` edges'
 so_that: cards, skills, and design choices are evaluated against an explicit why-test rather than argued in isolation — and new contributors / future agents inherit the framework that has been held implicitly
 goal: orbit's four user outcomes are documented in CLAUDE.md and README.md, and the relations graph that pillar-defining cards form (each pillar has cards that operationalise it) is the framework's structural wire; cards may declare pillar contribution via existing relations:feeds edges, optional and emergent at distill time
 maturity: emerging
