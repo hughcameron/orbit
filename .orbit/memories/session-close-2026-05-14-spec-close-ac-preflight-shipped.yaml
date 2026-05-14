@@ -1,0 +1,15 @@
+key: session-close-2026-05-14-spec-close-ac-preflight-shipped
+body: |-
+  Session shipped orbit 0.4.13 end-to-end through the full pipeline (card → design → spec → review-spec → implement → close → release → smoke) in one sitting. Card 0034 (spec-close-ac-preflight) closed; card 0035 (ac-taxonomy) filed as the deferred generalisation of time_gated: bool → categorical AC type. Three durable findings worth flagging:
+
+  (1) The feature was dogfooded on its own delivery — ac-09 (brew release smoke) carries time_gated: true so spec.close used the new path rather than --force. First canonical use of the feature is the spec that introduces it. Pattern worth repeating for substrate features whose own verification is calendar-bound.
+
+  (2) /orb:release skill had two gaps caught only at the brew-upgrade step: (a) it didn't bump orbit-state/Cargo.toml + reinstall the local binary before the release commit (satisfies the §1.4 parity gate only by retroactive rebuild), and (b) it didn't cut the v<version> git tag, which is the trigger for release.yml at meridian-online/orbit. Without the tag, the plugin landed in the marketplace cache but brew upgrade meridian-online/tap/orbit kept reporting the old version. Both gaps patched in plugins/orb/skills/release/SKILL.md — step 3 now bumps Cargo.toml in lockstep and rebuilds; step 4 (renamed 'Commit, Tag, and Push') cuts and pushes the tag and gh run watch's the workflow before declaring done.
+
+  (3) /orb:spec skill template lists Spec fields that don't exist in canonical Spec::FIELDS (constraints, implementation_notes, ontology_schema, evaluation_principles, exit_conditions, metadata). Writing a spec that follows the template literally produces a deny_unknown_fields parse failure. Worked around this session by writing only canonical fields and stashing implementation_notes etc. in interview.md. Not patched yet — worth a follow-up to bring the skill template back in sync with orbit-state's actual schema. Sibling shape to the /orb:release gap.
+
+  Also: card 0028 (four-pillars) i_want re-framed from schema-field to relations-graph framing. Beelink skill ~/.claude/skills/beelink/SKILL.md had model: sonnet frontmatter that pinned it to Sonnet 4.6's 1M-context tier (requires /extra-usage); removed the line so it inherits the parent session's model.
+
+  Substrate state at close: zero open specs, orbit verify clean, brew binary at 0.4.13 with full smoke coverage. Push successful. AC pre-flight is live everywhere.
+timestamp: 2026-05-14T00:32:45.460553866Z
+labels: []
