@@ -87,15 +87,43 @@ Parse the current version string (MAJOR.MINOR.PATCH) and apply the requested bum
 - `minor`: increment MINOR, reset PATCH to 0
 - `major`: increment MAJOR, reset MINOR and PATCH to 0
 
-Update `plugins/orb/.claude-plugin/plugin.json` with the new version.
+Update **all** of the following to the new version — the plugin and the substrate binary release in lockstep, by convention:
 
-### 4. Commit and Push
+- `plugins/orb/.claude-plugin/plugin.json` — the `version` field
+- `orbit-state/Cargo.toml` — `[workspace.package] version`
+
+Then refresh the lockfile and reinstall the binary so the local `orbit` on PATH matches the about-to-be-released version. This both satisfies §1.4's parity gate retroactively and verifies the substrate compiles before the release commit lands:
 
 ```bash
-git add plugins/orb/.claude-plugin/plugin.json CHANGELOG.md
+( cd orbit-state && cargo build --release --quiet && cargo install --path crates/cli --quiet )
+orbit --version    # must print the new version
+```
+
+If `cargo build` fails or `orbit --version` doesn't print the new version, **stop**. Fix the build before continuing — a release tag pushed against an uncompiling tree triggers the workflow against broken source.
+
+### 4. Commit, Tag, and Push
+
+The version-bump commit is the one that gets tagged. The tag is what triggers `.github/workflows/release.yml` to build cross-platform binaries and update `meridian-online/homebrew-tap` — without it, the plugin lands on the marketplace cache but the brew formula stays on the previous version.
+
+```bash
+git add plugins/orb/.claude-plugin/plugin.json CHANGELOG.md \
+        orbit-state/Cargo.toml orbit-state/Cargo.lock
 git commit -m "Bump version to <new_version>"
 git push origin main
+
+# Tag the bump commit and push it — release.yml triggers on `v*` tag push.
+git tag "v<new_version>"
+git push origin "v<new_version>"
 ```
+
+Watch the workflow to completion before considering the release done. The workflow updates the brew tap on success; until it finishes, `brew upgrade meridian-online/tap/orbit` will report the old version. A typical run takes a few minutes (cross-platform builds + tap update):
+
+```bash
+RUN_ID=$(gh run list --workflow=release.yml --limit 1 --json databaseId --jq '.[0].databaseId')
+gh run watch "$RUN_ID" --exit-status
+```
+
+If `gh run watch` exits non-zero, surface the failure to the user and **do not proceed to step 5** — the marketplace cache shouldn't advertise a new version whose binary distribution failed.
 
 ### 5. Update the Marketplace Cache
 

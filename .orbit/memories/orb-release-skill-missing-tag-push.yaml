@@ -1,0 +1,4 @@
+key: orb-release-skill-missing-tag-push
+body: 'The /orb:release skill bumps plugins/orb/.claude-plugin/plugin.json and orbit-state/Cargo.toml + Cargo.lock, writes a CHANGELOG entry, commits, pushes to origin, and updates the marketplace cache + installed_plugins.json. It does NOT cut the v<version> git tag, which is the trigger for the release.yml workflow at meridian-online/orbit (binaries + meridian-online/homebrew-tap update). Without the tag push, brew upgrade meridian-online/tap/orbit reports the old version still installed. Verified 2026-05-14 at v0.4.13 release. Durable fix: extend plugins/orb/skills/release/SKILL.md to include ''git tag v<new_version> && git push origin v<new_version>'' as the explicit final step before the marketplace cache pull, plus a brief gh run watch hint.'
+timestamp: 2026-05-13T23:45:08.694174159Z
+labels: []
