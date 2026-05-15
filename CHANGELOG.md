@@ -2,6 +2,42 @@
 
 All notable changes to orbit are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.4.14] - 2026-05-16
+
+Agent learning loop v1 ships — skills can record per-invocation outcomes and read recurrence; sessions get a canonical `Session` entity and an idempotent distill verb. Closes spec `2026-05-15-agent-learning-loop` (cards 0022-skill-curator, 0023-memory-loop). Card 0023 bumps `planned → emerging` because `orbit session prime` now scores memories by label-overlap with open-spec labels before recency — the "recent and relevant" gate is real. Card 0022 stays `planned`: the convention is an explicit stopgap until the curator-metadata system ships.
+
+### Binary state (substrate-binary parity gate)
+
+`orbit-state/` changed in this window (3 commits add four CLI/MCP verbs). Released via the gate's path (c) — forward-compatible:
+
+- The new verbs (`session.start`, `session.distill`, `skill.record-invocation`, `skill.recurrence`) are purely additive — no existing verb signature changed, no entity-schema break.
+- The Stop hook in `.claude/settings.json` is wrapped `(orbit session distill 2>/dev/null && rm -f .orbit/.session-id) || true`, so a pre-0.4.14 binary on PATH degrades silently rather than erroring.
+- `orbit verify` against the new substrate is unchanged — it doesn't reach for the new verbs.
+
+Users on the brewed `orbit` will see the new skill prose (and the Stop hook will no-op on session end) until they rebuild/reinstall the binary at 0.4.14+. Until then, the new verbs are reachable via the in-repo release binary (`orbit-state/target/release/orbit`).
+
+### Added
+
+- `orbit skill record-invocation <skill_id> --outcome <enum> [--correction <str>]` — appends one row to `.orbit/skills/<skill_id>.invocations.jsonl`. The `outcome` arg accepts `worked`, `partial`, `didnt-apply`, `incorrect`; any other value returns a malformed error naming the accepted set. `correction` is optional free text. `session_id` is sourced from `ORBIT_SESSION_ID` env, falling back to `.orbit/.session-id`, falling back to an unavailable error naming both sources.
+- `orbit skill recurrence <skill_id> [--since <iso-date>]` — reads the per-skill invocation stream and returns per-outcome counts with the recorded `correction` entries. Every outcome key (`worked`, `partial`, `didnt-apply`, `incorrect`) is always present in the response even when count is 0, so agents can index without first checking for missing keys. Returns the empty shape (total=0) when the file is absent.
+- `orbit session start [--id <uuid>]` — generates a UUIDv4 (or uses the supplied id) and writes it to `.orbit/.session-id` atomically. Idempotent on re-run: a new UUID overwrites, which is the fresh-session semantics.
+- `orbit session distill` — idempotent CLI/MCP verb that writes or updates `.orbit/sessions/<session-id>.yaml`. CLI reads the distillate from stdin (or `--from <path>`); MCP takes a required `distillate` arg. Session_id precedence is `--session-id` > `ORBIT_SESSION_ID` > `.orbit/.session-id`. First call sets `started_at = ended_at = now`; subsequent calls preserve `started_at` and advance `ended_at`.
+- `Session` canonical YAML entity at `.orbit/sessions/<session-id>.yaml` — substrate-written, round-trippable, schema-version bumped 0.1 → 0.2. The migration is structurally a no-op (additive) and the runner rejects unknown versions with `malformed` rather than guessing.
+- `SkillInvocation` event struct + `InvocationOutcome` kebab-case enum in `schema.rs`, alongside the existing `TaskEvent` / `NoteEvent` family. Append-only JSONL, excluded from the CI round-trip gate (events aren't round-trippable as a unit).
+- `.orbit/conventions/skill-self-improvement.md` — codifies the v1 rules for agent-judgment live edits to `SKILL.md`: ≥2 same-skill-same-outcome recurrence threshold, one-off failures route to `orbit memory remember`, named allowlist of editable skills (`card`, `design`, `discovery`, `implement`, `review-spec`, `spec`), and the worked example showing read-recurrence → reason-from-corrections → edit-SKILL.md flow. The convention names card 0022 as the future home of metadata-based enforcement.
+- `read_session_id` shared helper (`orbit-state/crates/core/src/session.rs`) — the canonical sourcing precedence consumed by every session-scoped verb. New module so future session-scoped verbs reach for one entry point.
+- `.orbit/.session-id` added to `.orbit/.gitignore` (transient per-clone state).
+- 40 new unit tests and 8 new CLI+MCP parity tests covering the new verbs end-to-end.
+
+### Changed
+
+- `orbit session prime` ranks memories by label-overlap with open-spec labels (descending) before timestamp DESC. When no open spec has labels, behaviour is unchanged. The cap, `item_bound`, and `next_step` text are unchanged.
+- `.claude/settings.json` wires the loop into Claude Code: `SessionStart` chains `orbit session start` + `orbit session prime`; `Stop` runs `orbit session distill` then removes `.orbit/.session-id`; `PreCompact` runs `orbit session prime`. Stale `bd prime` references retired. The Stop hook is wrapped to degrade gracefully when the verbs aren't on PATH yet (see Binary state above).
+
+### Fixed
+
+- `/orb:release` skill no longer pins `model: sonnet` in its frontmatter — the pin forced 1M-context Sonnet, which requires extra-usage enablement. The skill now inherits the invoking session's model.
+
 ## [0.4.13] - 2026-05-14
 
 `orbit spec close` gains an AC pre-flight: it refuses to flip a spec to closed while any non-time-gated AC remains `checked: false`, mirroring the existing unfinished-tasks guard. A new `time_gated: bool` field on `AcceptanceCriterion` carves out ACs that are legitimately expected to remain unchecked at close (post-deploy observation windows, operator sign-off awaiting calendar) so they don't have to be force-closed. Closes spec `2026-05-13-spec-close-ac-preflight` (card 0034). Dogfooded on its own delivery: the spec's release-smoke AC (ac-09) is itself `time_gated: true`, so this spec closed via the new path rather than `--force`.
