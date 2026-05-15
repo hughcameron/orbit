@@ -30,7 +30,7 @@ use crate::canonical::{parse_yaml, serialise_yaml};
 use crate::index::Index;
 use crate::layout::OrbitLayout;
 use crate::migrations::init_schema_version;
-use crate::schema::{Card, Choice, Memory, SchemaVersion, Spec};
+use crate::schema::{Card, Choice, Memory, SchemaVersion, Session, Spec};
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use std::path::{Path, PathBuf};
@@ -117,7 +117,13 @@ pub fn verify_all(layout: &OrbitLayout) -> std::io::Result<VerifyOutcome> {
         check_round_trip::<Memory>(&path, &mut outcome);
     }
 
-    // 6. Index rebuild check (ac-17).
+    // 6. sessions/*.yaml — substrate-written summaries, included in the
+    //    round-trip gate (sessions are NOT event streams).
+    for path in list_or_empty(layout.list_session_files()) {
+        check_round_trip::<Session>(&path, &mut outcome);
+    }
+
+    // 7. Index rebuild check (ac-17).
     //
     // We always rebuild against a fresh in-memory index — that's the hygiene
     // signal. A failure here is a file that parses individually but breaks

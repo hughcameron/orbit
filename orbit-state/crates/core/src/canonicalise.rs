@@ -27,7 +27,7 @@
 
 use crate::canonical::{parse_yaml, serialise_yaml};
 use crate::layout::OrbitLayout;
-use crate::schema::{Card, Choice, Memory, Spec};
+use crate::schema::{Card, Choice, Memory, Session, Spec};
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use std::path::{Path, PathBuf};
@@ -74,6 +74,9 @@ pub fn canonicalise_all(layout: &OrbitLayout, dry_run: bool) -> CanonicaliseRepo
     }
     for path in list_or_empty(layout.list_memory_files()) {
         canonicalise_file::<Memory>(&path, dry_run, &mut report);
+    }
+    for path in list_or_empty(layout.list_session_files()) {
+        canonicalise_file::<Session>(&path, dry_run, &mut report);
     }
 
     report

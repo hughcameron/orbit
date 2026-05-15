@@ -21,7 +21,7 @@ use crate::layout::OrbitLayout;
 use crate::schema::SchemaVersion;
 
 /// Current schema version shipped by this build.
-pub const CURRENT_SCHEMA_VERSION: &str = "0.1";
+pub const CURRENT_SCHEMA_VERSION: &str = "0.2";
 
 /// A single schema migration step.
 #[derive(Debug)]
@@ -31,10 +31,21 @@ pub struct Migration {
     pub apply: fn(&OrbitLayout) -> Result<()>,
 }
 
-/// The migration registry. Empty at v0.1.0 — no prior schemas exist to migrate
-/// from. New entries land in subsequent v0.1.x / v0.2 releases.
+/// The migration registry. Each entry is one step in the chain; the runner
+/// walks from the on-disk version up to `CURRENT_SCHEMA_VERSION`.
+///
+/// 0.1 → 0.2 (spec 2026-05-15-agent-learning-loop ac-02): structural no-op.
+/// The change adds the `Session` canonical entity at `.orbit/sessions/<id>.yaml`
+/// and the `SkillInvocation` append-only stream at `.orbit/skills/<id>.invocations.jsonl`.
+/// Both are additive — no existing files need rewriting — so the migration
+/// runner only needs to bump the recorded version. Fresh-at-0.2 workspaces
+/// initialised by `init_schema_version` never hit this path.
 pub fn registry() -> &'static [Migration] {
-    &[]
+    &[Migration {
+        from: "0.1",
+        to: "0.2",
+        apply: |_layout| Ok(()),
+    }]
 }
 
 /// Initialise the schema-version file at the configured layout.
@@ -98,6 +109,22 @@ pub fn run(layout: &OrbitLayout, target: &str) -> Result<MigrationReport> {
     }
 
     let registry = registry();
+
+    // Spec 2026-05-15-agent-learning-loop ac-02: an on-disk version that is
+    // neither the target nor a known migration source is malformed input —
+    // not a missing migration path. The known-versions set is derived from
+    // the registry (every `from` and `to`) plus the target.
+    if !is_known_version(registry, &current_sv.version, target) {
+        return Err(Error::malformed(
+            "migration.run",
+            format!(
+                "schema-version file has unknown version `{}`; known versions: {}",
+                current_sv.version,
+                known_versions_csv(registry, target)
+            ),
+        ));
+    }
+
     let chain = build_chain(registry, &current_sv.version, target)?;
     for step in chain {
         (step.apply)(layout)?;
@@ -118,6 +145,24 @@ pub struct MigrationReport {
     pub applied: usize,
     /// True when the file was already at the target version.
     pub skipped: bool,
+}
+
+fn is_known_version(registry: &[Migration], version: &str, target: &str) -> bool {
+    if version == target {
+        return true;
+    }
+    registry.iter().any(|m| m.from == version || m.to == version)
+}
+
+fn known_versions_csv(registry: &[Migration], target: &str) -> String {
+    let mut versions: Vec<&str> = registry
+        .iter()
+        .flat_map(|m| [m.from, m.to])
+        .chain(std::iter::once(target))
+        .collect();
+    versions.sort_unstable();
+    versions.dedup();
+    versions.join(", ")
 }
 
 fn build_chain<'a>(
@@ -291,12 +336,104 @@ mod tests {
     }
 
     #[test]
-    fn registry_at_v0_1_is_empty() {
-        // Documented invariant: no migrations exist at v0.1.0 because we're
-        // shipping the first version. New entries land in subsequent releases.
-        assert!(
-            registry().is_empty(),
-            "registry must be empty at v0.1.0; future versions add entries"
+    fn registry_at_v0_2_has_one_entry() {
+        // spec 2026-05-15-agent-learning-loop ac-02: the 0.1 → 0.2 entry is
+        // the first migration in orbit's history. If a future version adds
+        // 0.2 → 0.3 this test grows to assert the chain shape.
+        let r = registry();
+        assert_eq!(r.len(), 1, "expected exactly one migration entry at v0.2");
+        assert_eq!(r[0].from, "0.1");
+        assert_eq!(r[0].to, "0.2");
+    }
+
+    #[test]
+    fn migrate_0_1_to_0_2_writes_new_version_and_leaves_files_untouched() {
+        // spec 2026-05-15-agent-learning-loop ac-02: a fixture at 0.1 with
+        // existing canonical files must end at 0.2 with no other file
+        // mutated — the migration is structural no-op + version bump.
+        let dir = tempdir().unwrap();
+        let layout = OrbitLayout::at(dir.path());
+        layout.ensure_dirs().unwrap();
+
+        // Plant a 0.1 schema-version file (overriding init's default).
+        let sv = SchemaVersion { version: "0.1".into(), note: None };
+        let text = serialise_yaml(&sv).unwrap();
+        write_atomic(layout.schema_version_file(), text.as_bytes()).unwrap();
+
+        // Plant a canonical memory file we will assert remained untouched.
+        let memory_path = layout.memory_file("test-memory");
+        let memory_yaml = "key: test-memory\nbody: hello\ntimestamp: 2026-05-15T12:00:00Z\n";
+        write_atomic(&memory_path, memory_yaml.as_bytes()).unwrap();
+        let memory_mtime_before = std::fs::metadata(&memory_path).unwrap().modified().unwrap();
+
+        std::thread::sleep(std::time::Duration::from_millis(20));
+        let report = run(&layout, CURRENT_SCHEMA_VERSION).unwrap();
+        assert_eq!(report.from, "0.1");
+        assert_eq!(report.to, "0.2");
+        assert_eq!(report.applied, 1);
+        assert!(!report.skipped);
+
+        // schema-version file is now 0.2.
+        let new_text = std::fs::read_to_string(layout.schema_version_file()).unwrap();
+        let new_sv: SchemaVersion = parse_yaml(&new_text).unwrap();
+        assert_eq!(new_sv.version, "0.2");
+
+        // The memory file was not touched.
+        let memory_mtime_after = std::fs::metadata(&memory_path).unwrap().modified().unwrap();
+        assert_eq!(
+            memory_mtime_before, memory_mtime_after,
+            "0.1 → 0.2 must not rewrite existing canonical files"
         );
+        let memory_text_after = std::fs::read_to_string(&memory_path).unwrap();
+        assert_eq!(memory_text_after, memory_yaml);
+    }
+
+    #[test]
+    fn migrate_already_at_0_2_is_noop() {
+        // spec 2026-05-15-agent-learning-loop ac-02: a fixture already at
+        // 0.2 (fresh workspace seeded after this AC ships) must not run
+        // the 0.1 → 0.2 path. Zero files change.
+        let dir = tempdir().unwrap();
+        let layout = OrbitLayout::at(dir.path());
+        layout.ensure_dirs().unwrap();
+        init_schema_version(&layout).unwrap();
+
+        let sv_mtime_before = std::fs::metadata(layout.schema_version_file())
+            .unwrap()
+            .modified()
+            .unwrap();
+
+        std::thread::sleep(std::time::Duration::from_millis(20));
+        let report = run(&layout, CURRENT_SCHEMA_VERSION).unwrap();
+        assert_eq!(report.applied, 0);
+        assert!(report.skipped);
+
+        let sv_mtime_after = std::fs::metadata(layout.schema_version_file())
+            .unwrap()
+            .modified()
+            .unwrap();
+        assert_eq!(
+            sv_mtime_before, sv_mtime_after,
+            "fresh-at-0.2 must not rewrite the schema-version file"
+        );
+    }
+
+    #[test]
+    fn migrate_unknown_version_is_malformed() {
+        // spec 2026-05-15-agent-learning-loop ac-02: a version that is
+        // neither the target nor a known migration source returns
+        // Error::malformed rather than NotFound. This protects against
+        // silent guessing on hand-edited or future-versioned workspaces.
+        let dir = tempdir().unwrap();
+        let layout = OrbitLayout::at(dir.path());
+        layout.ensure_dirs().unwrap();
+
+        let sv = SchemaVersion { version: "0.9-future".into(), note: None };
+        let text = serialise_yaml(&sv).unwrap();
+        write_atomic(layout.schema_version_file(), text.as_bytes()).unwrap();
+
+        let err = run(&layout, CURRENT_SCHEMA_VERSION).unwrap_err();
+        assert_eq!(err.category, Category::Malformed);
+        assert!(err.message.contains("0.9-future"));
     }
 }

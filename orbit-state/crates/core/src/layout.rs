@@ -121,6 +121,26 @@ impl OrbitLayout {
         self.memories_dir().join(format!("{key}.yaml"))
     }
 
+    pub fn sessions_dir(&self) -> PathBuf {
+        self.root.join("sessions")
+    }
+
+    pub fn session_file(&self, session_id: &str) -> PathBuf {
+        self.sessions_dir().join(format!("{session_id}.yaml"))
+    }
+
+    pub fn skills_dir(&self) -> PathBuf {
+        self.root.join("skills")
+    }
+
+    pub fn skill_invocations_file(&self, skill_id: &str) -> PathBuf {
+        self.skills_dir().join(format!("{skill_id}.invocations.jsonl"))
+    }
+
+    pub fn session_id_file(&self) -> PathBuf {
+        self.root.join(".session-id")
+    }
+
     /// Create all expected subdirectories. Idempotent.
     pub fn ensure_dirs(&self) -> std::io::Result<()> {
         for dir in [
@@ -130,6 +150,7 @@ impl OrbitLayout {
             &self.memos_dir(),
             &self.choices_dir(),
             &self.memories_dir(),
+            &self.sessions_dir(),
             &self.locks_dir(),
         ] {
             std::fs::create_dir_all(dir)?;
@@ -175,6 +196,10 @@ impl OrbitLayout {
 
     pub fn list_memory_files(&self) -> std::io::Result<Vec<PathBuf>> {
         list_yaml_files(&self.memories_dir())
+    }
+
+    pub fn list_session_files(&self) -> std::io::Result<Vec<PathBuf>> {
+        list_yaml_files(&self.sessions_dir())
     }
 }
 
