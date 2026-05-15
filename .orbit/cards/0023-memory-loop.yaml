@@ -4,7 +4,7 @@ as_a: agent starting a session in a project
 i_want: relevant project-specific facts that prior sessions discovered to be in my context window from the moment I start work
 so_that: I do not re-discover the same gotchas, conventions, and quirks across sessions — and I can register new facts as I find them so future sessions benefit immediately
 goal: agents accumulate competence across sessions — facts discovered in one session are available in the next without re-discovery, while the memory file stays curated through periodic audit
-maturity: planned
+maturity: emerging
 scenarios:
 - name: Agent appends a discovered fact
   given: an agent finds a non-obvious project fact during work (e.g., "FineType uses uv, not pip")
