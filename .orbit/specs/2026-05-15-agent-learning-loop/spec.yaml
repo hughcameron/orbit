@@ -3,7 +3,7 @@ goal: 'Implement v1 of the agent learning loop scoped by the 2026-05-15 discover
 cards:
 - 0022-skill-curator
 - 0023-memory-loop
-status: open
+status: closed
 labels:
 - spec
 acceptance_criteria:
