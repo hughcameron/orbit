@@ -29,7 +29,7 @@ Not every idea is ready for a feature card. Sometimes you just need to jot somet
 
 ### 2. Ensure the Directory Exists
 
-Check that `.orbit/memos/` exists. If not, create it (including `.orbit/cards/` if needed).
+Check that `.orbit/memos/` exists. If not, create it.
 
 ### 3. Capture the Memo
 
