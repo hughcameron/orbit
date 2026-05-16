@@ -2,6 +2,34 @@
 
 All notable changes to orbit are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.4.17] - 2026-05-16
+
+Per-card session handover. The `Session` entity gains an optional `card_id`; new verbs `orbit session set-card` and `orbit session handover` let agents bind a session to a card and retrieve the latest matching session; `orbit session prime` now surfaces the latest handover at session start. `orbit session distill` learns to extract `last_assistant_message` from the Claude Code Stop-hook JSON envelope — the carrier was previously dumping raw JSON into `Session.distillate`. Closes 10 of 11 ACs in spec `2026-05-16-session-handover` (card 0036). Schema bumps 0.3 → 0.4 (additive no-op, chains after the 0.2 → 0.3 ac-taxonomy migration).
+
+### Added
+
+- `card_id: Option<String>` field on `Session` (orbit-state/crates/core/src/schema.rs). `#[serde(default, skip_serializing_if = "Option::is_none")]` keeps canonical output byte-identical for sessions without a card binding.
+- `orbit session set-card <id>` CLI + MCP verb — writes `.orbit/.session-card` atomically; validates `<id>` via the existing card-lookup helper. `orbit session distill --card <id>` and `orbit session handover --card <id>` both fall back to this file when the flag is absent.
+- `orbit session handover [--card <id>] [--since <iso>]` CLI + MCP verb — returns the most-recent matching `Session` across the substrate.
+- `handover` field on the `orbit session prime` envelope — carries the most-recent `Session` across all cards. Per-card lookup remains the explicit `handover` verb; prime surfaces only the global latest.
+- `0.3 → 0.4` schema migration step — additive no-op (adds the optional `card_id` field); chains after the 0.2 → 0.3 ac-taxonomy migration on the same `ensure_current` walk.
+- `.orbit/choices/0024-handover-register-is-discursive.yaml` MADR — records the deliberate divergence from STYLE.md's BLUF discipline for handover prose. Audience and purpose differ: the handover is reading-for-orientation prose written for the next agent, not a decision brief written for Hugh.
+- `.orbit/conventions/session-handover.md` — agent-facing discipline (call `set-card` early, write a discursive reflection covering what was tried + what worked + what didn't + where to pick up).
+
+### Changed
+
+- `orbit session distill` reads stdin and detects a Claude Code Stop-hook JSON envelope; when present, extracts `last_assistant_message` and stores that as `Session.distillate`. Plain-text stdin is preserved verbatim — the JSON-envelope path is opt-in by structural detection, not by flag. Fixes the load-bearing carrier bug where the entire envelope was being stored as distillate prose.
+- `.claude/settings.json` Stop hook updates so both `.session-id` and `.session-card` are deleted after `orbit session distill` completes. The `(... 2>/dev/null && rm -f ...) || true` invariant is preserved — distill failures still fall through harmlessly to keep Stop unblocked.
+- `CURRENT_SCHEMA_VERSION` bumps `0.3` → `0.4`. The schema-version file step is idempotent on already-migrated trees.
+
+### Binary state (substrate-binary parity gate)
+
+`orbit-state/` changed in this window (`Session.card_id` field, `0.3 → 0.4` migration, `session_set_card` / `session_handover` verbs, distill JSON-envelope extraction, prime envelope `handover` wiring). Released via the gate's path (a) — rebuild and reinstall the orbit binary at 0.4.17 before tagging so substrate and skills ship in lockstep.
+
+### Deferred to follow-up
+
+- ac-11 of spec `2026-05-16-session-handover` (end-to-end ops-band smoke against the released brew binary on the Beelink). Defers `spec.close` per the `ac_type: ops` band — to be executed after this release's brew formula updates.
+
 ## [0.4.16] - 2026-05-16
 
 Typed acceptance criteria: `AcceptanceCriterion` now carries a five-value `ac_type` enum (`code` / `config` / `doc` / `ops` / `observation`) declaring what kind of evidence closes the AC. `spec.close` honours the type via a two-band rule — `code` / `config` / `doc` block close when unchecked; `ops` / `observation` legitimately defer. Closes most of spec `2026-05-16-ac-taxonomy` (card 0035-ac-taxonomy, plus card 0034-spec-close-ac-preflight superseded, card 0030-canonical-schema-and-glossary extended, card 0032-brownfield-spec-migration extended). Forward-incompatible: a 0.4.15 binary scanning a 0.4.16 spec.yaml that carries `ac_type` rejects the unknown field via `deny_unknown_fields`.
