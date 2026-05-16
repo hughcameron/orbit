@@ -44,10 +44,11 @@ pub struct Migration {
 /// 0.2 → 0.3 (spec 2026-05-16-ac-taxonomy ac-03): retire `time_gated: bool`
 /// in favour of `ac_type: AcType`. Walks every spec.yaml under
 /// `.orbit/specs/**/`, parses raw YAML (the typed struct no longer carries
-/// `time_gated`), rewrites each AC: `time_gated: true` → `ac_type: observation`
-/// + remove the `time_gated` key; `time_gated: false` → just remove the key
-/// (the default `ac_type: code` is implicit). Reserialised via the canonical
-/// writer so output remains byte-identical to a fresh write.
+/// `time_gated`), rewrites each AC by remapping the legacy field, then
+/// re-serialises via the canonical writer so output remains byte-identical
+/// to a fresh write. The remap is: `time_gated: true` becomes
+/// `ac_type: observation` with the legacy key removed; `time_gated: false`
+/// is simply dropped (the default `ac_type: code` is implicit).
 pub fn registry() -> &'static [Migration] {
     &[
         Migration {

@@ -177,12 +177,13 @@ pub struct AcceptanceCriterion {
 /// behaviour: `Code`, `Config`, `Doc` block close when unchecked;
 /// `Ops`, `Observation` are deferrable (the spec is allowed to close with
 /// them open). Per spec 2026-05-16-ac-taxonomy.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum AcType {
     /// Closes on a passing test, referenced commit, or functional
     /// artefact. The default — matches the implicit assumption every
     /// untyped AC carried before this field shipped.
+    #[default]
     Code,
     /// Closes on a config or external-system-state change verifiable by
     /// grep, file inspection, or external query.
@@ -197,12 +198,6 @@ pub enum AcType {
     /// soak, eval-run output, training-completes-and-produces-metrics).
     /// Legitimately deferred at spec.close.
     Observation,
-}
-
-impl Default for AcType {
-    fn default() -> Self {
-        AcType::Code
-    }
 }
 
 impl AcType {

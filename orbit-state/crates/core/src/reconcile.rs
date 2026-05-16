@@ -72,6 +72,12 @@ impl EntityType {
 /// Disposition applied to a legacy field. The default for an unknown field
 /// without a registry rule is [`Disposition::Quarantine`] — the substrate
 /// never silently destroys content.
+//
+// PartialEq compares fn-pointer addresses for the Transform variant; the
+// derived implementation is fine for the existing Map/Drop/Quarantine
+// tests (which compare against literal variants, not Transform values).
+// We never compare two Transform values for equality in production code.
+#[allow(unpredictable_function_pointer_comparisons)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Disposition {
     /// Rename the field to the named canonical field; the value passes
