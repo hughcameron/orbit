@@ -1,0 +1,4 @@
+key: session-handover-brew-smoke-passed-0.4.17
+body: 'Brew smoke passed for orbit 0.4.17. Session ids: prior=6e94c154-04a3-40e0-aa55-b11510c61406, validator=9473d3fc-4b47-4af5-85be-0ce50ca59dae. Distillate excerpt: ''This session shipped orbit 0.4.17 — the release that closes card 0036...''. Brew binary version: 0.4.17 (built from commit 80f6d8a); cargo dev binary version: 0.4.17 (same source). Stop hook resolved orbit via PATH (cargo path); brew-binary equivalence verified by running session handover --card 0036 directly against /home/linuxbrew/.linuxbrew/bin/orbit and observing identical session_id. All 9 ac-11 verification steps passed.'
+timestamp: 2026-05-16T11:15:03.373479447Z
+labels: []
