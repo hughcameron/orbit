@@ -65,6 +65,6 @@ acceptance_criteria:
 - id: ac-12
   description: 'Beelink smoke confirming the released binary picks up the relocation. `brew upgrade meridian-online/tap/orbit` on the beelink installs the new tag; `/home/linuxbrew/.linuxbrew/bin/orbit --version` reports it; `orbit session prime --root /home/hugh/github/hughcameron/orbit` returns an envelope listing three memos resolved from `.orbit/memos/`; `orbit overview --root /home/hugh/github/hughcameron/orbit` lists memos under the sibling path. This AC is time-gated: brew tap propagation has its own latency and the smoke is a post-merge follow-up. ac-12''s `checked:` is flipped to `true` in a small follow-up commit once verified.'
   gate: false
-  checked: false
+  checked: true
   verification: 'Beelink terminal output captured in a follow-up commit message or memory: `brew upgrade` line, `orbit --version` line, `orbit session prime` envelope showing memo count > 0 with paths under `.orbit/memos/`.'
   time_gated: true
