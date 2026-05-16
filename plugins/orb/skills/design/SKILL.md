@@ -116,6 +116,7 @@ When the design space is closed, skip the interview entirely and produce a one-s
 ## Implementation notes
 
 - <Means-level leads from the codebase scan in §2 — starting context for the implementing agent>
+- <For each AC the spec will carry, the recommended `ac_type` (`code` / `config` / `doc` / `ops` / `observation`) and a one-line rationale. The closed-mode path skips the interview, so the design note is the place to lock in the type per AC. See §6 *Per-AC `ac_type` declaration* for the five values and the two close-time bands (`code/config/doc` block close; `ops/observation` defer).>
 ```
 
 The user-voice paragraph and the pinned approach are the load-bearing content. The design note is short on purpose — closed-space cards don't need re-litigation.
@@ -192,6 +193,22 @@ For each question that survives the filter:
 3. After each answer, target the biggest remaining gap in **intent**
 
 **Implementation notes:** As you explore the codebase and evidence base (§2), and as the filter routes failed questions, you'll accumulate implementation-level decisions — which module to modify, what patterns exist, what approach seems right. Record these under **Implementation Notes** in the interview record. They give the implementing agent a head start without burdening the author.
+
+#### Per-AC `ac_type` declaration
+
+Per spec 2026-05-16-ac-taxonomy ac-07, every AC the design session shapes carries an `ac_type` declaring what kind of evidence will close it. The author makes this call inline as ACs are drafted — it is an intent declaration, not an implementation question, so it is not subject to the implementation-question filter above.
+
+The five canonical values, with one-line semantics each:
+
+- **`code`** — closes on a passing test, referenced commit, or functional artefact. Default for ACs that are about implementing logic.
+- **`config`** — closes on a config or external-system-state change verifiable by grep, file inspection, or external query.
+- **`doc`** — closes on a written artefact (CLAUDE.md edit, card text, memo, MADR).
+- **`ops`** — closes on operator action with a captured log line, signoff, or dashboard check. Legitimately deferred at spec.close.
+- **`observation`** — closes on a dated window of empirical measurement (post-cutover soak, eval-run output, training-completes-and-produces-metrics). Legitimately deferred at spec.close.
+
+Two close-time bands follow from the type: `code` / `config` / `doc` block `spec.close` when unchecked; `ops` / `observation` legitimately defer (they appear in the response's `deferrable_open` list but do not block). Surface this consequence inline so the author understands what they are declaring — *"this AC is `observation`, so spec.close won't block on it; it's a deferred checkpoint."*
+
+Default visible value is `code`. ACs that omit `ac_type` parse as `code` and the substrate writes nothing extra on disk (skip-on-default).
 
 ### 7. Ambiguity Assessment
 

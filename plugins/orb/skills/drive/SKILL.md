@@ -310,6 +310,31 @@ emission — those are owned by `/orb:implement`. When implement returns
 via `orbit-acceptance.sh has-unchecked <spec-id>` exiting 1), drive
 sets `stage: review-pr` in `drive.yaml` and proceeds to Stage 3.
 
+### AC routing by `ac_type`
+
+Per spec 2026-05-16-ac-taxonomy ac-09, each AC carries an `ac_type`
+(`code` / `config` / `doc` / `ops` / `observation`) that determines
+how drive's implement step handles it. `/orb:implement` runs the
+per-AC loop; drive's role is the escalation contract on `ops` and the
+deferred-checkpoint registration on `observation`:
+
+- **`code`** — existing implement-and-test loop. No drive-level change.
+- **`config`** — file-edit loop with grep/diff verification. No
+  drive-level change.
+- **`doc`** — file-edit loop with content-check verification on the
+  named artefact. No drive-level change.
+- **`ops`** — operator-handoff escalation. Drive halts on the AC,
+  files a memo at `.orbit/memos/<YYYY-MM-DD>-drive-handoff-<spec-id>-<ac-id>.md`
+  capturing the AC id, the spec id, and what the operator must do
+  (read from the AC's `verification` field). The memo path appears in
+  the §Completion drive-summary so the operator can find the handoff
+  record.
+- **`observation`** — deferred-checkpoint entry. Drive records the AC
+  as deferred and proceeds past it without blocking. The AC lands in
+  spec.close's `deferrable_open` list (per spec 2026-05-16-ac-taxonomy
+  ac-02) automatically — no drive-level state addition is needed
+  beyond surfacing the deferral in the run report.
+
 **Supervised mode gate (implement):** If autonomy is `supervised`,
 pause after implement returns:
 

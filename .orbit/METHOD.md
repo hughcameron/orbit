@@ -39,6 +39,20 @@ Bare numeric ids are ambiguous (cards and choices share the NNNN namespace), so 
 
 CLI lookup: `orbit card show` and `orbit choice show` accept full slug, padded `NNNN`, or bare unpadded number — all three resolve via filename prefix-match. See `.orbit/conventions/id-conventions.md` for the full rationale.
 
+### Acceptance-criterion `ac_type`
+
+Each acceptance criterion carries an `ac_type` declaring what kind of evidence closes it. The type drives `spec.close`'s blocking decision, `/orb:review-pr`'s evidence expectation, and `/orb:drive`'s routing:
+
+| Value          | Closes on                                                                                                    | Close-time band |
+|----------------|--------------------------------------------------------------------------------------------------------------|-----------------|
+| `code` (default) | A passing test, referenced commit, or functional artefact.                                                  | blocks          |
+| `config`       | A config or external-system-state change verifiable by grep / file inspection / external query.              | blocks          |
+| `doc`          | A written artefact (CLAUDE.md edit, card text, memo, MADR).                                                  | blocks          |
+| `ops`          | Operator action with a captured log line, signoff, or dashboard check.                                       | defers          |
+| `observation`  | A dated window of empirical measurement (post-cutover soak, eval-run output, training metrics).              | defers          |
+
+Two bands: `code` / `config` / `doc` block `spec.close` when unchecked; `ops` / `observation` legitimately defer (they appear in the response's `deferrable_open` list but do not block). The default for an AC that omits `ac_type` is `code` — matches the implicit assumption every untyped AC carried before this field shipped. Per spec 2026-05-16-ac-taxonomy.
+
 ## When someone asks to "make a card for X"
 
 Discriminate before defaulting to a card. Choosing the wrong artefact is the most common mistake at this entry point.

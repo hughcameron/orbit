@@ -43,6 +43,22 @@ The skill takes an orbit-state spec id — the spec's `acceptance_criteria` are 
 1. Run the project's test suite. Record pass/fail with output.
 2. **AC-to-test coverage check**: For every AC parsed in Phase 1, search the project's test sources for a test bearing the bare AC identifier (`ac<NN>` or `ac-NN`).
 
+#### Type-keyed evidence expectations
+
+Per spec 2026-05-16-ac-taxonomy ac-08, each AC carries an `ac_type` declaring what kind of evidence closes it. The reviewer selects the right evidence shape per AC from this table — applying it BEFORE the AC-walk so missing-test findings only surface where a test was actually expected:
+
+| `ac_type`     | Expected evidence                                                                                                                                            |
+|---------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `code`        | Passing test bearing the AC id + commit reference. AC-to-test coverage rules below apply directly.                                                           |
+| `config`      | Grep + file diff on the named config or manifest. If the config touches an external system, an external-system check (e.g. external query, dashboard read). |
+| `doc`         | Grep + content check on the named written artefact (CLAUDE.md edit, card text, memo, MADR).                                                                  |
+| `ops`         | Operator log line + signoff quote (PR comment, chat record, or substrate memory entry). The verification field names the operator artefact location.        |
+| `observation` | Dated metric window + metric reference (dashboard URL, log query, empirical artefact captured in a follow-up commit message or substrate memory).            |
+
+**ACs with `ac_type: ops` or `ac_type: observation` MUST NOT be flagged as missing test evidence.** These never had unit tests by design — the review walk routes them to the appropriate evidence shape from the table above instead. (Live-trigger pattern: spec 2026-05-16-memos-own-folder ac-12 was a memo-based smoke that the previous review treated as test-shaped; the typed-AC field prevents that confusion.)
+
+#### AC-to-test coverage (`ac_type: code`)
+
 ```
 AC Coverage Report:
   ac-01:   ✓ ac01_creates_project_structure
@@ -58,7 +74,7 @@ Cross-language patterns to search:
 - TypeScript: `test('ac<NN>` or `it('ac<NN>`
 - Bash/general: grep for `ac<NN>` or `ac-<NN>` in test directories
 
-In the honest-assessment paragraph, contextualise which uncovered ACs are doc/gate-style (judged from each AC's description text — e.g. an AC that names a documentation deliverable or a sequencing gate, not a code change) versus genuine test gaps. The orbit-state spec carries description text and a `gate` flag per AC; the reviewer reads the description and judges whether a missing test is a real gap or an exempt non-code AC.
+In the honest-assessment paragraph, contextualise which uncovered code-type ACs are still gate-style (judged from each AC's description text — e.g. a sequencing gate that the implementation respects through other artefacts) versus genuine test gaps. The orbit-state spec carries `ac_type`, description text, and a `gate` flag per AC; the reviewer reads all three and judges whether a missing test is a real gap or an exempt non-test AC.
 
 ### 4. Phase 3: Environment Simulation
 
