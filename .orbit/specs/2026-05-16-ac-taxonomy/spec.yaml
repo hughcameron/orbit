@@ -78,7 +78,7 @@ acceptance_criteria:
 - id: ac-14
   description: 'Post-release brewed-binary smoke confirming the released orbit picks up the typed-AC migration. On the beelink: `brew upgrade meridian-online/tap/orbit` installs the new tag; `/home/linuxbrew/.linuxbrew/bin/orbit --version` reports it; `orbit canonicalise --reconcile --dry-run --root /home/hugh/github/meridian-online/arcform` produces a planned-changes report consistent with ac-12''s pre-release dry-run (the brewed binary reports the same dispositions as the local build, since neither rewrites files in dry-run mode); same against `/home/hugh/github/meridian-online/finetype`. This is the post-merge confirmation that the brew tap update flowed through and the binary in operators'' hands behaves correctly against external repo trees. The verification artefact saved into orbit (commit message or substrate memory body) names only the two public brownfield repos (per the Working-with-Hugh visibility discipline in CLAUDE.md); any private repos surfaced during the smoke are referred to generically.'
   gate: false
-  checked: false
+  checked: true
   verification: 'Beelink terminal output captured in a follow-up commit message or substrate memory: `brew upgrade` line, `orbit --version` line, both `orbit canonicalise --reconcile --dry-run` invocations with their planned-changes summary lines (disposition counts only — not full per-AC dispositions which may be long). ac-14''s `checked:` is flipped to `true` in a small follow-up commit once captured.'
   ac_type: observation
 - id: ac-15
