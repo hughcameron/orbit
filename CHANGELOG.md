@@ -2,6 +2,20 @@
 
 All notable changes to orbit are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.4.15] - 2026-05-16
+
+Memos relocate from `.orbit/cards/memos/` to a sibling `.orbit/memos/` directory. Closes spec `2026-05-16-memos-own-folder` (cards 0001-memos, 0008-consolidated-orbit-artefact-folder). Substrate ontology now reads correctly — memos are inputs *to* cards, not part of cards. Forward-incompatible: a 0.4.14 binary scanning a 0.4.15 layout sees zero memos at the legacy path.
+
+### Changed
+
+- `OrbitLayout::memos_dir()` returns `<root>/memos` (was `<root>/cards/memos`). The `list_yaml_files_shallow` wrapper at `orbit-state/crates/core/src/layout.rs` is removed as dead code; `list_card_files` calls `list_yaml_files` directly.
+- All skills (`/orb:memo`, `/orb:distill`, `/orb:design`, `/orb:rally`, `/orb:implement`) and the `setup/METHOD.md` vocabulary table reference `.orbit/memos/`.
+- 23 cards, 5 live spec files, choice 0021-spec-folders, and 2 memories had their `.orbit/cards/memos/` references rewritten to `.orbit/memos/` for substrate consistency. Migration commit is the audit record per the 2026-04-20 precedent.
+
+### Binary state (substrate-binary parity gate)
+
+`orbit-state/` changed in this window (the `memos_dir()` path + dead-code wrapper removal). Released via the gate's path (a) — rebuild and reinstall the orbit binary at 0.4.15 before tagging so substrate and skills ship in lockstep.
+
 ## [0.4.14] - 2026-05-16
 
 Agent learning loop v1 ships — skills can record per-invocation outcomes and read recurrence; sessions get a canonical `Session` entity and an idempotent distill verb. Closes spec `2026-05-15-agent-learning-loop` (cards 0022-skill-curator, 0023-memory-loop). Card 0023 bumps `planned → emerging` because `orbit session prime` now scores memories by label-overlap with open-spec labels before recency — the "recent and relevant" gate is real. Card 0022 stays `planned`: the convention is an explicit stopgap until the curator-metadata system ships.
