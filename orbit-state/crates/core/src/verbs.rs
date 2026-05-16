@@ -3152,6 +3152,7 @@ fn session_distill(
         started_at,
         ended_at: Some(now),
         distillate: args.distillate.clone(),
+        card_id: None,
         labels: args.labels.clone(),
     };
     let yaml = serialise_yaml(&session).map_err(|mut e| {

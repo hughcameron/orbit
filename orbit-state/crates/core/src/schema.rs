@@ -102,8 +102,14 @@ impl SkillInvocation {
 }
 
 impl Session {
-    pub const FIELDS: &'static [&'static str] =
-        &["id", "started_at", "ended_at", "distillate", "labels"];
+    pub const FIELDS: &'static [&'static str] = &[
+        "id",
+        "started_at",
+        "ended_at",
+        "distillate",
+        "card_id",
+        "labels",
+    ];
 }
 
 impl AcceptanceCriterion {
@@ -467,6 +473,13 @@ pub struct Session {
     pub ended_at: Option<String>,
     /// The agent's end-of-session reflection — free-text markdown.
     pub distillate: String,
+    /// Optional card slug scoping this session — populated by
+    /// `orbit session set-card <id>` (writes `.orbit/.session-card`) and
+    /// then resolved by `orbit session distill` at session end. Absent
+    /// from on-disk YAML when None so existing pre-card_id sessions stay
+    /// byte-identical. See spec 2026-05-16-session-handover ac-01.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub card_id: Option<String>,
     /// Free-text labels for prime-relevance and search.
     #[serde(default)]
     pub labels: Vec<String>,
@@ -661,6 +674,7 @@ unknown_field: oops
             started_at: "2026-05-15T12:00:00Z".into(),
             ended_at: Some("2026-05-15T13:00:00Z".into()),
             distillate: "got the loop running".into(),
+            card_id: Some("0036-session-handover".into()),
             labels: vec!["loop".into()],
         };
         let value = serde_yaml::to_value(&session).unwrap();
@@ -694,6 +708,7 @@ unknown_field: oops
             started_at: "2026-05-15T12:00:00Z".into(),
             ended_at: Some("2026-05-15T13:00:00Z".into()),
             distillate: "got the loop running\n".into(),
+            card_id: None,
             labels: vec![],
         };
         let yaml = serde_yaml::to_string(&session).unwrap();
@@ -711,6 +726,7 @@ unknown_field: oops
             started_at: "2026-05-15T12:00:00Z".into(),
             ended_at: None,
             distillate: "".into(),
+            card_id: None,
             labels: vec![],
         };
         let yaml = serde_yaml::to_string(&session).unwrap();

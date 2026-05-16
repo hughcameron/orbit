@@ -21,7 +21,7 @@ use crate::layout::OrbitLayout;
 use crate::schema::{SchemaVersion, Spec};
 
 /// Current schema version shipped by this build.
-pub const CURRENT_SCHEMA_VERSION: &str = "0.3";
+pub const CURRENT_SCHEMA_VERSION: &str = "0.4";
 
 /// A single schema migration step.
 #[derive(Debug)]
@@ -49,6 +49,13 @@ pub struct Migration {
 /// to a fresh write. The remap is: `time_gated: true` becomes
 /// `ac_type: observation` with the legacy key removed; `time_gated: false`
 /// is simply dropped (the default `ac_type: code` is implicit).
+///
+/// 0.3 → 0.4 (spec 2026-05-16-session-handover ac-02): structural no-op.
+/// The change adds an optional `card_id: Option<String>` field to the
+/// `Session` struct with `#[serde(default, skip_serializing_if = ...)]`,
+/// so existing Session YAML files (which carry no `card_id` key) remain
+/// parseable without rewriting. The migration step only advances the
+/// recorded version; no files are touched.
 pub fn registry() -> &'static [Migration] {
     &[
         Migration {
@@ -61,7 +68,20 @@ pub fn registry() -> &'static [Migration] {
             to: "0.3",
             apply: migrate_time_gated_to_ac_type,
         },
+        Migration {
+            from: "0.3",
+            to: "0.4",
+            apply: migrate_add_card_id_to_session,
+        },
     ]
+}
+
+/// 0.3 → 0.4 migration: structural no-op. The new `Session.card_id` field
+/// is `Option<String>` with `#[serde(default)]`, so existing on-disk
+/// Session YAML files remain parseable under the new schema without
+/// rewriting. The runner advances the version after this returns Ok.
+fn migrate_add_card_id_to_session(_layout: &OrbitLayout) -> Result<()> {
+    Ok(())
 }
 
 /// 0.2 → 0.3 migration: walk every spec.yaml and convert any
@@ -453,24 +473,26 @@ mod tests {
     }
 
     #[test]
-    fn registry_at_v0_3_has_two_entries() {
-        // spec 2026-05-16-ac-taxonomy ac-03: the registry now carries
-        // 0.1 → 0.2 (no-op) plus 0.2 → 0.3 (time_gated → ac_type). If a
-        // future version adds 0.3 → 0.4 this test grows.
+    fn registry_at_v0_4_has_three_entries() {
+        // spec 2026-05-16-session-handover ac-02: the registry now carries
+        // 0.1 → 0.2 (no-op), 0.2 → 0.3 (time_gated → ac_type), and
+        // 0.3 → 0.4 (additive Session.card_id no-op).
         let r = registry();
-        assert_eq!(r.len(), 2, "expected two migration entries at v0.3");
+        assert_eq!(r.len(), 3, "expected three migration entries at v0.4");
         assert_eq!(r[0].from, "0.1");
         assert_eq!(r[0].to, "0.2");
         assert_eq!(r[1].from, "0.2");
         assert_eq!(r[1].to, "0.3");
+        assert_eq!(r[2].from, "0.3");
+        assert_eq!(r[2].to, "0.4");
     }
 
     #[test]
     fn migrate_0_1_to_current_walks_chain_and_lands_at_target() {
-        // spec 2026-05-16-ac-taxonomy ac-03: a fixture at 0.1 with no
-        // legacy time_gated content walks the full chain (0.1 → 0.2 → 0.3)
-        // and ends at CURRENT_SCHEMA_VERSION. Existing canonical files
-        // not carrying time_gated remain untouched.
+        // spec 2026-05-16-session-handover ac-02: a fixture at 0.1 with no
+        // legacy time_gated content walks the full chain (0.1 → 0.2 → 0.3
+        // → 0.4) and ends at CURRENT_SCHEMA_VERSION. Existing canonical
+        // files not carrying time_gated remain untouched.
         let dir = tempdir().unwrap();
         let layout = OrbitLayout::at(dir.path());
         layout.ensure_dirs().unwrap();
@@ -490,7 +512,10 @@ mod tests {
         let report = run(&layout, CURRENT_SCHEMA_VERSION).unwrap();
         assert_eq!(report.from, "0.1");
         assert_eq!(report.to, CURRENT_SCHEMA_VERSION);
-        assert_eq!(report.applied, 2, "expected 0.1 → 0.2 and 0.2 → 0.3 steps");
+        assert_eq!(
+            report.applied, 3,
+            "expected 0.1 → 0.2, 0.2 → 0.3, and 0.3 → 0.4 steps"
+        );
         assert!(!report.skipped);
 
         // schema-version file is now CURRENT.
@@ -566,7 +591,12 @@ mod tests {
         write_atomic(&spec_path, legacy_yaml.as_bytes()).unwrap();
 
         let report = run(&layout, CURRENT_SCHEMA_VERSION).unwrap();
-        assert_eq!(report.applied, 1, "expected one step (0.2 → 0.3)");
+        // Chain from 0.2 covers 0.2 → 0.3 (time_gated → ac_type) and
+        // 0.3 → 0.4 (Session.card_id additive no-op). Both apply.
+        assert_eq!(
+            report.applied, 2,
+            "expected two steps (0.2 → 0.3 and 0.3 → 0.4)"
+        );
 
         let migrated = std::fs::read_to_string(&spec_path).unwrap();
         // time_gated keys are gone.
@@ -599,10 +629,10 @@ mod tests {
             crate::schema::AcType::Code,
         );
 
-        // schema-version file is now 0.3.
+        // schema-version file is now CURRENT (0.4).
         let new_text = std::fs::read_to_string(layout.schema_version_file()).unwrap();
         let new_sv: SchemaVersion = parse_yaml(&new_text).unwrap();
-        assert_eq!(new_sv.version, "0.3");
+        assert_eq!(new_sv.version, CURRENT_SCHEMA_VERSION);
     }
 
     #[test]

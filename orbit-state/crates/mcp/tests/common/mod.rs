@@ -502,6 +502,7 @@ pub fn expected_envelope_for_session_distill(
             started_at: started_at.into(),
             ended_at: Some(ended_at.into()),
             distillate: distillate.into(),
+            card_id: None,
             labels: vec![],
         },
     });
