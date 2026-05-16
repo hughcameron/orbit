@@ -72,7 +72,7 @@ acceptance_criteria:
 - id: ac-13
   description: Release the next orbit version via the `/orb:release` flow — bump `orbit-state/Cargo.toml`, `Cargo.lock`, `plugins/orb/.claude-plugin/plugin.json`; add a CHANGELOG entry naming the typed-AC migration, the `time_gated` retirement, the brownfield reconcile registry extension, and the `Disposition::Transform` variant addition; commit; push; `git tag v<new_version> && git push origin v<new_version>`; wait for the release.yml workflow to publish the brew tap update at meridian-online/orbit. This is an observation-shaped AC — brew tap propagation has its own latency. ac-13's `checked:` is flipped to `true` in a small follow-up commit once the release is published.
   gate: false
-  checked: false
+  checked: true
   verification: '`gh release view v<new_version>` shows the release published. `git tag --list v<new_version>` confirms the tag exists locally and on origin. The CHANGELOG entry for the new version names the typed-AC migration explicitly.'
   ac_type: observation
 - id: ac-14
