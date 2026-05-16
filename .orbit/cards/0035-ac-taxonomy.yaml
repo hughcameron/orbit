@@ -36,7 +36,8 @@ scenarios:
   when: enforcement is examined
   then: '`AcceptanceCriterion::FIELDS` includes the type field, the canonical schema (card 0030) names the enum and its semantics, `spec.close` honours the enum, `/orb:review-pr` and `/orb:drive` read the enum, and `/orb:design` prompts authors for type as ACs are being shaped — without these wires the field ships but downstream verbs ignore it'
   gate: true
-specs: []
+specs:
+- .orbit/specs/2026-05-16-ac-taxonomy/spec.yaml
 relations:
 - card: 0034-spec-close-ac-preflight
   type: feeds
