@@ -1,0 +1,4 @@
+key: spec-verification-against-real-envelope-shape
+body: 'Spec ac verification lines that assert specific envelope JSON fields must be checked against the actual binary''s output shape before they''re accepted. ac-12 of 2026-05-16-memos-own-folder asserted ''orbit session prime returns an envelope listing three memos resolved from .orbit/memos/'' — but session prime''s envelope is item_bound/memories/next_step/open_specs, no memos field. The smoke functionally passed (binary worked against new layout) but the verification line was unprovable as written. How to apply: when writing ac verifications that name specific JSON fields, run the actual command and inspect the envelope keys first. If it''s a substrate behaviour added by the same spec, write the test against the field that IS added; if it''s an existing surface, grep the verbs.rs handler or run the command with --json once.'
+timestamp: 2026-05-16T01:56:09.653437109Z
+labels: []
