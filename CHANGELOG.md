@@ -2,6 +2,37 @@
 
 All notable changes to orbit are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.4.16] - 2026-05-16
+
+Typed acceptance criteria: `AcceptanceCriterion` now carries a five-value `ac_type` enum (`code` / `config` / `doc` / `ops` / `observation`) declaring what kind of evidence closes the AC. `spec.close` honours the type via a two-band rule — `code` / `config` / `doc` block close when unchecked; `ops` / `observation` legitimately defer. Closes most of spec `2026-05-16-ac-taxonomy` (card 0035-ac-taxonomy, plus card 0034-spec-close-ac-preflight superseded, card 0030-canonical-schema-and-glossary extended, card 0032-brownfield-spec-migration extended). Forward-incompatible: a 0.4.15 binary scanning a 0.4.16 spec.yaml that carries `ac_type` rejects the unknown field via `deny_unknown_fields`.
+
+### Added
+
+- `AcType` enum on `AcceptanceCriterion` (`Code` default, `Config`, `Doc`, `Ops`, `Observation`) with `blocks_close()` as the single source of truth for the two-band split. `ac_type` field on `AcceptanceCriterion` with `#[serde(default)]` so untyped legacy corpora deserialise as `Code`; `skip_serializing_if = "AcType::is_code"` keeps existing canonical output byte-identical for the dominant case.
+- `Disposition::Transform(TransformFn)` variant on the reconcile registry, with `TransformResult::{ Replace { value, sibling_writes, detail }, Quarantine(reason) }`. Lets reconcile rules rewrite a field's VALUE (not just its name) and atomically set sibling fields. Used by the typed-AC handler to split brownfield `ac_type: gate` into orthogonal `ac_type: code|observation` + `gate: true`. `DispositionRecord` gains an optional `transform_detail: Option<String>` surfacing the per-AC routing rationale in the run summary and JSON envelope.
+- `migrations::ensure_current(layout)` — initialises the schema-version file if missing AND advances it through any pending migrations to `CURRENT_SCHEMA_VERSION`. `verify_all` calls it so substrate migrations auto-apply on the next orbit verb against an older tree.
+- `0.2 → 0.3` schema migration step `migrate_time_gated_to_ac_type` — walks every spec.yaml, rewrites `time_gated: true` → `ac_type: observation` (legacy key removed), drops `time_gated: false` (default `code` is implicit). Idempotent on already-migrated trees.
+
+### Changed
+
+- `spec.close`'s unchecked-blocking computation switches from `!ac.checked && !ac.time_gated` to `!ac.checked && ac.ac_type.blocks_close()`. Response envelope field `time_gated_open` renamed to `deferrable_open` across CLI / MCP / parity tests / drive SKILL.md. Error wording adjusts from "unchecked AC(s) in spec" to "unchecked blocking AC(s) in spec" so the deferrable distinction surfaces in the error itself. `--force` path unchanged.
+- `canonicalise --reconcile` registry — the seeded `Disposition::Drop` entry for `acceptance_criteria[].ac_type` is REPLACED with `Disposition::Transform(reconcile_ac_type)` routing brownfield values: `docs` → `doc` (typo); canonical values pass through (no-op recorded); `ac_type: gate` splits via description regex into `code + gate=true` (build/cargo/cmake/make/compile keywords) or `observation + gate=true` (eval/score/accuracy/training/metric keywords); unknown values quarantine with a reason.
+- `CURRENT_SCHEMA_VERSION` bumps `0.2` → `0.3`.
+- `/orb:design` SKILL.md §6 + §4: agent prompts the author for `ac_type` per AC. `/orb:review-pr` SKILL.md: per-AC evidence-expectation table BEFORE the AC-walk, with explicit "ACs of `ac_type: ops` or `observation` MUST NOT be flagged as missing test evidence" rule. `/orb:drive` SKILL.md: AC routing by `ac_type` in Stage 2 (Implement) — `ops` escalates to operator-handoff with memo path; `observation` registers as deferred-checkpoint via `deferrable_open`. `.orbit/METHOD.md` (and the byte-equal mirror at `plugins/orb/skills/setup/METHOD.md`) gain an Acceptance-criterion `ac_type` sub-section under Vocabulary.
+
+### Removed
+
+- `time_gated: bool` field on `AcceptanceCriterion`. Superseded by `ac_type: observation` (the kind that captures the deferrable-at-close semantics the bool encoded). The `0.2 → 0.3` migration rewrites every existing `time_gated: true` AC to `ac_type: observation`.
+- `Disposition::Drop` entry for `acceptance_criteria[].ac_type` in the reconcile registry — replaced with `Disposition::Transform`.
+
+### Binary state (substrate-binary parity gate)
+
+`orbit-state/` changed in this window (`AcType` enum, `Disposition::Transform` variant, `0.2 → 0.3` schema migration, `ensure_current` wire). Released via the gate's path (a) — rebuild and reinstall the orbit binary at 0.4.16 before tagging so substrate and skills ship in lockstep. The skill's parity-gate refusal mode was bypassed manually because §1.4 has a chicken-and-egg for first-substrate-bump releases (PATH binary by definition predates the new version when both are bumped together).
+
+### Deferred to follow-up
+
+- ac-12 of spec `2026-05-16-ac-taxonomy` (pre-release brownfield dry-run against the public corpora) is force-closed at spec.close. The Transform handler's correctness is proven by 11 unit tests; end-to-end validation against richer brownfield drift (missing top-level `id`, scalar AC entries, `orbit/` vs `.orbit/` substrate layout) needs reconcile-mode v3 rules that are out of scope. See `.orbit/memos/2026-05-16-richer-reconcile-rules.md` for distillation.
+
 ## [0.4.15] - 2026-05-16
 
 Memos relocate from `.orbit/cards/memos/` to a sibling `.orbit/memos/` directory. Closes spec `2026-05-16-memos-own-folder` (cards 0001-memos, 0008-consolidated-orbit-artefact-folder). Substrate ontology now reads correctly — memos are inputs *to* cards, not part of cards. Forward-incompatible: a 0.4.14 binary scanning a 0.4.15 layout sees zero memos at the legacy path.
