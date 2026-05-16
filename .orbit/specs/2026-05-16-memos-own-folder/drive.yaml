@@ -2,7 +2,8 @@ spec_id: 2026-05-16-memos-own-folder
 card_path: /home/hugh/github/hughcameron/orbit/.orbit/cards/0001-memos.yaml
 autonomy: full
 iteration: 1
-stage: review-pr
+started_at: 2026-05-16T00:00:00Z
+stage: complete
 review_spec_cycle: 3
 review_spec_date: 2026-05-16
 review_pr_cycle: 0

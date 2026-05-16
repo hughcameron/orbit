@@ -3,7 +3,7 @@ goal: Relocate memos to live at `.orbit/memos/` (a sibling of `.orbit/cards/`, n
 cards:
 - 0001-memos
 - 0008-consolidated-orbit-artefact-folder
-status: open
+status: closed
 labels:
 - spec
 acceptance_criteria:
@@ -60,7 +60,7 @@ acceptance_criteria:
 - id: ac-11
   description: Release the next orbit version via the `/orb:release` flow — bump `orbit-state/Cargo.toml`, `Cargo.lock`, `plugins/orb/.claude-plugin/plugin.json`; add a CHANGELOG entry naming the relocation; commit; push; `git tag v<new_version> && git push origin v<new_version>` per memory `orb-release-skill-missing-tag-push`; wait for the release.yml workflow to publish the brew tap update. This is a **pre-merge gate** — it lands the release before this spec closes. The spec can close with ac-12 (beelink smoke) still unchecked because ac-12 is time-gated.
   gate: false
-  checked: false
+  checked: true
   verification: '`gh release view v<new_version>` shows the release published. `git tag --list v<new_version>` confirms the tag exists locally and on origin. The CHANGELOG entry for the new version names the memos relocation explicitly.'
 - id: ac-12
   description: 'Beelink smoke confirming the released binary picks up the relocation. `brew upgrade meridian-online/tap/orbit` on the beelink installs the new tag; `/home/linuxbrew/.linuxbrew/bin/orbit --version` reports it; `orbit session prime --root /home/hugh/github/hughcameron/orbit` returns an envelope listing three memos resolved from `.orbit/memos/`; `orbit overview --root /home/hugh/github/hughcameron/orbit` lists memos under the sibling path. This AC is time-gated: brew tap propagation has its own latency and the smoke is a post-merge follow-up. ac-12''s `checked:` is flipped to `true` in a small follow-up commit once verified.'
