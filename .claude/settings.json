@@ -30,7 +30,7 @@
       {
         "hooks": [
           {
-            "command": "(orbit session distill 2>/dev/null && rm -f .orbit/.session-id) || true",
+            "command": "(orbit session distill 2>/dev/null && rm -f .orbit/.session-id .orbit/.session-card) || true",
             "type": "command"
           }
         ],

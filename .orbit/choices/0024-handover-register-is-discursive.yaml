@@ -1,0 +1,47 @@
+id: '0024'
+title: Handover register is discursive reflection, not BLUF / Decision Brief
+status: accepted
+date_created: 2026-05-16
+date_modified: 2026-05-16
+body: |
+  # 0024. Handover register is discursive reflection, not BLUF / Decision Brief
+
+  ## Context and Problem Statement
+
+  Card 0036 (`.orbit/cards/0036-session-handover.yaml`) carries the capability "the agent leaves a handover at session end so the next session picks up without re-discovery". Spec `2026-05-16-session-handover` makes that concrete: `orbit session set-card <id>` writes a per-card session register, the Stop hook pipes the agent's `last_assistant_message` into `Session.distillate`, and the next `orbit session prime` surfaces it via a `handover` field on the envelope.
+
+  Every other agent-to-Hugh prose surface in this repo follows the BLUF / Decision Brief contract (`.orbit/STYLE.md`, card 0026): TL;DR sentence first, imperative recommendation, three bullets of Why max, detail under "Available on request". The discipline exists because Hugh reads fast and decides faster — compression is the load-bearing service the agent provides.
+
+  The handover artefact's audience is not Hugh. The reader is the next agent, opening a fresh session against the same card, needing to orient before deciding. Hugh reads over its shoulder — he sees the handover surface inside `orbit session prime`'s envelope — but the artefact is not addressed to him. The question this choice records: does the handover follow STYLE.md's BLUF discipline, or does it diverge?
+
+  ## Considered Options
+
+  - **A. Terse-BLUF** — apply STYLE.md verbatim: TL;DR sentence, imperative "next action", three bullets of context, everything else as a one-line index. Pro: consistency across every agent-authored artefact; one register to learn, one tone to maintain; the agent that just spent a session compressing context for Hugh keeps doing so for itself. Con: orientation prose carries judgement that BLUF compression discards — "what I tried, what didn't work, where I'd pick up if I had another hour" is exactly the discursive content BLUF treats as detail to be deferred; the next agent reading the handover is mid-orientation, not mid-decision, so the compression service is wrong-headed; Hugh reading over the shoulder gets a flatter view than the agent's session actually produced.
+
+  - **B. Hybrid (BLUF header + discursive tail)** — open with a one-sentence TL;DR, then drop into multi-paragraph reflection. Pro: keeps the lede-first discipline so Hugh skims the handover and gets the headline; the next agent gets the discursive content anyway. Con: two registers in one artefact is a documentation burden — the convention has to teach both shapes and where the boundary sits; the TL;DR sentence and the opening of the discursive section will collide stylistically; v1 should ship a single register and earn a more complex shape only after handover usage matures.
+
+  - **C. Discursive reflection (single register)** — multi-paragraph what-I-tried + what-worked + what-didn't + where-to-pick-up; no required structure, no front-matter. Pro: matches the audience (next agent orienting, not Hugh deciding); preserves the judgement and texture that BLUF compression discards; the agent writes prose at the register the next reader actually needs; one register to teach, one shape to enforce via convention. Con: divergence from STYLE.md needs an explicit MADR so the divergence is bounded and intentional rather than drifting silently; the agent that wrote a Decision-Brief response in the same session has to switch registers to write the handover — context-switching cost, mitigated by the convention naming the handover artefact explicitly.
+
+  ## Decision Outcome
+
+  **Chosen: C — Discursive reflection (single register).**
+
+  The handover's audience and purpose differ from every other agent-to-Hugh prose surface: it is a reading-for-orientation artefact written for the next agent, not a decision-brief written for Hugh. BLUF compression discards exactly the texture that orientation prose depends on (what was tried and didn't work, what's left half-done, where intuition says to push next). One register, scoped to this artefact, costs less than the hybrid framing's documentation burden and earns the texture in exchange.
+
+  STYLE.md continues to govern every other agent-to-Hugh prose surface unchanged. The divergence is bounded to `Session.distillate` written by the Stop-hook-mediated handover — a single artefact, surfaced in one envelope field, written under one convention (`.orbit/conventions/session-handover.md`, ac-10 of this spec).
+
+  ## Consequences
+
+  - The handover convention (`.orbit/conventions/session-handover.md`) is the v1 enforcement surface — no front-matter on SKILL.md files is changed by this decision. The convention names four orientation elements the prose should cover (current state, what was tried, blockers, next step) without prescribing a template.
+  - When handover usage matures and a recurring shape surfaces, the hybrid framing (B above) is the candidate evolution: a stable TL;DR header preceding the discursive body. This choice records the rejection-for-v1 explicitly so a later choice can revisit without re-arguing the BLUF-vs-discursive axis.
+  - The next agent's first action on session start is to read the handover — `orbit session prime`'s envelope carries a `handover` field (ac-07) and prefixes `next_step` with `"Read the handover above before any other action. "` when one is present. The substrate enforces the reading order; the convention enforces the writing register.
+  - Operators running `orbit session distill` manually (test fixtures, replay scenarios) take responsibility for clearing `.orbit/.session-card` themselves — the Stop hook owns deletion (ac-08), the verb is read-only on that file (ac-03). The convention names this leak case so it surfaces in operator docs rather than as a surprise.
+
+  ## References
+
+  - `.orbit/specs/2026-05-16-session-handover/spec.yaml` — the spec this choice records the register decision for. ACs 9 and 10 cite this choice directly.
+  - `.orbit/specs/2026-05-16-session-handover/interview.md` — design session framing the discursive-vs-BLUF question.
+  - `.orbit/cards/0036-session-handover.yaml` — capability card the handover serves.
+  - `.orbit/STYLE.md` — the BLUF / Decision Brief contract this choice carves out an exception from.
+  - `.orbit/cards/0026-executive-communication.yaml` — the card STYLE.md distils.
+references: []
