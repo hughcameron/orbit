@@ -29,7 +29,7 @@
 use crate::canonical::{parse_yaml, serialise_yaml};
 use crate::index::Index;
 use crate::layout::OrbitLayout;
-use crate::migrations::init_schema_version;
+use crate::migrations::ensure_current;
 use crate::schema::{Card, Choice, Memory, SchemaVersion, Session, Spec};
 use serde::de::DeserializeOwned;
 use serde::Serialize;
@@ -84,10 +84,12 @@ pub enum RoundTripFailureKind {
 /// 4. Open or create `state.db`, rebuild from files, diff.
 pub fn verify_all(layout: &OrbitLayout) -> std::io::Result<VerifyOutcome> {
     layout.ensure_dirs()?;
-    // init_schema_version is idempotent. Errors here surface as round-trip
-    // failures on the schema-version path so the caller sees a single channel
-    // of diagnostics rather than a mid-run abort.
-    let _ = init_schema_version(layout);
+    // ensure_current is idempotent: initialises the schema-version file if
+    // missing, advances any pending migrations to CURRENT_SCHEMA_VERSION
+    // (spec 2026-05-16-ac-taxonomy ac-04 wire). Errors here surface as
+    // round-trip failures on the schema-version path so the caller sees a
+    // single channel of diagnostics rather than a mid-run abort.
+    let _ = ensure_current(layout);
 
     let mut outcome = VerifyOutcome::default();
 
@@ -363,28 +365,36 @@ mystery_field: ohno
     }
 
     #[test]
-    fn verify_detects_schema_version_drift() {
-        // Hand-edit schema-version into a non-canonical (but parseable) form.
+    fn verify_repairs_known_schema_version_drift_via_migration() {
+        // spec 2026-05-16-ac-taxonomy ac-04: verify_all calls ensure_current
+        // which initialises + advances the schema-version through any
+        // pending migrations. A non-canonical-but-known schema-version file
+        // is silently normalised by the migration runner's per-step
+        // persistence — the on-disk bytes after verify match the canonical
+        // form at CURRENT_SCHEMA_VERSION, and verify reports no failures.
         let (_dir, layout) = fresh_layout();
-        // Initialise normally.
         verify_all(&layout).unwrap();
-        // Now overwrite with a parseable but non-canonical body.
+        // Overwrite with a parseable but non-canonical body at an OLDER
+        // known version. The migration runner will rewrite it.
         std::fs::write(
             layout.schema_version_file(),
             "version: '0.1'\nnote:\n",
         )
         .unwrap();
-        // Re-serialise the correct canonical form for comparison sanity.
+
+        let outcome = verify_all(&layout).unwrap();
+        assert!(
+            !outcome.has_failures(),
+            "ensure_current should have repaired the drift: {outcome:?}"
+        );
+        // The on-disk file is now canonical at CURRENT_SCHEMA_VERSION.
+        let on_disk = std::fs::read_to_string(layout.schema_version_file()).unwrap();
         let canonical_form = serialise_yaml(&SchemaVersion {
-            version: "0.1".into(),
+            version: crate::migrations::CURRENT_SCHEMA_VERSION.into(),
             note: None,
         })
         .unwrap();
-        let on_disk = std::fs::read_to_string(layout.schema_version_file()).unwrap();
-        assert_ne!(canonical_form, on_disk, "test setup: file must be non-canonical");
-
-        let outcome = verify_all(&layout).unwrap();
-        // Either ParseFailed (note: '' isn't a valid Option) or NotByteIdentical.
-        assert!(outcome.has_failures(), "{outcome:?}");
+        assert_eq!(on_disk, canonical_form);
     }
+
 }

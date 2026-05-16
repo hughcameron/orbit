@@ -67,4 +67,4 @@ acceptance_criteria:
   gate: false
   checked: true
   verification: 'Beelink terminal output captured in a follow-up commit message or memory: `brew upgrade` line, `orbit --version` line, `orbit session prime` envelope showing memo count > 0 with paths under `.orbit/memos/`.'
-  time_gated: true
+  ac_type: observation

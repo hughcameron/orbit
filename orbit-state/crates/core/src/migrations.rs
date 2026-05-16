@@ -18,10 +18,10 @@ use crate::atomic::write_atomic;
 use crate::canonical::{parse_yaml, serialise_yaml};
 use crate::error::{Category, Error, Result};
 use crate::layout::OrbitLayout;
-use crate::schema::SchemaVersion;
+use crate::schema::{SchemaVersion, Spec};
 
 /// Current schema version shipped by this build.
-pub const CURRENT_SCHEMA_VERSION: &str = "0.2";
+pub const CURRENT_SCHEMA_VERSION: &str = "0.3";
 
 /// A single schema migration step.
 #[derive(Debug)]
@@ -40,12 +40,128 @@ pub struct Migration {
 /// Both are additive — no existing files need rewriting — so the migration
 /// runner only needs to bump the recorded version. Fresh-at-0.2 workspaces
 /// initialised by `init_schema_version` never hit this path.
+///
+/// 0.2 → 0.3 (spec 2026-05-16-ac-taxonomy ac-03): retire `time_gated: bool`
+/// in favour of `ac_type: AcType`. Walks every spec.yaml under
+/// `.orbit/specs/**/`, parses raw YAML (the typed struct no longer carries
+/// `time_gated`), rewrites each AC: `time_gated: true` → `ac_type: observation`
+/// + remove the `time_gated` key; `time_gated: false` → just remove the key
+/// (the default `ac_type: code` is implicit). Reserialised via the canonical
+/// writer so output remains byte-identical to a fresh write.
 pub fn registry() -> &'static [Migration] {
-    &[Migration {
-        from: "0.1",
-        to: "0.2",
-        apply: |_layout| Ok(()),
-    }]
+    &[
+        Migration {
+            from: "0.1",
+            to: "0.2",
+            apply: |_layout| Ok(()),
+        },
+        Migration {
+            from: "0.2",
+            to: "0.3",
+            apply: migrate_time_gated_to_ac_type,
+        },
+    ]
+}
+
+/// 0.2 → 0.3 migration: walk every spec.yaml and convert any
+/// `time_gated: bool` field on each AC into the new `ac_type: AcType`
+/// shape. Idempotent: re-running on a tree that has no `time_gated`
+/// keys is a no-op (no file is rewritten when no AC carried the
+/// legacy field). Errors fail the migration loudly per the runner's
+/// existing partial-failure contract.
+fn migrate_time_gated_to_ac_type(layout: &OrbitLayout) -> Result<()> {
+    let spec_files = layout.list_spec_files().map_err(|e| {
+        Error::unavailable(
+            "migration.0.2-to-0.3",
+            format!("list specs: {e}"),
+        )
+        .with_source(e)
+    })?;
+
+    for path in spec_files {
+        let original = std::fs::read_to_string(&path).map_err(|e| {
+            Error::unavailable(
+                "migration.0.2-to-0.3",
+                format!("read {}: {e}", path.display()),
+            )
+            .with_source(e)
+        })?;
+
+        let mut value: serde_yaml::Value = serde_yaml::from_str(&original).map_err(|e| {
+            Error::malformed(
+                "migration.0.2-to-0.3",
+                format!("parse {}: {e}", path.display()),
+            )
+        })?;
+
+        let mut changed = false;
+        if let Some(mapping) = value.as_mapping_mut() {
+            let acs_key = serde_yaml::Value::String("acceptance_criteria".into());
+            if let Some(acs_value) = mapping.get_mut(&acs_key) {
+                if let Some(seq) = acs_value.as_sequence_mut() {
+                    for item in seq.iter_mut() {
+                        let ac_map = match item.as_mapping_mut() {
+                            Some(m) => m,
+                            None => continue,
+                        };
+                        let tg_key = serde_yaml::Value::String("time_gated".into());
+                        match ac_map.remove(&tg_key) {
+                            Some(serde_yaml::Value::Bool(true)) => {
+                                ac_map.insert(
+                                    serde_yaml::Value::String("ac_type".into()),
+                                    serde_yaml::Value::String("observation".into()),
+                                );
+                                changed = true;
+                            }
+                            Some(_) => {
+                                // time_gated: false (or unexpected scalar) — drop
+                                // the key; default ac_type: code is implicit.
+                                changed = true;
+                            }
+                            None => {}
+                        }
+                    }
+                }
+            }
+        }
+
+        if !changed {
+            continue;
+        }
+
+        // Re-parse via the typed schema then re-serialise via the canonical
+        // writer. The typed parse will accept the new ac_type field (added
+        // in spec 2026-05-16-ac-taxonomy ac-01). Output is byte-identical
+        // to a fresh canonical write, which keeps `orbit verify` clean
+        // post-migration.
+        let migrated_spec: Spec = serde_yaml::from_value(value).map_err(|e| {
+            Error::malformed(
+                "migration.0.2-to-0.3",
+                format!("re-parse {} after rewrite: {e}", path.display()),
+            )
+        })?;
+        let canonical_text = serialise_yaml(&migrated_spec)?;
+        if canonical_text != original {
+            write_atomic(&path, canonical_text.as_bytes())?;
+        }
+    }
+
+    Ok(())
+}
+
+/// Initialise the schema-version file if missing, then advance it through
+/// any pending migrations to `CURRENT_SCHEMA_VERSION`. Idempotent — safe
+/// to call on every verb invocation. Fresh trees skip the run() path
+/// (file just got created at the current version); already-current trees
+/// take the no-op branch in `run`.
+///
+/// Per spec 2026-05-16-ac-taxonomy ac-04: this is the wire that makes
+/// substrate migrations auto-apply on the next orbit verb against an
+/// older tree. `verify_all` calls it; other verbs that mutate substrate
+/// state should call it too if they want a guaranteed-current tree.
+pub fn ensure_current(layout: &OrbitLayout) -> Result<MigrationReport> {
+    init_schema_version(layout)?;
+    run(layout, CURRENT_SCHEMA_VERSION)
 }
 
 /// Initialise the schema-version file at the configured layout.
@@ -336,21 +452,24 @@ mod tests {
     }
 
     #[test]
-    fn registry_at_v0_2_has_one_entry() {
-        // spec 2026-05-15-agent-learning-loop ac-02: the 0.1 → 0.2 entry is
-        // the first migration in orbit's history. If a future version adds
-        // 0.2 → 0.3 this test grows to assert the chain shape.
+    fn registry_at_v0_3_has_two_entries() {
+        // spec 2026-05-16-ac-taxonomy ac-03: the registry now carries
+        // 0.1 → 0.2 (no-op) plus 0.2 → 0.3 (time_gated → ac_type). If a
+        // future version adds 0.3 → 0.4 this test grows.
         let r = registry();
-        assert_eq!(r.len(), 1, "expected exactly one migration entry at v0.2");
+        assert_eq!(r.len(), 2, "expected two migration entries at v0.3");
         assert_eq!(r[0].from, "0.1");
         assert_eq!(r[0].to, "0.2");
+        assert_eq!(r[1].from, "0.2");
+        assert_eq!(r[1].to, "0.3");
     }
 
     #[test]
-    fn migrate_0_1_to_0_2_writes_new_version_and_leaves_files_untouched() {
-        // spec 2026-05-15-agent-learning-loop ac-02: a fixture at 0.1 with
-        // existing canonical files must end at 0.2 with no other file
-        // mutated — the migration is structural no-op + version bump.
+    fn migrate_0_1_to_current_walks_chain_and_lands_at_target() {
+        // spec 2026-05-16-ac-taxonomy ac-03: a fixture at 0.1 with no
+        // legacy time_gated content walks the full chain (0.1 → 0.2 → 0.3)
+        // and ends at CURRENT_SCHEMA_VERSION. Existing canonical files
+        // not carrying time_gated remain untouched.
         let dir = tempdir().unwrap();
         let layout = OrbitLayout::at(dir.path());
         layout.ensure_dirs().unwrap();
@@ -369,30 +488,30 @@ mod tests {
         std::thread::sleep(std::time::Duration::from_millis(20));
         let report = run(&layout, CURRENT_SCHEMA_VERSION).unwrap();
         assert_eq!(report.from, "0.1");
-        assert_eq!(report.to, "0.2");
-        assert_eq!(report.applied, 1);
+        assert_eq!(report.to, CURRENT_SCHEMA_VERSION);
+        assert_eq!(report.applied, 2, "expected 0.1 → 0.2 and 0.2 → 0.3 steps");
         assert!(!report.skipped);
 
-        // schema-version file is now 0.2.
+        // schema-version file is now CURRENT.
         let new_text = std::fs::read_to_string(layout.schema_version_file()).unwrap();
         let new_sv: SchemaVersion = parse_yaml(&new_text).unwrap();
-        assert_eq!(new_sv.version, "0.2");
+        assert_eq!(new_sv.version, CURRENT_SCHEMA_VERSION);
 
         // The memory file was not touched.
         let memory_mtime_after = std::fs::metadata(&memory_path).unwrap().modified().unwrap();
         assert_eq!(
             memory_mtime_before, memory_mtime_after,
-            "0.1 → 0.2 must not rewrite existing canonical files"
+            "memory files must not be rewritten by chain migration"
         );
         let memory_text_after = std::fs::read_to_string(&memory_path).unwrap();
         assert_eq!(memory_text_after, memory_yaml);
     }
 
     #[test]
-    fn migrate_already_at_0_2_is_noop() {
-        // spec 2026-05-15-agent-learning-loop ac-02: a fixture already at
-        // 0.2 (fresh workspace seeded after this AC ships) must not run
-        // the 0.1 → 0.2 path. Zero files change.
+    fn migrate_already_at_current_is_noop() {
+        // spec 2026-05-16-ac-taxonomy ac-03 (generalising 2026-05-15-
+        // agent-learning-loop ac-02): a fixture already at the current
+        // version must not run any migration step. Zero files change.
         let dir = tempdir().unwrap();
         let layout = OrbitLayout::at(dir.path());
         layout.ensure_dirs().unwrap();
@@ -414,8 +533,137 @@ mod tests {
             .unwrap();
         assert_eq!(
             sv_mtime_before, sv_mtime_after,
-            "fresh-at-0.2 must not rewrite the schema-version file"
+            "fresh-at-current must not rewrite the schema-version file"
         );
+    }
+
+    #[test]
+    fn migrate_0_2_to_0_3_rewrites_time_gated_to_ac_type_observation() {
+        // spec 2026-05-16-ac-taxonomy ac-03: a fixture spec.yaml carrying
+        // `time_gated: true` on an AC migrates to `ac_type: observation`
+        // with the time_gated key removed.
+        let dir = tempdir().unwrap();
+        let layout = OrbitLayout::at(dir.path());
+        layout.ensure_dirs().unwrap();
+
+        // Plant a 0.2 schema-version file.
+        let sv = SchemaVersion { version: "0.2".into(), note: None };
+        let text = serialise_yaml(&sv).unwrap();
+        write_atomic(layout.schema_version_file(), text.as_bytes()).unwrap();
+
+        // Plant a spec.yaml with time_gated: true on ac-X and time_gated:
+        // false on ac-Y. Use the legacy field name directly — pre-0.3
+        // canonical content.
+        layout.ensure_spec_dir("0001").unwrap();
+        let spec_path = layout.spec_file("0001");
+        let legacy_yaml = "id: '0001'\n\
+                           goal: test\n\
+                           status: open\n\
+                           acceptance_criteria:\n\
+                           - id: ac-X\n  description: X\n  gate: false\n  checked: false\n  time_gated: true\n\
+                           - id: ac-Y\n  description: Y\n  gate: false\n  checked: false\n  time_gated: false\n";
+        write_atomic(&spec_path, legacy_yaml.as_bytes()).unwrap();
+
+        let report = run(&layout, CURRENT_SCHEMA_VERSION).unwrap();
+        assert_eq!(report.applied, 1, "expected one step (0.2 → 0.3)");
+
+        let migrated = std::fs::read_to_string(&spec_path).unwrap();
+        // time_gated keys are gone.
+        assert!(
+            !migrated.contains("time_gated"),
+            "time_gated must be removed:\n{migrated}"
+        );
+        // ac-X carries ac_type: observation.
+        assert!(
+            migrated.contains("ac_type: observation"),
+            "ac-X must carry ac_type: observation:\n{migrated}"
+        );
+        // ac-Y has no ac_type line (default code is implicit).
+        // We assert there's exactly one ac_type occurrence (for ac-X).
+        assert_eq!(
+            migrated.matches("ac_type:").count(),
+            1,
+            "exactly one ac_type line expected (ac-X), default-code ac-Y is implicit:\n{migrated}"
+        );
+
+        // Re-parse via typed schema succeeds.
+        let parsed: Spec = parse_yaml(&migrated).unwrap();
+        assert_eq!(parsed.acceptance_criteria.len(), 2);
+        assert_eq!(
+            parsed.acceptance_criteria[0].ac_type,
+            crate::schema::AcType::Observation,
+        );
+        assert_eq!(
+            parsed.acceptance_criteria[1].ac_type,
+            crate::schema::AcType::Code,
+        );
+
+        // schema-version file is now 0.3.
+        let new_text = std::fs::read_to_string(layout.schema_version_file()).unwrap();
+        let new_sv: SchemaVersion = parse_yaml(&new_text).unwrap();
+        assert_eq!(new_sv.version, "0.3");
+    }
+
+    #[test]
+    fn migrate_0_2_to_0_3_is_idempotent_on_already_migrated_tree() {
+        // spec 2026-05-16-ac-taxonomy ac-03: re-running on a tree with no
+        // time_gated keys touches no files (the migration step's changed
+        // flag stays false, no write).
+        let dir = tempdir().unwrap();
+        let layout = OrbitLayout::at(dir.path());
+        layout.ensure_dirs().unwrap();
+
+        let sv = SchemaVersion { version: "0.2".into(), note: None };
+        let text = serialise_yaml(&sv).unwrap();
+        write_atomic(layout.schema_version_file(), text.as_bytes()).unwrap();
+
+        // Plant a spec.yaml that already uses ac_type (post-migration shape).
+        layout.ensure_spec_dir("0001").unwrap();
+        let spec_path = layout.spec_file("0001");
+        let modern_yaml = "id: '0001'\n\
+                           goal: test\n\
+                           status: open\n\
+                           acceptance_criteria:\n\
+                           - id: ac-X\n  description: X\n  gate: false\n  checked: false\n  ac_type: observation\n";
+        write_atomic(&spec_path, modern_yaml.as_bytes()).unwrap();
+        let mtime_before = std::fs::metadata(&spec_path).unwrap().modified().unwrap();
+
+        std::thread::sleep(std::time::Duration::from_millis(20));
+        run(&layout, CURRENT_SCHEMA_VERSION).unwrap();
+
+        let mtime_after = std::fs::metadata(&spec_path).unwrap().modified().unwrap();
+        assert_eq!(
+            mtime_before, mtime_after,
+            "spec.yaml without time_gated must not be rewritten by the 0.2 → 0.3 migration"
+        );
+    }
+
+    #[test]
+    fn ensure_current_initialises_and_advances_in_one_call() {
+        // spec 2026-05-16-ac-taxonomy ac-04: the wire that makes substrate
+        // migrations auto-apply on the next orbit verb. ensure_current
+        // initialises if missing AND advances the version through any
+        // pending migrations.
+        let dir = tempdir().unwrap();
+        let layout = OrbitLayout::at(dir.path());
+        layout.ensure_dirs().unwrap();
+
+        // 1. Missing file: ensure_current initialises at CURRENT (no advance needed).
+        assert!(!layout.schema_version_file().exists());
+        let report = ensure_current(&layout).unwrap();
+        assert!(report.skipped, "fresh init should skip the run() chain");
+        let text = std::fs::read_to_string(layout.schema_version_file()).unwrap();
+        let sv: SchemaVersion = parse_yaml(&text).unwrap();
+        assert_eq!(sv.version, CURRENT_SCHEMA_VERSION);
+
+        // 2. Manually downgrade to 0.2; ensure_current advances to current.
+        let downgraded = SchemaVersion { version: "0.2".into(), note: None };
+        let text = serialise_yaml(&downgraded).unwrap();
+        write_atomic(layout.schema_version_file(), text.as_bytes()).unwrap();
+        let report = ensure_current(&layout).unwrap();
+        assert_eq!(report.from, "0.2");
+        assert_eq!(report.to, CURRENT_SCHEMA_VERSION);
+        assert!(!report.skipped);
     }
 
     #[test]

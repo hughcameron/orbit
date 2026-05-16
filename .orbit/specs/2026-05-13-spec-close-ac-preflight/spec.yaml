@@ -51,4 +51,4 @@ acceptance_criteria:
   gate: true
   checked: true
   verification: 'Sequencing: (1) ac-01 lands — `time_gated` field exists in the canonical schema; (2) this AC (ac-09) is amended in spec.yaml to add `time_gated: true` (substrate now accepts the field); (3) remaining ACs ship; (4) `orbit spec close` closes the spec cleanly because ac-09 is time-gated (no `--force`); (5) release runs via `/orb:release` — Cargo.toml bump, tag, brew tap update; (6) smoke on the released binary: `brew upgrade orbit` shows the new tag, then `orbit spec close <test-spec-with-unchecked-ac>` returns `Error::conflict`, `orbit spec close --force <same-spec>` succeeds, `orbit spec close <test-spec-with-only-time-gated-unchecked>` succeeds without `--force`; (7) smoke result captured in a follow-up memory or commit message, and ac-09''s `checked:` is flipped to `true` in a small follow-up commit. The flow validates the feature end-to-end on its own delivery without `--force` theatre.'
-  time_gated: true
+  ac_type: observation
