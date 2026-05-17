@@ -54,7 +54,7 @@ relations:
   reason: code-level lean (dead code, stale comments, orphan imports) needs AST awareness; tree-sitter and ast-grep are the substrate
 references:
 - '.orbit/memos/2026-05-06-codebase-mastery.md: distillation source — three pillars and Karpathy''s principles mapping'
-- 'ops/RTK.md: rtk reference (token compression layer; already in use via Claude Code hooks)'
+- 'rtk: token-compressing CLI proxy installed on PATH; agent-facing reference is `rtk --help` (lists wrapped verbs — ls, tree, read, grep, git, find, diff, log, json, etc.)'
 - 'https://github.com/quickwit-oss/tantivy: indexed full-text search (deferred to v0.2+)'
 - 'https://github.com/ast-grep/ast-grep: pattern-based AST search'
 - 'https://github.com/forrestchang/andrej-karpathy-skills: Karpathy''s four principles'

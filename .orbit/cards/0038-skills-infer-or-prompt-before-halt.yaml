@@ -1,0 +1,42 @@
+id: 0038-skills-infer-or-prompt-before-halt
+feature: Skills infer or prompt before halting on missing arguments
+as_a: agent (or Hugh) invoking a /orb:* skill that requires a contextual argument (typically a spec-id) without supplying one
+i_want: the skill to try to figure out what I meant — by checking what's already bound, then offering a menu of open work — before halting
+so_that: a recoverable missing argument never looks like a silent failure, and one round-trip resolves what would otherwise force me to re-read docs and re-invoke
+goal: every /orb:* skill with a required contextual argument follows the same three-step recovery (infer → prompt → halt) — zero silent halts on recoverable missing-arg cases
+maturity: planned
+scenarios:
+- name: Skill uses the bound spec when no argument is supplied
+  given: a /orb:* skill that requires a spec-id is invoked with no argument, and .orbit/.session-card contains a bound spec
+  when: the skill runs
+  then: it uses the bound spec automatically, surfacing which spec it picked before doing other work
+  gate: true
+- name: Skill prompts with a menu when nothing is bound
+  given: the skill is invoked with no argument and .orbit/.session-card is empty
+  when: open specs exist
+  then: the skill lists the open specs as a single choice (one AskUserQuestion), uses the selected spec, and proceeds — without a multi-step research expedition
+  gate: true
+- name: Skill halts only when both fallbacks fail
+  given: the skill is invoked with no argument, .orbit/.session-card is empty, and there are no open specs
+  when: the skill cannot resolve a target
+  then: it halts with a clear "no spec to act on" message — not a silent stop the user can mistake for a broken skill
+  gate: true
+- name: The recovery behaviour is uniform across all affected skills
+  given: every /orb:* skill that takes a required contextual argument
+  when: the capability is shipped
+  then: each affected skill follows the same infer → prompt → halt sequence — implementation lives wherever enforcement is strongest (likely a shared CLI resolver, possibly with thin per-skill wrappers), not where prose interpretation is required
+  gate: false
+specs: []
+relations:
+- card: 0036-session-handover
+  type: depends-on
+  reason: .session-card (the binding read in step 1) shipped as part of 0036's per-card session handover work; this card consumes that substrate
+- card: 0020-orbit-state
+  type: depends-on
+  reason: open-spec enumeration and the .session-card surface are orbit-state primitives
+- card: 0022-skill-curator
+  type: feeds
+  reason: skill front-matter or curator metadata could carry a "requires_arg:" declaration that the shared resolver reads; both cards live in skill-quality territory
+references:
+- '.orbit/memos/2026-05-16-skills-infer-or-prompt-not-halt.md: distillation source'
+notes: []

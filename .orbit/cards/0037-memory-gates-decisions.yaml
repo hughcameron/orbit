@@ -1,0 +1,53 @@
+id: 0037-memory-gates-decisions
+feature: Memory gates decisions — relevant prior knowledge surfaces at the decision moment, not only at session prime
+as_a: agent committing to an approach in a project where prior sessions have recorded relevant memories
+i_want: matching memories to surface at the moment the decision is made — whether that moment is inside /orb:design, inside /orb:spec, or mid-conversation when I am about to propose a non-trivial implementation
+so_that: the answer a past agent already recorded is not silently overridden by my momentum on a workaround for the same problem
+goal: zero "memory existed and was ignored" incidents — every memory matching active work is reconciled at the decision moment, whether or not a spec exists
+maturity: planned
+scenarios:
+- name: Matching memories surface at design time
+  given: a memory exists whose topic matches the work being scoped, and the agent enters /orb:design
+  when: the design interview opens
+  then: matching memories are surfaced into the interview before the agent commits to an approach
+  gate: true
+- name: Inline memory match during fluid work
+  given: an agent is mid-conversation and about to commit to a non-trivial approach (a refactor, a new module, an architectural choice) without entering /orb:design or /orb:spec
+  when: it calls a memory-match surface against the topic or a snippet of the proposed approach
+  then: matching memories are returned so the agent can reconcile them before typing the implementation
+  gate: true
+- name: Spec records which memories were considered
+  given: a spec is being framed and matching memories exist for its topic
+  when: the spec is written
+  then: a memories_considered field lists each matching memory and how it was applied — adopted, partially adopted with reason, or NA with reason
+  gate: true
+- name: spec.close blocks on unreconciled memories
+  given: a spec has matching memories but its memories_considered field is empty
+  when: spec.close runs
+  then: closure is refused — the spec must reconcile each matching memory before it can close
+  gate: true
+- name: Memory shape favours mechanism over state
+  given: an agent is recording a memory at session close
+  when: it writes the memory body
+  then: the memory leads with what to do (a mechanism clause — "use X for Y"), not what is observed (a state clause — "Y is hard"), so future decision-moment surfacing has something actionable to gate on
+  gate: false
+- name: Skill-prompt-only enforcement is insufficient
+  given: a skill prompt instructs the agent to re-check memories at decision points
+  when: the agent is mid-design and momentum favours a new workaround
+  then: the instruction loses to recency bias and sunk-cost momentum — enforcement must combine a callable surface (inline memory match) with structural gates (design-time surfacing, spec.close block), not behavioural reminders alone
+  gate: false
+specs: []
+relations:
+- card: 0023-memory-loop
+  type: depends-on
+  reason: record / store / auto-inject-at-prime is provided by 0023; this card adds enforcement at the decision moments where the auto-injected context has already lost the agent's attention
+- card: 0020-orbit-state
+  type: depends-on
+  reason: matching, surfacing, and the memories_considered field on Spec are substrate-level affordances
+- card: 0031-design-session-user-language
+  type: feeds
+  reason: memory surfacing inside /orb:design changes what the interview opens with — relevant prior knowledge frames the first question, not the last
+references:
+- '.orbit/memos/2026-05-17-memory-as-gate-not-context.md: distillation source'
+- '.orbit/cards/0023-memory-loop.yaml: the recall half of the memory loop — this card is the enforcement half'
+notes: []

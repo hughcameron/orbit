@@ -1,0 +1,47 @@
+id: 2026-05-17-code-investigate-skill
+goal: Ship /orb:code-investigate as a sub-skill that coaches agents to reach for AST-aware tools (ast-grep, tree-sitter, rg, rtk wrappers) for code investigation in both narrow query and broad neighbourhood modes; embed call-points in /orb:implement, /orb:researcher, and /orb:review-pr; install a soft PreToolUse hook that warns when Edit/Write is invoked without a recent investigation; seed the learning loop via memories tagged code-investigate. Intent contract and design decisions in .orbit/specs/2026-05-17-code-investigate-skill/interview.md.
+cards:
+- 0025-codebase-mastery
+status: open
+labels:
+- spec
+acceptance_criteria:
+- id: ac-01
+  description: '/orb:code-investigate skill exists at plugins/orb/skills/code-investigate/SKILL.md with two documented modes. Narrow mode — agent passes a specific query ("find X matching pattern Y", "where is feature Z implemented", "what calls function W") and the skill prose coaches the agent to pick the right tool per query type. Broad mode — agent invokes without a specific query (or with a directory/module scope) and the skill prose coaches the agent to gather a synthesised neighbourhood picture (directory structure, hot files, where complexity lives, what is adjacent to the area being changed). Tool taxonomy in the coaching prose: ast-grep for structural patterns regex cannot express, tree-sitter for AST queries, ripgrep for text search, rtk-wrapped variants for token-frugal output, Read/Glob for file context. Skill front-matter follows the curator convention from card 0022 (name, description, created_by, created_at, pinned).'
+  gate: true
+  checked: false
+  verification: File exists at plugins/orb/skills/code-investigate/SKILL.md. Front-matter parses and includes the curator fields. Prose grep returns hits for "narrow mode", "broad mode", "ast-grep", "tree-sitter", "ripgrep", "rtk". Invocation as /orb:code-investigate from a fresh Claude Code session resolves the skill (not "skill not found").
+- id: ac-02
+  description: PreToolUse hook installed in plugins/orb/hooks/ (or wherever the plugin loader expects) that fires on Edit and Write tool calls. Hook reads the session-state marker from ac-03; if no recent /orb:code-investigate invocation is recorded for the file being edited (or no investigation in the session at all), the hook emits a non-blocking warning naming the file and pointing the agent at /orb:code-investigate. The edit proceeds regardless — this is a nudge, not a gate. The warning text is stable enough to grep for ("consider /orb:code-investigate before editing") so subsequent audits can count warning fires across sessions.
+  gate: true
+  checked: false
+  verification: 'Hook file exists at the plugin-loader-expected path. Manual smoke: in a fresh session, invoke Edit on a file without prior /orb:code-investigate; assert the warning appears in tool output and the edit still succeeds. Counter-smoke: invoke /orb:code-investigate first, then Edit the same file; assert no warning. Grep .claude/settings.json (or wherever the plugin registers hooks) confirms the registration.'
+- id: ac-03
+  description: 'Session-state surface that tracks recent /orb:code-investigate invocations so the ac-02 hook can read them. Cheapest mechanism — likely a single-file marker at .orbit/.code-investigate-recent containing a newline-separated list of (timestamp, file-or-scope) entries, with entries older than the session (or older than 1 hour) ignored at read time. The skill writes to this file on each invocation; the hook reads it. Design pass to confirm: per-file granularity vs session-wide-recency, TTL choice, atomic write discipline (use write_atomic per existing orbit-state convention). The .orbit/.gitignore gains a .code-investigate-recent entry alongside the existing .session-id and .session-card entries.'
+  gate: true
+  checked: false
+  verification: 'Invoking /orb:code-investigate writes the marker file with an entry containing a parseable timestamp and the query/scope. Hook reads the marker correctly (no spurious warnings when an entry is present and fresh; warning fires when the entry is absent or stale). gitignore_includes_code_investigate_recent regression test added alongside the existing gitignore-content tests. Manual smoke: marker file is absent on a fresh session, appears after first /orb:code-investigate, is cleaned up by Stop hook (or expires by TTL — design pass chooses).'
+- id: ac-04
+  description: Call-points embedded in existing skills. plugins/orb/skills/implement/SKILL.md gets prose at the start of its instructions directing the agent to invoke /orb:code-investigate (broad mode) on the relevant module before proposing any non-trivial change, and to invoke narrow mode whenever a specific structural question arises mid-implementation. plugins/orb/skills/researcher/SKILL.md gets prose directing the agent to invoke /orb:code-investigate (broad mode) before opening any new research thread that touches code. plugins/orb/skills/review-pr/SKILL.md gets prose directing the agent to invoke /orb:code-investigate (narrow mode) when checking call sites, test coverage, and related-doc presence as part of the review checklist. Each call-point includes a one-line rationale matching the agent-equipment framing — the agent reaches for evidence cheaply enough that it actually reaches.
+  gate: true
+  checked: false
+  verification: 'Grep each updated SKILL.md for "/orb:code-investigate" and assert at least one hit per file. Prose review confirms the call-points sit at the right structural moments (not buried in a footnote, not duplicated, named with a one-line rationale). Manual smoke: invoke each updated skill in a fresh session, observe whether the agent reaches for /orb:code-investigate at the expected moment.'
+  ac_type: doc
+- id: ac-05
+  description: 'Memory tag convention "code-investigate" documented in METHOD.md and in the skill prose. The skill prose includes a closing instruction: after using /orb:code-investigate, write a short memory via orbit memory remember with tag "code-investigate" capturing (a) the query or scope, (b) the tools reached for, (c) what worked or did not. METHOD.md gains a one-line entry under the memory section naming "code-investigate" as the canonical tag for code-investigation observations and pointing to the skill. The tag is the substrate seam the learning loop pivots on — periodic distillation (manual or via a future lean-pass column) lifts recurring patterns from tagged memories into the skill prose.'
+  gate: false
+  checked: false
+  verification: 'Grep METHOD.md for "code-investigate" tag mention. Grep skill SKILL.md for the "after using this, write a memory" instruction. Manual smoke: invoke the skill, follow the closing instruction, verify the memory lands with the expected tag (orbit memory list --tag code-investigate returns it).'
+  ac_type: doc
+- id: ac-06
+  description: Card 0025 (codebase-mastery) reframed to make the agent-equipment story explicit and to name /orb:code-investigate as the surface that delivers the capability. Reframe scope — as_a/i_want/so_that wording stays close to current but tightens the agent-facing framing; goal updated to reference /orb:code-investigate as the delivery vehicle for the token-frugal default; scenarios stay (all seven) with minor wording tightening where any read as user-facing rather than agent-facing. The references list adds .orbit/specs/2026-05-17-code-investigate-skill/spec.yaml. The card stays at maturity planned until the 4-week observation window (ac-07) confirms the capability is being used in practice — promotion to emerging is a follow-on lean-pass call, not part of this spec.
+  gate: false
+  checked: false
+  verification: Grep card 0025 yaml for "/orb:code-investigate" — at least one hit in the goal field or scenarios. Spot-check that the seven scenarios still parse cleanly through orbit card show 25 (no schema drift). References list includes the spec path.
+  ac_type: doc
+- id: ac-07
+  description: 'Observation-band: 4-week usage audit of the tagged memories. Earliest fire date: 2026-06-14 (4 weeks after this spec lands). Audit reads memories tagged code-investigate across orbit and consumer repos where /orb:code-investigate has been adopted, tabulates invocation count by week, tool-reach distribution (which tools the agent reached for, per query type), warning-fire count from the ac-02 hook (how often agents edited without prior investigation), and gaps that surfaced (queries the skill did not coach well, tools the agent reached for that were not in the taxonomy). Audit produces a memo at .orbit/memos/2026-06-14-code-investigate-4-week-audit.md with the data tables and a recommendation: keep coaching as-is, update skill prose with newly-learned patterns, or open a follow-on spec if the learning loop revealed a substrate gap.'
+  gate: false
+  checked: false
+  verification: Audit memo exists at the path above on or after 2026-06-14. Memo includes invocation count table, tool-reach distribution table, warning-fire count, gaps section, recommendation. spec.close treats this AC as deferrable per the ac-taxonomy observation band (does not block close).
+  ac_type: observation
