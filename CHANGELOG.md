@@ -2,6 +2,40 @@
 
 All notable changes to orbit are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.4.20] - 2026-05-18
+
+Topology moves out of the documentation tree and into the agent substrate. Per choice 0025 (`topology-substrate-folder`), the canonical shape is per-subsystem yaml at `.orbit/topology/<subsystem>.yaml` parsed against the new `TopologyEntry` schema — pointer-only, agent-queryable, prunable with `rm`. The substrate-engagement envelopes shipped in 0.4.19 (`session.prime` `topology_drift`, `spec.close` `topology_warnings`, `memory.remember` `--label topology` nudge) are preserved against the new parser, so consumer-facing envelope shapes don't break. Ships spec `2026-05-18-topology-substrate-migration` end-to-end (5/5 ACs, card 0040 maturity planned → emerging).
+
+### Added
+
+- `TopologyEntry` schema in `orbit-state` (deny-unknown-fields, slug-shape and ≥ 5-char validation, non-empty `canonical_code` required); list-valued pointer fields for `canonical_code` / `decision_record` / `operational_doc` / `test_surface`.
+- `Layout::topology_dir()` / `topology_file(slug)` / `list_topology_files()` mirroring the existing card/choice/memory scanner shape.
+- `verify_all` extends with a topology-entry branch — round-trip + non-serde validate per file.
+- `orbit topology setup` Rust verb (CLI + MCP): scaffolds `.orbit/topology/` with a self-describing seed (one entry per `.orbit/` entity type — `cards`, `choices`, `specs-substrate`, `memories`, `topology` itself), opportunistically strips legacy `docs.topology` from `.orbit/config.yaml`, idempotent on re-runs. Replaces `plugins/orb/scripts/setup-topology.sh` per choice 0020.
+- Choice 0025 (`topology-substrate-folder`) — MADR for the architectural shift.
+
+### Changed
+
+- `audit_topology` parser swap — markdown header/list scanning → per-file yaml parse via `schema::TopologyEntry`. Drift codes: `stale_pointer` / `missing_entry` preserved for envelope continuity; `invalid_field` / `parse_failed` added for structural failures.
+- `audit_topology(...).configured` canonical predicate: `.orbit/topology/` exists AND contains ≥ 1 entry (populated == configured per the design pass's UX call).
+- `compute_topology_warnings` rewired to load subsystem names directly from `.orbit/topology/` entries.
+- `/orb:topology` skill rewritten for per-file editing (write/read/audit modes operate on `.orbit/topology/<subsystem>.yaml`).
+- `/orb:setup` §6d invokes `orbit topology setup` (Rust verb, not bash script).
+- `/orb:distill` and `/orb:release` topology gates re-anchored to ".orbit/topology/ exists and is populated".
+
+### Fixed
+
+- `promote.sh` was checking the obsolete flat spec path (`.orbit/specs/<id>.yaml`) and silently bailing before writing acceptance_criteria; now uses the folder-sidecar path (`.orbit/specs/<id>/spec.yaml`).
+
+### Deprecated
+
+- `DocsConfig::topology` field — retained as parse-only so brownfield consumer repos that wired topology under 0.4.19 do not hard-fail `Config::from_str` on session prime. The canonical writer preserves the field; `orbit topology setup` strips it from on-disk configs. A follow-on spec deletes the field entirely after consumer-repo soak.
+
+### Removed
+
+- Legacy markdown parser in `audit_topology` (`parse_topology_doc` and `load_topology_subsystem_names` helpers).
+- `plugins/orb/scripts/setup-topology.sh` and its bash test (replaced by `orbit topology setup` Rust verb + CLI/MCP parity tests).
+
 ## [0.4.19] - 2026-05-18
 
 Topology capability becomes self-maintaining. The substrate shipped in 0.4.18's parent spec (`/orb:topology` skill + `Config` schema + `orbit audit topology` verb) now reaches into the moments where it earns its keep — `/orb:setup` scaffolds the config + stub on first project boot, `orbit session prime` surfaces topology drift in its envelope at session start, `orbit spec close` flags warnings when the closing spec text touches a documented subsystem, and `orbit memory remember --label topology` nudges toward `/orb:topology` so the index gets updated at the learning moment rather than at the next gate. Closes 4 of 5 ACs in spec `2026-05-18-topology-substrate-wires` (card 0040); ac-05 is the 2026-06-15 4-week observation audit, calendar-deferred per the ac-taxonomy observation band.
