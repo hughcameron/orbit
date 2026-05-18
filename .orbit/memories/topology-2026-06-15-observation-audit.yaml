@@ -1,0 +1,7 @@
+key: topology-2026-06-15-observation-audit
+body: 'Calendar entry: 2026-06-15 is the earliest fire date for ac-05 of spec 2026-05-18-topology-substrate-wires (the 4-week topology observation audit). Audit reads (a) topology doc entry count + update frequency by subsystem, (b) memories labelled topology over the 4-week window, (c) topology_warnings counts emitted by spec.close, (d) topology_drift counts emitted by session prime. Produces a memo at .orbit/memos/2026-06-15-topology-4-week-audit.md with data tables + recommendation (keep coaching as-is / tighten heuristic / expand triggers / open follow-on spec). spec.close treats this AC as deferrable per ac-taxonomy observation band — the spec is ALREADY closed; this is post-close empirical evaluation. To reopen the spec for the audit, just append the ac-05 verification artefact to .orbit/memos/ — no spec-state change needed unless follow-on work is identified.'
+timestamp: 2026-05-18T06:26:19.411386242Z
+labels:
+- topology
+- observation
+- calendar

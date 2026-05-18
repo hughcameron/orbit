@@ -1,0 +1,7 @@
+key: review-pr-medium-findings-default-policy
+body: 'When review-pr returns APPROVE with a MEDIUM finding on verification-language adherence (e.g. ''Parity test on CLI + MCP'' but only CLI shipped), the DEFAULT is to address inline before close, NOT to capture in a follow-on memo. Reason: card 0040 produced two follow-on memos in a row (parent + this drive), both around verification gaps that took ~30-60 min each to actually close. Punting cost Hugh ~1hr of his time after the second occurrence. The reviewer''s ''APPROVE not BLOCK'' framing was about behavioural correctness, not verification-language adherence — those are different contracts. How to apply: when finalising a drive and review-pr reports MEDIUM findings, ask ''is this 30-60 min to address inline?'' If yes, ship it. Only route to a memo when the work is genuinely out of scope or requires new design decisions. Substrate-side reinforcement: review-pr findings of MEDIUM severity around tests/parity/verification-language should be treated as ship-blockers by the implementing agent''s own internal threshold, even when the cold-fork reviewer issues APPROVE.'
+timestamp: 2026-05-18T06:26:12.650973736Z
+labels:
+- feedback
+- drive
+- review-pr
