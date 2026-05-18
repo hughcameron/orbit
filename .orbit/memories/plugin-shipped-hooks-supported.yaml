@@ -1,0 +1,6 @@
+key: plugin-shipped-hooks-supported
+body: 'Claude Code''s plugin loader registers hooks shipped at plugins/<name>/hooks/hooks.json automatically when the plugin is enabled — no consumer-side .claude/settings.json edits needed. Verified 2026-05-18 via the Claude Code plugins reference (https://code.claude.com/docs/en/plugins-reference.md, Hooks section). Format: standard JSON with an ''hooks'' object keyed by event name (SessionStart, PreToolUse, PostToolUse, etc.); command hooks support $CLAUDE_PLUGIN_ROOT for path resolution within the plugin dir. Caveat: prior memory missing-hooks-json-smoke-test (2026-05-09) verified absence-tolerated but did NOT verify presence-loads — agents in cycle-1 review-spec for 2026-05-17-code-investigate-skill misread it both ways (cycle-1 reviewer read absence-tolerated as proof presence-doesn''t-load; cycle-1 author read absence-tolerated as proof presence-does-load). Neither read was supported by the memory; only the 2026-05-18 docs check resolved it.'
+timestamp: 2026-05-18T00:27:28.921165826Z
+labels:
+- code-investigate
+- plugin-format
