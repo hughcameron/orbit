@@ -6,6 +6,7 @@ schema-version
 locks/
 .session-id
 .session-card
+.code-investigate-recent
 
 # Substrate content — tracked. The negations are pinned here so any
 # future ignore-everything rule (in this file or a parent) cannot

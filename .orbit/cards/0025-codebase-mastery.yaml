@@ -1,9 +1,9 @@
 id: 0025-codebase-mastery
 feature: Codebase mastery — token-frugal navigation, parsing, and search
 as_a: agent working in any of Hugh's repos
-i_want: rtk-wrapped commands, tree-sitter for AST queries, ripgrep and ast-grep for search — all delivered in token-frugal modes by default
+i_want: rtk-wrapped commands, tree-sitter for AST queries, ripgrep and ast-grep for search — all delivered via /orb:code-investigate in token-frugal modes by default
 so_that: I can check the codebase before editing it (Think Before Coding), reuse existing patterns (Simplicity First), edit surgically (Surgical Changes), and write tests-first (Goal-Driven Execution) — without burning the context budget on browsing
-goal: agents check the codebase cheaply enough that they actually check; Karpathy's principles become operable rather than aspirational; token cost of evidence is low enough that evidence is gathered before assumptions are made
+goal: agents check the codebase cheaply enough that they actually check — /orb:code-investigate is the delivery vehicle for the token-frugal default with a PreToolUse nudge ensuring the discipline fires before edits; Karpathy's principles become operable rather than aspirational; token cost of evidence is low enough that evidence is gathered before assumptions are made
 maturity: planned
 scenarios:
 - name: rtk wraps command interactions by default
@@ -34,7 +34,7 @@ scenarios:
 - name: Karpathy's principles are operable, not aspirational
   given: an agent about to edit code
   when: the four principles apply (think before coding, simplicity first, surgical changes, goal-driven execution)
-  then: the tooling supports each — tree-sitter for evidence, ripgrep for finding precedent, ast-grep for orphan detection, rtk to keep all of this token-cheap
+  then: /orb:code-investigate routes the agent to the right tool for each — tree-sitter for evidence, ripgrep for finding precedent, ast-grep for orphan detection, rtk to keep all of this token-cheap
   gate: false
 - name: Code-domain verbs join orbit-state in v0.2+
   given: orbit-state has shipped at v0.1 (state-domain only)
@@ -53,6 +53,7 @@ relations:
   type: feeds
   reason: code-level lean (dead code, stale comments, orphan imports) needs AST awareness; tree-sitter and ast-grep are the substrate
 references:
+- '.orbit/specs/2026-05-17-code-investigate-skill/spec.yaml: ships /orb:code-investigate as the agent-equipment surface delivering this card'
 - '.orbit/memos/2026-05-06-codebase-mastery.md: distillation source — three pillars and Karpathy''s principles mapping'
 - 'rtk: token-compressing CLI proxy installed on PATH; agent-facing reference is `rtk --help` (lists wrapped verbs — ls, tree, read, grep, git, find, diff, log, json, etc.)'
 - 'https://github.com/quickwit-oss/tantivy: indexed full-text search (deferred to v0.2+)'

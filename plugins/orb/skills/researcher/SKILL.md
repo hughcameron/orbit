@@ -17,6 +17,8 @@ Stop coding and start investigating when the problem is unclear. Most bugs and b
 
 ## Your Approach
 
+**Before any research thread that touches code, run `/orb:code-investigate` (broad mode) on the relevant area.** The skill returns a synthesised neighbourhood picture — directory shape, hot files, complexity clusters — cheap enough to default to. The agent owns the code; this is how that ownership becomes cheap.
+
 1. **Define What's Unknown**
    Before any fix, articulate what you DON'T know:
    - "What does this function actually return?"

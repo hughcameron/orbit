@@ -70,6 +70,7 @@ Discriminate before defaulting to a card. Choosing the wrong artefact is the mos
 - Use `orbit` verbs for ALL task and spec tracking — do NOT use `TodoWrite`, `TaskCreate`, or markdown TODO lists.
 - Run `orbit session prime` at the start of every session — it surfaces open specs and recent memories.
 - Use `orbit memory remember <key> "<body>"` for persistent knowledge across sessions — do NOT use `MEMORY.md` files.
+- Use `--label code-investigate` on memories that capture code-investigation observations (a tool that worked where another failed, a query shape worth reaching for again, a structural insight worth keeping). This is the canonical label that `/orb:code-investigate` pivots on — periodic distillation lifts recurring patterns from labelled memories back into the skill's prose.
 - Use `orbit task open / claim / update / done` for in-session tracking.
 
 ## Four pillars

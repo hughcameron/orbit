@@ -123,6 +123,10 @@ Before any code is written, the agent runs the following sequence:
 No checklist file is written. The spec's `acceptance_criteria` field is
 authoritative and remains so for the rest of the session.
 
+## Code investigation discipline
+
+Run `/orb:code-investigate` (broad mode) on the module the next AC touches before proposing any non-trivial change. The skill gathers a synthesised neighbourhood picture — directory shape, hot files, where complexity clusters, what sits adjacent to the change surface — cheap enough to default to. For specific structural questions that surface mid-implementation — *where is X*, *what calls Y*, *how many Z* — invoke narrow mode rather than approximating with grep. The agent owns the code; reach for evidence cheaply enough that you actually reach.
+
 ## Implement loop
 
 For each AC, in `next-ac` order:

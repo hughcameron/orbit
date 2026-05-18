@@ -40,6 +40,8 @@ The skill takes an orbit-state spec id — the spec's `acceptance_criteria` are 
 
 ### 3. Phase 2: Run Tests + AC Coverage Check
 
+**Reach for `/orb:code-investigate` (narrow mode) when probing call sites, test coverage, and related-doc presence.** The skill returns precise answers — *what calls X*, *where's the test for ac-04*, *is feature Y documented in METHOD.md* — without the grep-and-eyeball cost. Quote stats accurately rather than approximating.
+
 1. Run the project's test suite. Record pass/fail with output.
 2. **AC-to-test coverage check**: For every AC parsed in Phase 1, search the project's test sources for a test bearing the bare AC identifier (`ac<NN>` or `ac-NN`).
 
