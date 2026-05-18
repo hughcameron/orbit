@@ -18,7 +18,7 @@ acceptance_criteria:
 - id: ac-03
   description: /orb:topology skill rewrite. plugins/orb/skills/topology/SKILL.md write/read/audit modes rewritten for per-file yaml editing. Write-mode operates on one .orbit/topology/<subsystem>.yaml at a time (Write tool against the canonical path; subsystem-slug validation per ac-01 schema). Read-mode loads one file by subsystem key (Read tool against the canonical path). Audit-mode invokes `orbit audit topology` against the substrate verb. Skill prose names the per-file shape as canonical and removes references to the single markdown doc. SKILL.md cites choice 0025 as the architectural pin.
   gate: false
-  checked: false
+  checked: true
   verification: Grep plugins/orb/skills/topology/SKILL.md for the three modes (write/read/audit) and the canonical path .orbit/topology/<subsystem>.yaml. Assert references to docs/topology.md are removed or quarantined. Assert SKILL.md cites choice 0025. Invoke /orb:topology write-mode against a scratch subsystem and assert the file lands at .orbit/topology/<subsystem>.yaml with the canonical schema.
   ac_type: doc
 - id: ac-04
