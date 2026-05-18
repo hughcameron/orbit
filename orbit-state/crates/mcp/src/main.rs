@@ -425,10 +425,24 @@ fn tool_descriptors() -> Vec<Value> {
         }),
         json!({
             "name": "audit.topology",
-            "description": "Walk the topology doc named by .orbit/config.yaml's docs.topology key and report drift across three categories: stale_pointer, missing_entry, shape_drift. Exits 0 in all three states (clean, drift, not configured); consumers discriminate via the envelope.",
+            "description": "Walk .orbit/topology/<subsystem>.yaml entries (per choice 0025) and report drift across stale_pointer / missing_entry / invalid_field / parse_failed. Exits 0 in all states; consumers discriminate via the envelope's configured flag and topology_drift array.",
             "inputSchema": {
                 "type": "object",
                 "properties": {},
+                "additionalProperties": false
+            }
+        }),
+        json!({
+            "name": "topology.setup",
+            "description": "Scaffold .orbit/topology/ with self-describing seed entries (one per .orbit/ entity) and opportunistically strip legacy docs.topology from .orbit/config.yaml. Idempotent on re-runs. Per spec 2026-05-18-topology-substrate-migration ac-05.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "answer_wire": {
+                        "type": "string",
+                        "description": "Script the wire-or-decline prompt for non-interactive runs ('y' to proceed, 'n' to decline)."
+                    }
+                },
                 "additionalProperties": false
             }
         }),

@@ -24,7 +24,7 @@ use orbit_state_core::Error as OrbitError;
 use orbit_state_core::{
     canonicalise_all, envelope_err_string, envelope_ok_string, execute, reconcile_all,
     CanonicaliseReport, ReconcileReport,
-    AuditDriftArgs, AuditDriftResult, AuditTopologyArgs, AuditTopologyResult,
+    AuditDriftArgs, AuditDriftResult, AuditTopologyArgs, AuditTopologyResult, TopologySetupArgs, TopologySetupResult,
     CardListArgs, CardSearchArgs, CardShowArgs, CardShowResult,
     CardSpecsArgs, CardSpecsResult, CardTreeArgs, CardTreeEdge, CardTreeResult, ChoiceListArgs,
     ChoiceListResult, GraphArgs, GraphFormat, GraphResult, OverviewArgs, OverviewResult,
@@ -123,6 +123,11 @@ enum Command {
     Audit {
         #[command(subcommand)]
         action: AuditAction,
+    },
+    /// Topology substrate verbs (setup) — per choice 0025.
+    Topology {
+        #[command(subcommand)]
+        action: TopologyAction,
     },
     /// Substrate hygiene check — round-trip every canonical file (ac-16) and
     /// rebuild the index from files (ac-17). Exits non-zero on any drift.
@@ -270,6 +275,20 @@ enum CardAction {
     /// Surfaces drift where the card's `specs:` and the spec's `cards:`
     /// arrays disagree.
     Specs { slug: String },
+}
+
+#[derive(Debug, Subcommand)]
+enum TopologyAction {
+    /// Scaffold .orbit/topology/ with self-describing seed entries;
+    /// opportunistically strip legacy docs.topology from .orbit/config.yaml.
+    /// Idempotent on re-runs.
+    Setup {
+        /// Script the wire-or-decline prompt for non-interactive runs.
+        /// Pass `y` to proceed or `n` to decline. Per choice 0020's Rust
+        /// verb migration of setup-topology.sh.
+        #[arg(long = "answer-wire")]
+        answer_wire: Option<String>,
+    },
 }
 
 #[derive(Debug, Subcommand)]
@@ -1067,6 +1086,13 @@ fn build_request(layout: &OrbitLayout, command: &Command) -> Result<VerbRequest,
                 VerbRequest::AuditTopology(AuditTopologyArgs::default())
             }
         },
+        Command::Topology { action } => match action {
+            TopologyAction::Setup { answer_wire } => {
+                VerbRequest::TopologySetup(TopologySetupArgs {
+                    answer_wire: answer_wire.clone(),
+                })
+            }
+        },
         Command::Graph { card, depth, format } => {
             let parsed_format = match format.as_str() {
                 "mermaid" => GraphFormat::Mermaid,
@@ -1125,6 +1151,7 @@ fn render_human(response: &VerbResponse) {
         VerbResponse::Graph(result) => render_graph(result),
         VerbResponse::AuditDrift(result) => render_audit_drift(result),
         VerbResponse::AuditTopology(result) => render_audit_topology(result),
+        VerbResponse::TopologySetup(result) => render_topology_setup(result),
         VerbResponse::ChoiceShow(result) => render_choice_show(result),
         VerbResponse::ChoiceList(result) | VerbResponse::ChoiceSearch(result) => {
             render_choice_list(result)
@@ -1348,6 +1375,46 @@ fn render_audit_topology(result: &AuditTopologyResult) {
             "  {}\t{}{}",
             entry.subsystem, entry.drift_kind, detail
         );
+    }
+}
+
+fn render_topology_setup(result: &TopologySetupResult) {
+    if result.declined {
+        println!("topology.setup: declined (no changes)");
+        return;
+    }
+    if result.config_cleaned {
+        println!("topology.setup: stripped legacy docs.topology from .orbit/config.yaml");
+    }
+    if result.dir_created {
+        println!("topology.setup: created .orbit/topology/");
+    }
+    if !result.seeds_created.is_empty() {
+        println!(
+            "topology.setup: wrote {} seed entr{}:",
+            result.seeds_created.len(),
+            if result.seeds_created.len() == 1 { "y" } else { "ies" },
+        );
+        for slug in &result.seeds_created {
+            println!("  + {slug}");
+        }
+    }
+    if !result.seeds_skipped.is_empty() {
+        println!(
+            "topology.setup: skipped {} existing entr{} (preserved operator edits):",
+            result.seeds_skipped.len(),
+            if result.seeds_skipped.len() == 1 { "y" } else { "ies" },
+        );
+        for slug in &result.seeds_skipped {
+            println!("  = {slug}");
+        }
+    }
+    if !result.config_cleaned
+        && !result.dir_created
+        && result.seeds_created.is_empty()
+        && result.seeds_skipped.is_empty()
+    {
+        println!("topology.setup: nothing to do (substrate already configured)");
     }
 }
 

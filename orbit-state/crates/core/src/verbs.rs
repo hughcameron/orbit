@@ -110,6 +110,8 @@ pub enum VerbRequest {
     AuditDrift(AuditDriftArgs),
     #[serde(rename = "audit.topology")]
     AuditTopology(AuditTopologyArgs),
+    #[serde(rename = "topology.setup")]
+    TopologySetup(TopologySetupArgs),
     #[serde(rename = "choice.show")]
     ChoiceShow(ChoiceShowArgs),
     #[serde(rename = "choice.list")]
@@ -423,13 +425,29 @@ pub enum GraphFormat {
 #[serde(deny_unknown_fields)]
 pub struct AuditDriftArgs {}
 
-/// Args for `audit.topology` — walks the topology doc named by
-/// `.orbit/config.yaml`'s `docs.topology` key and reports drift across
-/// three categories (stale_pointer, missing_entry, shape_drift). No
-/// flags at v0.1. Per spec 2026-05-18-documentation-topology ac-06.
+/// Args for `audit.topology` — walks `.orbit/topology/<subsystem>.yaml`
+/// per choice 0025 (`topology-substrate-folder`) and reports drift
+/// (stale_pointer, missing_entry, invalid_field, parse_failed). No
+/// flags at v0.1. Per spec 2026-05-18-documentation-topology ac-06 and
+/// 2026-05-18-topology-substrate-migration ac-02.
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct AuditTopologyArgs {}
+
+/// Args for `topology.setup` — scaffolds the `.orbit/topology/`
+/// substrate folder and writes the self-describing seed entries, with
+/// opportunistic brownfield cleanup of any legacy `docs.topology`
+/// config key. Per spec 2026-05-18-topology-substrate-migration ac-05
+/// and choice 0020 (Rust verb migration of setup-topology.sh).
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct TopologySetupArgs {
+    /// Script the wire-or-decline prompt for non-interactive runs.
+    /// Some("y") proceeds, Some("n") declines, None defers to caller-
+    /// driven interaction. CLI surfaces this as `--answer-wire`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub answer_wire: Option<String>,
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
@@ -626,6 +644,8 @@ pub enum VerbResponse {
     AuditDrift(AuditDriftResult),
     #[serde(rename = "audit.topology")]
     AuditTopology(AuditTopologyResult),
+    #[serde(rename = "topology.setup")]
+    TopologySetup(TopologySetupResult),
     #[serde(rename = "choice.show")]
     ChoiceShow(ChoiceShowResult),
     #[serde(rename = "choice.list")]
@@ -890,6 +910,27 @@ pub struct AuditTopologyResult {
     pub topology_drift: Vec<TopologyDriftEntry>,
 }
 
+/// Result for `topology.setup`. Per spec
+/// 2026-05-18-topology-substrate-migration ac-05.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct TopologySetupResult {
+    /// True if the brownfield-cleanup arm ran (legacy `docs.topology`
+    /// key found and stripped from `.orbit/config.yaml`).
+    pub config_cleaned: bool,
+    /// True if `.orbit/topology/` was newly created in this invocation.
+    /// False on idempotent re-runs.
+    pub dir_created: bool,
+    /// Subsystem slugs whose seed entries were newly written. Empty on
+    /// idempotent re-runs.
+    pub seeds_created: Vec<String>,
+    /// Subsystem slugs whose seed entries already existed and were
+    /// skipped (operator edits preserved — no overwrite).
+    pub seeds_skipped: Vec<String>,
+    /// True if the prompt fired and was declined (operator chose not to
+    /// scaffold). Mutually exclusive with the other create/skip fields.
+    pub declined: bool,
+}
+
 /// A single drift entry from `audit.topology`.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct TopologyDriftEntry {
@@ -1141,6 +1182,7 @@ pub fn execute(layout: &OrbitLayout, request: &VerbRequest) -> Result<VerbRespon
         VerbRequest::Overview(args) => overview(layout, args).map(VerbResponse::Overview),
         VerbRequest::Graph(args) => graph(layout, args).map(VerbResponse::Graph),
         VerbRequest::AuditDrift(args) => audit_drift(layout, args).map(VerbResponse::AuditDrift),
+        VerbRequest::TopologySetup(args) => topology_setup(layout, args).map(VerbResponse::TopologySetup),
         VerbRequest::AuditTopology(args) => {
             audit_topology(layout, args).map(VerbResponse::AuditTopology)
         }
@@ -3099,6 +3141,158 @@ fn audit_topology(
         configured: true,
         topology_drift: drift,
     })
+}
+
+/// `topology.setup` — scaffold the `.orbit/topology/` substrate folder
+/// and write the self-describing seed entries. Per spec
+/// 2026-05-18-topology-substrate-migration ac-05.
+///
+/// Operation order:
+/// 1. Brownfield cleanup: strip legacy `docs.topology` from
+///    `.orbit/config.yaml` if present.
+/// 2. Create `.orbit/topology/` (idempotent).
+/// 3. Write one seed entry per `.orbit/` entity type (cards, choices,
+///    specs, memories, topology). Existing entries are skipped — operator
+///    edits preserved.
+///
+/// Idempotency: every step is no-op on a clean substrate; re-running
+/// produces no on-disk diff.
+fn topology_setup(
+    layout: &OrbitLayout,
+    args: &TopologySetupArgs,
+) -> Result<TopologySetupResult> {
+    const VERB: &str = "topology.setup";
+
+    // Decline path: caller scripted "n".
+    if matches!(args.answer_wire.as_deref(), Some("n") | Some("N") | Some("no")) {
+        return Ok(TopologySetupResult {
+            config_cleaned: false,
+            dir_created: false,
+            seeds_created: Vec::new(),
+            seeds_skipped: Vec::new(),
+            declined: true,
+        });
+    }
+
+    // 1. Brownfield cleanup: legacy docs.topology in .orbit/config.yaml.
+    let mut config_cleaned = false;
+    let config_path = layout.config_file();
+    if config_path.exists() {
+        let text = std::fs::read_to_string(&config_path).map_err(|e| {
+            Error::unavailable(VERB, format!("read {}: {e}", config_path.display()))
+        })?;
+        let mut config: crate::schema::Config = serde_yaml::from_str(&text)
+            .map_err(|e| Error::malformed(VERB, format!("parse config.yaml: {e}")))?;
+        if let Some(docs) = config.docs.as_mut() {
+            if docs.topology.take().is_some() {
+                config_cleaned = true;
+            }
+        }
+        // Elide an empty docs block entirely so verify_all stays clean.
+        if let Some(docs) = config.docs.as_ref() {
+            if docs.topology.is_none() {
+                config.docs = None;
+            }
+        }
+        if config_cleaned {
+            let new_text = if config.docs.is_none() {
+                // Empty struct serialises as "docs: null\n" or similar —
+                // prefer an empty Config which round-trips as "{}\n".
+                serde_yaml::to_string(&config).map_err(|e| {
+                    Error::malformed(VERB, format!("reserialise config.yaml: {e}"))
+                })?
+            } else {
+                serde_yaml::to_string(&config).map_err(|e| {
+                    Error::malformed(VERB, format!("reserialise config.yaml: {e}"))
+                })?
+            };
+            write_atomic(&config_path, new_text.as_bytes()).map_err(|e| {
+                Error::unavailable(VERB, format!("write {}: {e}", config_path.display()))
+            })?;
+        }
+    }
+
+    // 2. Create .orbit/topology/ (idempotent).
+    let topology_dir = layout.topology_dir();
+    let dir_created = !topology_dir.exists();
+    if dir_created {
+        std::fs::create_dir_all(&topology_dir).map_err(|e| {
+            Error::unavailable(VERB, format!("create {}: {e}", topology_dir.display()))
+        })?;
+    }
+
+    // 3. Write self-describing seed entries. One TopologyEntry per
+    //    .orbit/ entity type, each pointing at the orbit-state schema
+    //    struct (canonical_code), the relevant choice (decision_record),
+    //    the writing SKILL.md (operational_doc), and the schema tests
+    //    (test_surface). Universal across any orbit-using repo.
+    let mut seeds_created = Vec::new();
+    let mut seeds_skipped = Vec::new();
+    for seed in topology_setup_seeds() {
+        let path = layout.topology_file(&seed.subsystem);
+        if path.exists() {
+            seeds_skipped.push(seed.subsystem.clone());
+            continue;
+        }
+        let yaml = serde_yaml::to_string(&seed).map_err(|e| {
+            Error::malformed(VERB, format!("serialise seed {}: {e}", seed.subsystem))
+        })?;
+        write_atomic(&path, yaml.as_bytes())
+            .map_err(|e| Error::unavailable(VERB, format!("write {}: {e}", path.display())))?;
+        seeds_created.push(seed.subsystem.clone());
+    }
+
+    Ok(TopologySetupResult {
+        config_cleaned,
+        dir_created,
+        seeds_created,
+        seeds_skipped,
+        declined: false,
+    })
+}
+
+/// The self-describing seed templates written by `topology.setup`.
+/// One entry per `.orbit/` entity type — universal across any orbit-using
+/// repo. Subsystem slugs are slug-shaped (lowercase letters, ≥ 5 chars)
+/// per `TopologyEntry::validate`.
+fn topology_setup_seeds() -> Vec<crate::schema::TopologyEntry> {
+    vec![
+        crate::schema::TopologyEntry {
+            subsystem: "cards".into(),
+            canonical_code: vec!["orbit-state/crates/core/src/schema.rs".into()],
+            decision_record: vec!["0016".into()],
+            operational_doc: vec!["plugins/orb/skills/card/SKILL.md".into()],
+            test_surface: vec!["orbit-state/crates/core/src/schema.rs".into()],
+        },
+        crate::schema::TopologyEntry {
+            subsystem: "choices".into(),
+            canonical_code: vec!["orbit-state/crates/core/src/schema.rs".into()],
+            decision_record: vec!["0016".into()],
+            operational_doc: vec!["plugins/orb/skills/design/SKILL.md".into()],
+            test_surface: vec!["orbit-state/crates/core/src/schema.rs".into()],
+        },
+        crate::schema::TopologyEntry {
+            subsystem: "memories".into(),
+            canonical_code: vec!["orbit-state/crates/core/src/schema.rs".into()],
+            decision_record: vec!["0015".into()],
+            operational_doc: vec!["plugins/orb/skills/memo/SKILL.md".into()],
+            test_surface: vec!["orbit-state/crates/core/src/schema.rs".into()],
+        },
+        crate::schema::TopologyEntry {
+            subsystem: "specs-substrate".into(),
+            canonical_code: vec!["orbit-state/crates/core/src/schema.rs".into()],
+            decision_record: vec!["0021".into()],
+            operational_doc: vec!["plugins/orb/skills/spec/SKILL.md".into()],
+            test_surface: vec!["orbit-state/crates/core/src/schema.rs".into()],
+        },
+        crate::schema::TopologyEntry {
+            subsystem: "topology".into(),
+            canonical_code: vec!["orbit-state/crates/core/src/schema.rs".into()],
+            decision_record: vec!["0025".into()],
+            operational_doc: vec!["plugins/orb/skills/topology/SKILL.md".into()],
+            test_surface: vec!["orbit-state/crates/core/src/schema.rs".into()],
+        },
+    ]
 }
 
 fn graph(layout: &OrbitLayout, args: &GraphArgs) -> Result<GraphResult> {
@@ -7138,6 +7332,136 @@ canonical_code:
                 assert!(!result.configured);
             }
             other => panic!("expected AuditTopology, got {other:?}"),
+        }
+    }
+
+    // ----- topology.setup (spec 2026-05-18-topology-substrate-migration ac-05) -----
+
+    #[test]
+    fn topology_setup_greenfield_creates_dir_and_seeds() {
+        let (_dir, layout) = fresh_topology_layout();
+        // Greenfield: .orbit/topology/ absent, no legacy config.
+        let result = topology_setup(&layout, &TopologySetupArgs::default()).unwrap();
+        assert!(!result.declined);
+        assert!(result.dir_created, "should create .orbit/topology/");
+        assert!(!result.config_cleaned, "no legacy config to clean");
+        assert_eq!(result.seeds_created.len(), 5, "five orbit-substrate entries");
+        assert_eq!(result.seeds_skipped, Vec::<String>::new());
+        // All five seed files exist on disk and validate.
+        for slug in &["cards", "choices", "memories", "specs-substrate", "topology"] {
+            let path = layout.topology_file(slug);
+            assert!(path.exists(), "missing seed: {slug}");
+            let text = std::fs::read_to_string(&path).unwrap();
+            let entry: crate::schema::TopologyEntry = serde_yaml::from_str(&text).unwrap();
+            assert!(entry.validate().is_ok(), "seed `{slug}` failed validate");
+        }
+    }
+
+    #[test]
+    fn topology_setup_is_idempotent() {
+        // Two-stage idempotency per spec ac-05: first invocation mutates;
+        // subsequent invocations are no-ops on every surface.
+        let (_dir, layout) = fresh_topology_layout();
+        let first = topology_setup(&layout, &TopologySetupArgs::default()).unwrap();
+        assert!(first.dir_created);
+        assert_eq!(first.seeds_created.len(), 5);
+
+        let second = topology_setup(&layout, &TopologySetupArgs::default()).unwrap();
+        assert!(!second.declined);
+        assert!(!second.dir_created, "dir already exists on re-run");
+        assert!(!second.config_cleaned, "config already cleaned on re-run");
+        assert_eq!(second.seeds_created, Vec::<String>::new(), "no new seeds");
+        assert_eq!(second.seeds_skipped.len(), 5, "all five seeds skipped on re-run");
+    }
+
+    #[test]
+    fn topology_setup_brownfield_strips_legacy_config() {
+        // Brownfield arm: an existing .orbit/config.yaml carrying
+        // docs.topology is stripped of that key.
+        let (_dir, layout) = fresh_topology_layout();
+        std::fs::create_dir_all(&layout.root).unwrap();
+        std::fs::write(
+            layout.config_file(),
+            "docs:\n  topology: docs/topology.md\n",
+        )
+        .unwrap();
+        let result = topology_setup(&layout, &TopologySetupArgs::default()).unwrap();
+        assert!(result.config_cleaned, "legacy docs.topology must be stripped");
+        // Post-cleanup, the file no longer carries docs.topology.
+        let post = std::fs::read_to_string(layout.config_file()).unwrap();
+        assert!(
+            !post.contains("docs.topology") && !post.contains("topology: docs/topology.md"),
+            "post-cleanup config must not carry docs.topology: {post}"
+        );
+        // Re-run is a no-op on the config side.
+        let again = topology_setup(&layout, &TopologySetupArgs::default()).unwrap();
+        assert!(!again.config_cleaned, "second run sees no legacy key");
+    }
+
+    #[test]
+    fn topology_setup_brownfield_preserves_operator_edits() {
+        // Existing .orbit/topology/cards.yaml with operator content is
+        // NOT overwritten — skip-on-exist preserves operator agency.
+        let (_dir, layout) = fresh_topology_layout();
+        std::fs::create_dir_all(layout.topology_dir()).unwrap();
+        let custom = "\
+subsystem: cards
+canonical_code:
+- custom/path.rs
+";
+        std::fs::write(layout.topology_file("cards"), custom).unwrap();
+        let result = topology_setup(&layout, &TopologySetupArgs::default()).unwrap();
+        assert!(
+            result.seeds_skipped.iter().any(|s| s == "cards"),
+            "cards seed must be skipped, got {result:?}"
+        );
+        // Operator content preserved verbatim.
+        let post = std::fs::read_to_string(layout.topology_file("cards")).unwrap();
+        assert_eq!(post, custom, "operator-edited entry must not be overwritten");
+    }
+
+    #[test]
+    fn topology_setup_declined_when_answer_wire_is_no() {
+        let (_dir, layout) = fresh_topology_layout();
+        let result = topology_setup(
+            &layout,
+            &TopologySetupArgs {
+                answer_wire: Some("n".into()),
+            },
+        )
+        .unwrap();
+        assert!(result.declined);
+        assert!(!result.dir_created);
+        assert!(result.seeds_created.is_empty());
+        // Confirm nothing was written.
+        assert!(!layout.topology_dir().exists() || layout.list_topology_files().unwrap().is_empty());
+    }
+
+    #[test]
+    fn topology_setup_dispatched_through_execute() {
+        // VerbRequest::TopologySetup routes to VerbResponse::TopologySetup.
+        let (_dir, layout) = fresh_topology_layout();
+        let response = execute(&layout, &VerbRequest::TopologySetup(Default::default())).unwrap();
+        match response {
+            VerbResponse::TopologySetup(result) => {
+                assert!(!result.declined);
+                assert_eq!(result.seeds_created.len(), 5);
+            }
+            other => panic!("expected TopologySetup, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn topology_setup_seeds_validate_against_schema() {
+        // The hard-coded seed templates must each pass validate() —
+        // protects against the templates drifting from the schema.
+        for seed in topology_setup_seeds() {
+            assert!(
+                seed.validate().is_ok(),
+                "seed `{}` failed validate: {:?}",
+                seed.subsystem,
+                seed.validate()
+            );
         }
     }
 

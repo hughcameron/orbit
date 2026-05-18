@@ -33,6 +33,7 @@ pub use verify::{verify_all, RoundTripFailure, RoundTripFailureKind, VerifyOutco
 pub use verbs::{
     envelope_err, envelope_err_string, envelope_ok, envelope_ok_string, execute, CardListArgs,
     AuditDriftArgs, AuditDriftResult, AuditTopologyArgs, AuditTopologyResult, TopologyDriftEntry,
+    TopologySetupArgs, TopologySetupResult,
     CardListResult, CardMaturityCounts, CardSearchArgs,
     CardShowArgs, CardShowResult, CardSpecsArgs, CardSpecsEntry, CardSpecsResult, CardSummary,
     CardTreeArgs, CardTreeEdge, CardTreeNode, CardTreeResult, ChoiceListArgs, DriftEntry,

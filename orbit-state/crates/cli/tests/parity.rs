@@ -1252,6 +1252,100 @@ fn memory_remember_cli_human_mode_renders_nudge_to_stderr() {
     );
 }
 
+// ----- topology setup CLI parity (spec 2026-05-18-topology-substrate-migration ac-05) -----
+
+#[test]
+fn topology_setup_cli_greenfield_envelope() {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::create_dir_all(dir.path().join(".orbit")).unwrap();
+
+    let cli_bin = env!("CARGO_BIN_EXE_orbit");
+    let output = Command::new(cli_bin)
+        .args(["--root", dir.path().to_str().unwrap(), "--json", "topology", "setup"])
+        .stdin(Stdio::null())
+        .output()
+        .expect("run cli");
+
+    assert!(output.status.success(), "exit 0 for greenfield setup");
+    let stdout = String::from_utf8(output.stdout).expect("utf-8");
+    let envelope: serde_json::Value =
+        serde_json::from_str(stdout.trim_end_matches('\n')).expect("json");
+    assert_eq!(envelope["ok"], true);
+    let result = &envelope["data"]["result"];
+    assert_eq!(result["dir_created"], true);
+    assert_eq!(result["config_cleaned"], false);
+    assert_eq!(result["declined"], false);
+    let seeds = result["seeds_created"].as_array().unwrap();
+    assert_eq!(seeds.len(), 5, "five orbit-substrate seeds");
+    // Each seed file landed on disk.
+    for slug in &["cards", "choices", "memories", "specs-substrate", "topology"] {
+        let path = dir.path().join(".orbit/topology").join(format!("{slug}.yaml"));
+        assert!(path.exists(), "missing seed file: {slug}");
+    }
+}
+
+#[test]
+fn topology_setup_cli_idempotent() {
+    // Two-stage idempotency per spec ac-05.
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::create_dir_all(dir.path().join(".orbit")).unwrap();
+
+    let cli_bin = env!("CARGO_BIN_EXE_orbit");
+    // First invocation mutates.
+    Command::new(cli_bin)
+        .args(["--root", dir.path().to_str().unwrap(), "--json", "topology", "setup"])
+        .stdin(Stdio::null())
+        .output()
+        .expect("run cli");
+    // Second invocation is a no-op on every surface.
+    let output = Command::new(cli_bin)
+        .args(["--root", dir.path().to_str().unwrap(), "--json", "topology", "setup"])
+        .stdin(Stdio::null())
+        .output()
+        .expect("run cli");
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).expect("utf-8");
+    let envelope: serde_json::Value =
+        serde_json::from_str(stdout.trim_end_matches('\n')).expect("json");
+    let result = &envelope["data"]["result"];
+    assert_eq!(result["dir_created"], false, "dir already exists");
+    assert_eq!(result["seeds_created"].as_array().unwrap().len(), 0);
+    assert_eq!(result["seeds_skipped"].as_array().unwrap().len(), 5);
+}
+
+#[test]
+fn topology_setup_cli_brownfield_strips_legacy_config() {
+    let dir = tempfile::tempdir().unwrap();
+    let orbit_dir = dir.path().join(".orbit");
+    std::fs::create_dir_all(&orbit_dir).unwrap();
+    std::fs::write(
+        orbit_dir.join("config.yaml"),
+        "docs:\n  topology: docs/topology.md\n",
+    )
+    .unwrap();
+
+    let cli_bin = env!("CARGO_BIN_EXE_orbit");
+    let output = Command::new(cli_bin)
+        .args(["--root", dir.path().to_str().unwrap(), "--json", "topology", "setup"])
+        .stdin(Stdio::null())
+        .output()
+        .expect("run cli");
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).expect("utf-8");
+    let envelope: serde_json::Value =
+        serde_json::from_str(stdout.trim_end_matches('\n')).expect("json");
+    let result = &envelope["data"]["result"];
+    assert_eq!(result["config_cleaned"], true, "legacy docs.topology must be stripped");
+    // Confirm on-disk: docs.topology absent.
+    let config_text = std::fs::read_to_string(orbit_dir.join("config.yaml")).unwrap();
+    assert!(
+        !config_text.contains("topology: docs/topology.md"),
+        "post-cleanup config must not carry docs.topology: {config_text}"
+    );
+}
+
 // Helper visible to ensure the test binary depends on the CLI binary.
 #[allow(dead_code)]
 fn _binary_dep_anchor(_p: &Path) {}

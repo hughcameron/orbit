@@ -688,3 +688,49 @@ fn memory_remember_mcp_no_nudge_arg_suppresses_envelope_nudge() {
         "no_nudge:true must suppress envelope nudge, got {result}",
     );
 }
+
+// ----- ac-05: topology.setup -----
+
+#[test]
+fn topology_setup_mcp_greenfield_envelope() {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::create_dir_all(dir.path().join(".orbit")).unwrap();
+    let inner = run_mcp_tools_call(
+        dir.path(),
+        json!({ "name": "topology.setup", "arguments": {} }),
+    );
+    let envelope_text = inner_envelope_text(&inner);
+    let envelope: Value = serde_json::from_str(&envelope_text).unwrap();
+    let result = &envelope["data"]["result"];
+    assert_eq!(result["dir_created"], true);
+    assert_eq!(result["declined"], false);
+    let seeds = result["seeds_created"].as_array().unwrap();
+    assert_eq!(seeds.len(), 5, "five orbit-substrate seeds via MCP");
+    for slug in &["cards", "choices", "memories", "specs-substrate", "topology"] {
+        let path = dir.path().join(".orbit/topology").join(format!("{slug}.yaml"));
+        assert!(path.exists(), "missing seed file via MCP: {slug}");
+    }
+}
+
+#[test]
+fn topology_setup_mcp_brownfield_envelope() {
+    // MCP-side parity for the brownfield-cleanup arm.
+    let dir = tempfile::tempdir().unwrap();
+    let orbit_dir = dir.path().join(".orbit");
+    std::fs::create_dir_all(&orbit_dir).unwrap();
+    std::fs::write(
+        orbit_dir.join("config.yaml"),
+        "docs:\n  topology: docs/topology.md\n",
+    )
+    .unwrap();
+    let inner = run_mcp_tools_call(
+        dir.path(),
+        json!({ "name": "topology.setup", "arguments": {} }),
+    );
+    let envelope_text = inner_envelope_text(&inner);
+    let envelope: Value = serde_json::from_str(&envelope_text).unwrap();
+    let result = &envelope["data"]["result"];
+    assert_eq!(result["config_cleaned"], true);
+    let config_text = std::fs::read_to_string(orbit_dir.join("config.yaml")).unwrap();
+    assert!(!config_text.contains("topology: docs/topology.md"));
+}
