@@ -30,7 +30,7 @@ use crate::canonical::{parse_yaml, serialise_yaml};
 use crate::index::Index;
 use crate::layout::OrbitLayout;
 use crate::migrations::ensure_current;
-use crate::schema::{Card, Choice, Memory, SchemaVersion, Session, Spec};
+use crate::schema::{Card, Choice, Config, Memory, SchemaVersion, Session, Spec};
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use std::path::{Path, PathBuf};
@@ -125,7 +125,15 @@ pub fn verify_all(layout: &OrbitLayout) -> std::io::Result<VerifyOutcome> {
         check_round_trip::<Session>(&path, &mut outcome);
     }
 
-    // 7. Index rebuild check (ac-17).
+    // 7. config.yaml — opt-in project config (spec
+    //    2026-05-18-documentation-topology ac-04). Absence is tolerated:
+    //    the topology capability is opt-in. Presence MUST round-trip
+    //    against the Config schema.
+    if layout.config_file().exists() {
+        check_round_trip::<Config>(&layout.config_file(), &mut outcome);
+    }
+
+    // 8. Index rebuild check (ac-17).
     //
     // We always rebuild against a fresh in-memory index — that's the hygiene
     // signal. A failure here is a file that parses individually but breaks
@@ -397,4 +405,75 @@ mystery_field: ohno
         assert_eq!(on_disk, canonical_form);
     }
 
+    // ----- Config verify wiring (spec 2026-05-18-documentation-topology ac-04) -----
+
+    #[test]
+    fn verify_clean_when_config_file_absent() {
+        // ac-04 verification: orbit verify on a repo without
+        // .orbit/config.yaml exits 0 (opt-in tolerance per ac-02).
+        let (_dir, layout) = fresh_layout();
+        assert!(!layout.config_file().exists());
+        let outcome = verify_all(&layout).unwrap();
+        assert!(
+            !outcome.has_failures(),
+            "absent config.yaml must not fail verify: {outcome:?}"
+        );
+    }
+
+    #[test]
+    fn verify_clean_with_valid_config() {
+        // ac-04 verification: orbit verify on a repo with a valid
+        // .orbit/config.yaml exits 0.
+        use crate::schema::{Config, DocsConfig};
+        let (_dir, layout) = fresh_layout();
+        let config = Config {
+            docs: Some(DocsConfig {
+                topology: Some("docs/topology.md".into()),
+            }),
+        };
+        let yaml = serialise_yaml(&config).unwrap();
+        write_atomic(layout.config_file(), yaml.as_bytes()).unwrap();
+        let outcome = verify_all(&layout).unwrap();
+        assert!(!outcome.has_failures(), "valid config must verify clean: {outcome:?}");
+    }
+
+    #[test]
+    fn verify_detects_invalid_config_topology_type() {
+        // ac-04 verification: orbit verify on a fixture with an invalid
+        // Config (wrong type on docs.topology) reports a round-trip failure.
+        let (_dir, layout) = fresh_layout();
+        let bad = "docs:\n  topology: [not, a, string]\n";
+        write_atomic(layout.config_file(), bad.as_bytes()).unwrap();
+        let outcome = verify_all(&layout).unwrap();
+        let parse_failures: Vec<_> = outcome
+            .round_trip_failures
+            .iter()
+            .filter(|f| matches!(f.kind, RoundTripFailureKind::ParseFailed(_)))
+            .filter(|f| f.path == layout.config_file())
+            .collect();
+        assert!(
+            !parse_failures.is_empty(),
+            "expected ParseFailed on config.yaml; got {outcome:?}"
+        );
+    }
+
+    #[test]
+    fn verify_detects_unknown_config_field() {
+        // ac-04 verification: unknown fields on Config fail verify per
+        // deny_unknown_fields.
+        let (_dir, layout) = fresh_layout();
+        let bad = "docs:\n  topology: docs/topology.md\nmystery_field: ohno\n";
+        write_atomic(layout.config_file(), bad.as_bytes()).unwrap();
+        let outcome = verify_all(&layout).unwrap();
+        let parse_failures: Vec<_> = outcome
+            .round_trip_failures
+            .iter()
+            .filter(|f| matches!(f.kind, RoundTripFailureKind::ParseFailed(_)))
+            .filter(|f| f.path == layout.config_file())
+            .collect();
+        assert!(
+            !parse_failures.is_empty(),
+            "expected ParseFailed on config.yaml; got {outcome:?}"
+        );
+    }
 }

@@ -56,6 +56,12 @@ impl OrbitLayout {
         self.root.join("schema-version")
     }
 
+    /// Project-level config file at `.orbit/config.yaml`. Opt-in: absence is
+    /// tolerated. Per spec 2026-05-18-documentation-topology ac-02 / ac-04.
+    pub fn config_file(&self) -> PathBuf {
+        self.root.join("config.yaml")
+    }
+
     pub fn state_db(&self) -> PathBuf {
         self.root.join("state.db")
     }

@@ -125,6 +125,14 @@ impl Relation {
     pub const FIELDS: &'static [&'static str] = &["card", "type", "reason"];
 }
 
+impl Config {
+    pub const FIELDS: &'static [&'static str] = &["docs"];
+}
+
+impl DocsConfig {
+    pub const FIELDS: &'static [&'static str] = &["topology"];
+}
+
 /// A discrete unit of work with numbered acceptance criteria. Substrate-written.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -449,6 +457,38 @@ pub struct Memory {
     pub timestamp: String,
     #[serde(default)]
     pub labels: Vec<String>,
+}
+
+// ============================================================================
+// Config
+// ============================================================================
+
+/// Project-level orbit configuration at `.orbit/config.yaml`. Opt-in:
+/// absence of the file is tolerated and the rest of orbit-state functions
+/// unchanged. When present, `orbit verify` validates the file against this
+/// schema. Currently surfaces the `docs.topology` pointer used by the
+/// `/orb:topology` skill and `orbit audit topology` verb to locate the
+/// topology doc in consumer-chosen layouts. Per spec
+/// 2026-05-18-documentation-topology ac-02.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(deny_unknown_fields)]
+pub struct Config {
+    /// Documentation-surface configuration. Optional — when absent the
+    /// topology capability is unconfigured (the audit verb returns
+    /// "topology capability not configured").
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub docs: Option<DocsConfig>,
+}
+
+/// Documentation-surface inner config. Per spec
+/// 2026-05-18-documentation-topology ac-03.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(deny_unknown_fields)]
+pub struct DocsConfig {
+    /// Path (relative to the repo root) of the topology doc. Default in
+    /// the canonical `/orb:setup`-scaffolded config is `docs/topology.md`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub topology: Option<String>,
 }
 
 // ============================================================================
@@ -963,5 +1003,105 @@ unknown_field: oops
         // untyped AC carried before this field shipped).
         assert_eq!(AcType::default(), AcType::Code);
         assert!(AcType::default().is_code());
+    }
+
+    // ----- Config schema-drift coverage (spec 2026-05-18-documentation-topology) -----
+
+    #[test]
+    fn config_fields_matches_struct() {
+        // ac-02 verification: Config::FIELDS must equal the struct's
+        // serde top-level field set. Fully-populated fixture so
+        // skip_serializing_if doesn't drop fields.
+        let config = Config {
+            docs: Some(DocsConfig {
+                topology: Some("docs/topology.md".into()),
+            }),
+        };
+        let value = serde_yaml::to_value(&config).unwrap();
+        let got = top_level_keys(&value);
+        let mut expected: Vec<String> =
+            Config::FIELDS.iter().map(|s| s.to_string()).collect();
+        expected.sort();
+        assert_eq!(got, expected, "Config::FIELDS drifted from struct");
+    }
+
+    #[test]
+    fn docs_config_fields_matches_struct() {
+        // ac-03 verification: DocsConfig::FIELDS must equal its serde
+        // top-level field set.
+        let docs = DocsConfig {
+            topology: Some("docs/topology.md".into()),
+        };
+        let value = serde_yaml::to_value(&docs).unwrap();
+        let got = top_level_keys(&value);
+        let mut expected: Vec<String> =
+            DocsConfig::FIELDS.iter().map(|s| s.to_string()).collect();
+        expected.sort();
+        assert_eq!(got, expected, "DocsConfig::FIELDS drifted from struct");
+    }
+
+    #[test]
+    fn config_rejects_unknown_field() {
+        // ac-02 verification: parser MUST reject unknown fields rather than
+        // silently dropping them (matches the deny_unknown_fields contract
+        // shared with Spec/Card/Choice/Memory/Session).
+        let yaml = r#"
+docs:
+  topology: docs/topology.md
+unknown_field: oops
+"#;
+        let err = serde_yaml::from_str::<Config>(yaml).unwrap_err();
+        assert!(err.to_string().contains("unknown"));
+    }
+
+    #[test]
+    fn docs_config_rejects_unknown_field() {
+        // ac-03 verification: inner DocsConfig also rejects unknown fields.
+        let yaml = r#"
+topology: docs/topology.md
+unknown_inner: nope
+"#;
+        let err = serde_yaml::from_str::<DocsConfig>(yaml).unwrap_err();
+        assert!(err.to_string().contains("unknown"));
+    }
+
+    #[test]
+    fn config_empty_is_valid() {
+        // ac-03 verification: a fixture without docs.topology parses with
+        // Config { docs: None } (opt-in tolerance).
+        let yaml = "{}";
+        let parsed: Config = serde_yaml::from_str(yaml).unwrap();
+        assert!(parsed.docs.is_none());
+    }
+
+    #[test]
+    fn config_round_trips_byte_identical() {
+        // ac-03 verification: a populated Config round-trips through
+        // serde_yaml without loss.
+        let config = Config {
+            docs: Some(DocsConfig {
+                topology: Some("docs/topology.md".into()),
+            }),
+        };
+        let yaml = serde_yaml::to_string(&config).unwrap();
+        let parsed: Config = serde_yaml::from_str(&yaml).unwrap();
+        assert_eq!(config, parsed);
+    }
+
+    #[test]
+    fn config_topology_wrong_type_rejected() {
+        // ac-03 verification: docs.topology of the wrong type (list,
+        // not string) fails to parse.
+        let yaml = r#"
+docs:
+  topology: [not, a, string]
+"#;
+        let err = serde_yaml::from_str::<Config>(yaml).unwrap_err();
+        // serde_yaml error wording varies — just assert it fails.
+        let msg = err.to_string();
+        assert!(
+            msg.contains("string") || msg.contains("sequence") || msg.contains("expected"),
+            "expected a type-mismatch error, got: {msg}"
+        );
     }
 }

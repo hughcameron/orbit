@@ -15,18 +15,18 @@ acceptance_criteria:
 - id: ac-02
   description: 'Config artefact added to the orbit-state schema. New top-level struct Config in orbit-state/crates/core/src/schema.rs parallel to Card / Spec / Choice / Memory, with #[serde(deny_unknown_fields)] and a corresponding Config::FIELDS constant. Schema-drift unit test added alongside the existing tests at the bottom of schema.rs (mirrors the existing assert_eq for Spec::FIELDS) asserting Config::FIELDS matches the struct''s serde representation so the audit field set cannot drift from the struct definition. orbit verify treats Config as an opt-in artefact: absence of .orbit/config.yaml is tolerated (orbit-state continues to function without it).'
   gate: true
-  checked: false
+  checked: true
   verification: Config struct exists in orbit-state/crates/core/src/schema.rs with deny_unknown_fields. Config::FIELDS const exists. Unit test schema_drift_config (or equivalent name) passes and fails when Config gains/loses a field without the FIELDS constant being updated — verify by adding a temporary field, asserting the test fails, then removing. orbit verify on a repo without .orbit/config.yaml exits 0 (no regression).
 - id: ac-03
   description: Pointer key on Config — Config carries a docs.topology key of type Option<String> (or equivalent — Option of a typed Path). The key names the consumer-chosen path for the topology doc relative to the repo root. Default in the canonical scaffolded config (per ac-07) is docs/topology.md. The key round-trips through orbit canonicalise without loss.
   gate: true
-  checked: false
+  checked: true
   verification: 'A .orbit/config.yaml fixture with docs.topology: docs/topology.md parses and round-trips through orbit canonicalise byte-identically. A fixture with docs.topology of the wrong type (e.g. a list, an int) fails to parse with a clear error. A fixture without docs.topology parses with Config { docs.topology: None } (or equivalent).'
   ac_type: config
 - id: ac-04
   description: orbit verify wiring + parity. orbit verify validates .orbit/config.yaml against the Config schema when the file is present; exits non-zero with the standard error envelope on schema mismatch (e.g. wrong type on docs.topology); exits 0 on a valid config; exits 0 when the file is absent (opt-in tolerance per ac-02). Parity test in orbit-state/crates/cli/tests/parity.rs and orbit-state/crates/mcp/tests/parity.rs confirms CLI + MCP emit the same envelope shape for the three outcomes.
   gate: true
-  checked: false
+  checked: true
   verification: orbit verify on a fixture with a valid .orbit/config.yaml exits 0. orbit verify on a fixture with an invalid Config (wrong type on docs.topology) exits non-zero with an Error envelope naming the field. orbit verify on a fixture without .orbit/config.yaml exits 0. Parity-test cases added on both CLI and MCP sides.
 - id: ac-05
   description: METHOD.md gains a posture line in the substrate-rules section — verbatim or close-paraphrase of "Before reasoning about how a subsystem works, grep the code tree and docs/ for it. Substrate beats extrapolation." The line lives where the other substrate-rules bullets live (memory loop, session prime, task tracking). METHOD.md also gains a brief mention of the topology label convention (parallel to the existing --label code-investigate documentation) naming "topology" as the canonical label that triggers the update-on-learning prompt in /orb:topology.
