@@ -856,6 +856,96 @@ fn session_distill_cli_envelope_matches_canonical() {
     assert_eq!(actual, expected);
 }
 
+// ----- audit topology CLI parity (spec 2026-05-18-documentation-topology ac-06) -----
+
+#[test]
+fn audit_topology_cli_not_configured_envelope() {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::create_dir_all(dir.path().join(".orbit")).unwrap();
+
+    let cli_bin = env!("CARGO_BIN_EXE_orbit");
+    let output = Command::new(cli_bin)
+        .args(["--root", dir.path().to_str().unwrap(), "--json", "audit", "topology"])
+        .stdin(Stdio::null())
+        .output()
+        .expect("run cli");
+
+    assert!(output.status.success(), "exit 0 for not-configured");
+    let stdout = String::from_utf8(output.stdout).expect("utf-8");
+    let envelope: serde_json::Value =
+        serde_json::from_str(stdout.trim_end_matches('\n')).expect("json");
+    assert_eq!(envelope["ok"], true);
+    let result = &envelope["data"]["result"];
+    assert_eq!(result["configured"], false);
+    assert_eq!(result["topology_drift"].as_array().unwrap().len(), 0);
+}
+
+#[test]
+fn audit_topology_cli_clean_envelope() {
+    let dir = tempfile::tempdir().unwrap();
+    let orbit_dir = dir.path().join(".orbit");
+    std::fs::create_dir_all(&orbit_dir).unwrap();
+    std::fs::create_dir_all(dir.path().join("docs")).unwrap();
+    std::fs::write(
+        orbit_dir.join("config.yaml"),
+        "docs:\n  topology: docs/topology.md\n",
+    )
+    .unwrap();
+    // Empty topology doc — no entries, no codebase subsystems = clean.
+    std::fs::write(dir.path().join("docs/topology.md"), "# Topology\n").unwrap();
+
+    let cli_bin = env!("CARGO_BIN_EXE_orbit");
+    let output = Command::new(cli_bin)
+        .args(["--root", dir.path().to_str().unwrap(), "--json", "audit", "topology"])
+        .stdin(Stdio::null())
+        .output()
+        .expect("run cli");
+
+    assert!(output.status.success(), "exit 0 for clean");
+    let stdout = String::from_utf8(output.stdout).expect("utf-8");
+    let envelope: serde_json::Value =
+        serde_json::from_str(stdout.trim_end_matches('\n')).expect("json");
+    assert_eq!(envelope["ok"], true);
+    let result = &envelope["data"]["result"];
+    assert_eq!(result["configured"], true);
+    assert_eq!(result["topology_drift"].as_array().unwrap().len(), 0);
+}
+
+#[test]
+fn audit_topology_cli_drift_envelope() {
+    let dir = tempfile::tempdir().unwrap();
+    let orbit_dir = dir.path().join(".orbit");
+    std::fs::create_dir_all(&orbit_dir).unwrap();
+    std::fs::create_dir_all(dir.path().join("docs")).unwrap();
+    std::fs::create_dir_all(dir.path().join("src/auth")).unwrap();
+    std::fs::write(
+        orbit_dir.join("config.yaml"),
+        "docs:\n  topology: docs/topology.md\n",
+    )
+    .unwrap();
+    // src/auth exists but isn't in the topology doc → missing_entry.
+    std::fs::write(dir.path().join("docs/topology.md"), "# Topology\n").unwrap();
+
+    let cli_bin = env!("CARGO_BIN_EXE_orbit");
+    let output = Command::new(cli_bin)
+        .args(["--root", dir.path().to_str().unwrap(), "--json", "audit", "topology"])
+        .stdin(Stdio::null())
+        .output()
+        .expect("run cli");
+
+    assert!(output.status.success(), "exit 0 for drift-present");
+    let stdout = String::from_utf8(output.stdout).expect("utf-8");
+    let envelope: serde_json::Value =
+        serde_json::from_str(stdout.trim_end_matches('\n')).expect("json");
+    assert_eq!(envelope["ok"], true);
+    let result = &envelope["data"]["result"];
+    assert_eq!(result["configured"], true);
+    let drift = result["topology_drift"].as_array().unwrap();
+    assert_eq!(drift.len(), 1);
+    assert_eq!(drift[0]["subsystem"], "auth");
+    assert_eq!(drift[0]["drift_kind"], "missing_entry");
+}
+
 // Helper visible to ensure the test binary depends on the CLI binary.
 #[allow(dead_code)]
 fn _binary_dep_anchor(_p: &Path) {}

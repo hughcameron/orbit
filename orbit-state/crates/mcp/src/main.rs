@@ -424,6 +424,15 @@ fn tool_descriptors() -> Vec<Value> {
             }
         }),
         json!({
+            "name": "audit.topology",
+            "description": "Walk the topology doc named by .orbit/config.yaml's docs.topology key and report drift across three categories: stale_pointer, missing_entry, shape_drift. Exits 0 in all three states (clean, drift, not configured); consumers discriminate via the envelope.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {},
+                "additionalProperties": false
+            }
+        }),
+        json!({
             "name": "choice.show",
             "description": "Show a choice by id.",
             "inputSchema": {

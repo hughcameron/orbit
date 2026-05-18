@@ -24,7 +24,8 @@ use orbit_state_core::Error as OrbitError;
 use orbit_state_core::{
     canonicalise_all, envelope_err_string, envelope_ok_string, execute, reconcile_all,
     CanonicaliseReport, ReconcileReport,
-    AuditDriftArgs, AuditDriftResult, CardListArgs, CardSearchArgs, CardShowArgs, CardShowResult,
+    AuditDriftArgs, AuditDriftResult, AuditTopologyArgs, AuditTopologyResult,
+    CardListArgs, CardSearchArgs, CardShowArgs, CardShowResult,
     CardSpecsArgs, CardSpecsResult, CardTreeArgs, CardTreeEdge, CardTreeResult, ChoiceListArgs,
     ChoiceListResult, GraphArgs, GraphFormat, GraphResult, OverviewArgs, OverviewResult,
     ChoiceSearchArgs, ChoiceShowArgs, ChoiceShowResult, MemoryListArgs, MemoryListResult,
@@ -271,6 +272,11 @@ enum AuditAction {
     /// Permissive YAML scan that surfaces top-level fields absent from the
     /// canonical schema. Read-only; no rewrites.
     Drift,
+    /// Walk the topology doc named by `.orbit/config.yaml`'s `docs.topology`
+    /// key and report drift across three categories: stale_pointer,
+    /// missing_entry, shape_drift. Exits 0 in all three states (clean,
+    /// drift present, not configured); discrimination is via the envelope.
+    Topology,
 }
 
 #[derive(Debug, Subcommand)]
@@ -1050,6 +1056,9 @@ fn build_request(layout: &OrbitLayout, command: &Command) -> Result<VerbRequest,
         }),
         Command::Audit { action } => match action {
             AuditAction::Drift => VerbRequest::AuditDrift(AuditDriftArgs::default()),
+            AuditAction::Topology => {
+                VerbRequest::AuditTopology(AuditTopologyArgs::default())
+            }
         },
         Command::Graph { card, depth, format } => {
             let parsed_format = match format.as_str() {
@@ -1108,6 +1117,7 @@ fn render_human(response: &VerbResponse) {
         VerbResponse::Overview(result) => render_overview(result),
         VerbResponse::Graph(result) => render_graph(result),
         VerbResponse::AuditDrift(result) => render_audit_drift(result),
+        VerbResponse::AuditTopology(result) => render_audit_topology(result),
         VerbResponse::ChoiceShow(result) => render_choice_show(result),
         VerbResponse::ChoiceList(result) | VerbResponse::ChoiceSearch(result) => {
             render_choice_list(result)
@@ -1298,6 +1308,32 @@ fn render_audit_drift(result: &AuditDriftResult) {
         println!(
             "  {}\t{}\t{}\t[{}]",
             entry.path, entry.kind, entry.field, entry.disposition
+        );
+    }
+}
+
+fn render_audit_topology(result: &AuditTopologyResult) {
+    if !result.configured {
+        println!("audit.topology: topology capability not configured");
+        return;
+    }
+    if result.topology_drift.is_empty() {
+        println!("audit.topology: clean (topology doc matches the codebase)");
+        return;
+    }
+    println!(
+        "audit.topology: {} drift entries",
+        result.topology_drift.len()
+    );
+    for entry in &result.topology_drift {
+        let detail = if entry.detail.is_empty() {
+            String::new()
+        } else {
+            format!("\t{}", entry.detail)
+        };
+        println!(
+            "  {}\t{}{}",
+            entry.subsystem, entry.drift_kind, detail
         );
     }
 }

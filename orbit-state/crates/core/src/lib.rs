@@ -32,7 +32,8 @@ pub use sqlite_link::{link_sanity_check, sqlite_version};
 pub use verify::{verify_all, RoundTripFailure, RoundTripFailureKind, VerifyOutcome};
 pub use verbs::{
     envelope_err, envelope_err_string, envelope_ok, envelope_ok_string, execute, CardListArgs,
-    AuditDriftArgs, AuditDriftResult, CardListResult, CardMaturityCounts, CardSearchArgs,
+    AuditDriftArgs, AuditDriftResult, AuditTopologyArgs, AuditTopologyResult, TopologyDriftEntry,
+    CardListResult, CardMaturityCounts, CardSearchArgs,
     CardShowArgs, CardShowResult, CardSpecsArgs, CardSpecsEntry, CardSpecsResult, CardSummary,
     CardTreeArgs, CardTreeEdge, CardTreeNode, CardTreeResult, ChoiceListArgs, DriftEntry,
     GraphArgs, GraphFormat, GraphResult, MostConnectedCard, OverviewArgs, OverviewResult,
