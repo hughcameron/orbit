@@ -2,6 +2,24 @@
 
 All notable changes to orbit are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.4.18] - 2026-05-18
+
+Codebase mastery becomes operable. `/orb:code-investigate` ships as the agent-equipment surface delivering card 0025 — narrow mode for specific queries (where is X, what calls Y, how many Z), broad mode for neighbourhood awareness, with a tool taxonomy that routes structural queries to ast-grep and tree-sitter, text searches to ripgrep, and command output through rtk-wrapped variants by default. A PreToolUse hook shipped at `plugins/orb/hooks/hooks.json` softly warns when Edit/Write hits an uninvestigated path; the warning is non-blocking and grep-stable so the 4-week audit (ac-07, observation band) can count fires across sessions. Call-points embedded in `/orb:implement`, `/orb:researcher`, and `/orb:review-pr` with imperative voice make the discipline a default reach rather than an optional one. Closes 6 of 7 ACs in spec `2026-05-17-code-investigate-skill` (card 0025); ac-07 defers per the ac-taxonomy observation band.
+
+### Added
+
+- `plugins/orb/skills/code-investigate/SKILL.md` — narrow + broad modes, tool taxonomy (ast-grep / tree-sitter / ripgrep / rtk / Read), discipline rules, heuristic closing instruction for memories labelled `code-investigate`. Front-matter follows card 0022's curator convention (`name`, `description`, `created_by`, `created_at`, `pinned`).
+- `plugins/orb/hooks/hooks.json` — declares a PreToolUse hook on the `Edit|Write` matcher, pointing at `${CLAUDE_PLUGIN_ROOT}/hooks/code-investigate-nudge.sh`. The Claude Code plugin loader picks this up on plugin enable; no consumer-side `.claude/settings.json` edit required.
+- `plugins/orb/hooks/code-investigate-nudge.sh` — non-blocking soft nudge. Path filter skips `.orbit/`, `.claude/`, and `*.lock`; graceful degradation skips silently when `.orbit/` is absent (non-orbit repos that happen to load the plugin) and warns when the marker is missing or session-stale.
+- `plugins/orb/scripts/code-investigate-mark.sh` — atomic-write marker at `.orbit/.code-investigate-recent` with a session-id header line plus tab-delimited `(timestamp, kind, path)` entries. Preserves prior entries when the session-id matches; treats stale-session markers as empty.
+- Memory label convention `code-investigate` documented in `.orbit/METHOD.md` — the canonical label that `/orb:code-investigate` pivots on for the learning loop.
+
+### Changed
+
+- `/orb:implement`, `/orb:researcher`, `/orb:review-pr` gain imperative-voice call-points naming `/orb:code-investigate` (broad mode for implement/researcher, narrow mode for review-pr) with a one-line rationale tied to the agent-equipment framing.
+- Card 0025 (codebase-mastery) reframed — `i_want` and `goal` name `/orb:code-investigate` as the delivery vehicle; scenario 6 names the skill as the principle-router; references list adds the spec path. Maturity stays `planned` until the 4-week observation window confirms the capability is being used in practice.
+- `.orbit/.gitignore` adds `.code-investigate-recent` alongside the existing session-state files.
+
 ## [0.4.17] - 2026-05-16
 
 Per-card session handover. The `Session` entity gains an optional `card_id`; new verbs `orbit session set-card` and `orbit session handover` let agents bind a session to a card and retrieve the latest matching session; `orbit session prime` now surfaces the latest handover at session start. `orbit session distill` learns to extract `last_assistant_message` from the Claude Code Stop-hook JSON envelope — the carrier was previously dumping raw JSON into `Session.distillate`. Closes 10 of 11 ACs in spec `2026-05-16-session-handover` (card 0036). Schema bumps 0.3 → 0.4 (additive no-op, chains after the 0.2 → 0.3 ac-taxonomy migration).
