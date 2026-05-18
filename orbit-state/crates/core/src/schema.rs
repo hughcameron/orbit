@@ -133,6 +133,78 @@ impl DocsConfig {
     pub const FIELDS: &'static [&'static str] = &["topology"];
 }
 
+impl TopologyEntry {
+    pub const FIELDS: &'static [&'static str] = &[
+        "subsystem",
+        "canonical_code",
+        "decision_record",
+        "operational_doc",
+        "test_surface",
+    ];
+
+    /// Minimum length for the `subsystem` slug. Mirrors the ≥ 5 char filter
+    /// applied by `spec_close` topology_warnings word-boundary heuristic so
+    /// short common tokens cannot collide with subsystem names.
+    pub const MIN_SUBSYSTEM_LEN: usize = 5;
+
+    /// Validate non-serde invariants — slug shape and minimum length on the
+    /// subsystem key, non-empty canonical_code list. Returns the first
+    /// validation error encountered (or `Ok(())`). Called by `verify_all`'s
+    /// topology branch after serde parsing succeeds.
+    pub fn validate(&self) -> Result<(), String> {
+        if self.subsystem.len() < Self::MIN_SUBSYSTEM_LEN {
+            return Err(format!(
+                "subsystem slug `{}` is below the minimum length of {} characters",
+                self.subsystem,
+                Self::MIN_SUBSYSTEM_LEN
+            ));
+        }
+        if !is_slug_shaped(&self.subsystem) {
+            return Err(format!(
+                "subsystem slug `{}` is not slug-shaped (lower-case letters, digits, and hyphens only; \
+                 first char must be a letter; no leading/trailing/double hyphens)",
+                self.subsystem
+            ));
+        }
+        if self.canonical_code.is_empty() {
+            return Err(format!(
+                "topology entry `{}` has no canonical_code pointers — entries without code pointers \
+                 are not load-bearing",
+                self.subsystem
+            ));
+        }
+        Ok(())
+    }
+}
+
+/// Slug-shape predicate for topology subsystem keys: lower-case letters,
+/// digits, and hyphens; first character must be a letter; no leading,
+/// trailing, or double hyphens.
+fn is_slug_shaped(s: &str) -> bool {
+    let bytes = s.as_bytes();
+    if bytes.is_empty() {
+        return false;
+    }
+    if !bytes[0].is_ascii_lowercase() {
+        return false;
+    }
+    if bytes[bytes.len() - 1] == b'-' {
+        return false;
+    }
+    let mut prev_hyphen = false;
+    for &b in bytes {
+        let ok = b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-';
+        if !ok {
+            return false;
+        }
+        if b == b'-' && prev_hyphen {
+            return false;
+        }
+        prev_hyphen = b == b'-';
+    }
+    true
+}
+
 /// A discrete unit of work with numbered acceptance criteria. Substrate-written.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -466,10 +538,7 @@ pub struct Memory {
 /// Project-level orbit configuration at `.orbit/config.yaml`. Opt-in:
 /// absence of the file is tolerated and the rest of orbit-state functions
 /// unchanged. When present, `orbit verify` validates the file against this
-/// schema. Currently surfaces the `docs.topology` pointer used by the
-/// `/orb:topology` skill and `orbit audit topology` verb to locate the
-/// topology doc in consumer-chosen layouts. Per spec
-/// 2026-05-18-documentation-topology ac-02.
+/// schema. Per spec 2026-05-18-documentation-topology ac-02.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(deny_unknown_fields)]
 pub struct Config {
@@ -485,10 +554,62 @@ pub struct Config {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(deny_unknown_fields)]
 pub struct DocsConfig {
-    /// Path (relative to the repo root) of the topology doc. Default in
-    /// the canonical `/orb:setup`-scaffolded config is `docs/topology.md`.
+    /// DEPRECATED. The `docs.topology` config key is retained as a parse-only
+    /// field so brownfield consumer repos that wired topology under orbit
+    /// 0.4.19 (spec `2026-05-18-topology-substrate-wires` ac-01) do not
+    /// hard-fail `Config::from_str` on session-prime after the substrate
+    /// migration. The field is unused — no code path reads it; topology lives
+    /// at `.orbit/topology/<subsystem>.yaml` per choice 0025
+    /// (`topology-substrate-folder`). Canonical write preserves the field so
+    /// `verify_all` sees no drift. A follow-on spec to spec
+    /// `2026-05-18-topology-substrate-migration` deletes this field entirely
+    /// once consumer-repo soak completes.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub topology: Option<String>,
+}
+
+// ============================================================================
+// Topology
+// ============================================================================
+
+/// A topology entry at `.orbit/topology/<subsystem>.yaml`. Per choice 0025
+/// (`topology-substrate-folder`) and spec
+/// `2026-05-18-topology-substrate-migration` ac-01: per-subsystem yaml,
+/// pointer-only, agent-queryable substrate. Fields store opaque strings
+/// verbatim — resolution (filesystem existence check, choice-id-to-path
+/// translation) is the drift-detector's responsibility, not the parser's.
+///
+/// The `subsystem` slug is the file stem and the entry's key — it must be
+/// slug-shaped and at least 5 characters (mirrors the `≥ 5 char` filter on
+/// the spec.close topology_warnings word-boundary heuristic in
+/// `verbs.rs::spec_close`, so subsystem names that would be filtered out of
+/// that heuristic are also rejected at schema-validation time).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(deny_unknown_fields)]
+pub struct TopologyEntry {
+    /// Subsystem slug — kebab-case, lower-case, digits allowed, must match
+    /// the file stem at `.orbit/topology/<subsystem>.yaml`. Minimum length
+    /// 5 characters.
+    pub subsystem: String,
+    /// Canonical code paths for the subsystem (typically file or directory
+    /// paths). Required and non-empty — a topology entry without a code
+    /// pointer is not load-bearing.
+    pub canonical_code: Vec<String>,
+    /// Decision-record references. Typically choice ids resolved via the
+    /// `resolve_numeric_slug(VERB, &layout.choices_dir(), id)` then
+    /// `layout.choice_file(&resolved)` two-step pattern; may also be a
+    /// direct path. Drift detection tries id-resolution first and falls
+    /// through to direct path check.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub decision_record: Vec<String>,
+    /// Operational documentation paths — typically the writing SKILL.md
+    /// or a substrate convention doc.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub operational_doc: Vec<String>,
+    /// Test surface — paths or test-target identifiers covering the
+    /// subsystem.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub test_surface: Vec<String>,
 }
 
 // ============================================================================
@@ -1086,6 +1207,201 @@ unknown_inner: nope
         let yaml = serde_yaml::to_string(&config).unwrap();
         let parsed: Config = serde_yaml::from_str(&yaml).unwrap();
         assert_eq!(config, parsed);
+    }
+
+    // ========================================================================
+    // TopologyEntry — per choice 0025, spec
+    // 2026-05-18-topology-substrate-migration ac-01
+    // ========================================================================
+
+    #[test]
+    fn topology_entry_rejects_unknown_field() {
+        // ac-01 verification: deny-unknown-fields contract holds.
+        let yaml = r#"
+subsystem: cards
+canonical_code: [orbit-state/crates/core/src/schema.rs]
+unknown_field: oops
+"#;
+        let err = serde_yaml::from_str::<TopologyEntry>(yaml).unwrap_err();
+        assert!(err.to_string().contains("unknown"));
+    }
+
+    #[test]
+    fn topology_entry_missing_required_subsystem() {
+        // ac-01 verification: serde-required field `subsystem` cannot be omitted.
+        let yaml = r#"
+canonical_code: [orbit-state/crates/core/src/schema.rs]
+"#;
+        let err = serde_yaml::from_str::<TopologyEntry>(yaml).unwrap_err();
+        let msg = err.to_string();
+        assert!(
+            msg.contains("subsystem") || msg.contains("missing"),
+            "expected a missing-required-field error, got: {msg}"
+        );
+    }
+
+    #[test]
+    fn topology_entry_missing_required_canonical_code() {
+        // ac-01 verification: serde-required field `canonical_code` cannot be
+        // omitted (the empty-vec case is enforced by validate(), see below).
+        let yaml = r#"
+subsystem: cards
+"#;
+        let err = serde_yaml::from_str::<TopologyEntry>(yaml).unwrap_err();
+        let msg = err.to_string();
+        assert!(
+            msg.contains("canonical_code") || msg.contains("missing"),
+            "expected a missing-required-field error, got: {msg}"
+        );
+    }
+
+    #[test]
+    fn topology_entry_round_trips_byte_identical() {
+        // ac-01 verification: serde round-trip is lossless for a fully-populated
+        // entry. Every Vec non-empty so skip_serializing_if doesn't drop fields.
+        let entry = TopologyEntry {
+            subsystem: "cards".into(),
+            canonical_code: vec!["orbit-state/crates/core/src/schema.rs".into()],
+            decision_record: vec!["0016".into()],
+            operational_doc: vec!["plugins/orb/skills/card/SKILL.md".into()],
+            test_surface: vec!["orbit-state/crates/core/src/schema.rs".into()],
+        };
+        let yaml = serde_yaml::to_string(&entry).unwrap();
+        let parsed: TopologyEntry = serde_yaml::from_str(&yaml).unwrap();
+        assert_eq!(entry, parsed);
+    }
+
+    #[test]
+    fn topology_entry_optional_lists_omitted_when_empty() {
+        // ac-01 verification: skip_serializing_if = Vec::is_empty drops the
+        // optional list fields from the canonical output when empty.
+        let entry = TopologyEntry {
+            subsystem: "cards".into(),
+            canonical_code: vec!["orbit-state/crates/core/src/schema.rs".into()],
+            decision_record: vec![],
+            operational_doc: vec![],
+            test_surface: vec![],
+        };
+        let yaml = serde_yaml::to_string(&entry).unwrap();
+        assert!(!yaml.contains("decision_record"));
+        assert!(!yaml.contains("operational_doc"));
+        assert!(!yaml.contains("test_surface"));
+        // Round-trip recovers an entry with empty vecs from a yaml that omits
+        // the keys (serde defaults).
+        let parsed: TopologyEntry = serde_yaml::from_str(&yaml).unwrap();
+        assert_eq!(parsed.decision_record, Vec::<String>::new());
+        assert_eq!(parsed.operational_doc, Vec::<String>::new());
+        assert_eq!(parsed.test_surface, Vec::<String>::new());
+    }
+
+    #[test]
+    fn topology_entry_fields_matches_struct() {
+        // ac-01 verification: TopologyEntry::FIELDS equals the serde top-level
+        // key set. Drift-trap parallel to the existing card_fields_matches_struct
+        // / docs_config_fields_matches_struct pattern.
+        let entry = TopologyEntry {
+            subsystem: "cards".into(),
+            canonical_code: vec!["a".into()],
+            decision_record: vec!["b".into()],
+            operational_doc: vec!["c".into()],
+            test_surface: vec!["d".into()],
+        };
+        let yaml = serde_yaml::to_string(&entry).unwrap();
+        let value: serde_yaml::Value = serde_yaml::from_str(&yaml).unwrap();
+        let got = top_level_keys(&value);
+        let mut expected: Vec<String> =
+            TopologyEntry::FIELDS.iter().map(|s| s.to_string()).collect();
+        expected.sort();
+        assert_eq!(got, expected, "TopologyEntry::FIELDS drifted from struct");
+    }
+
+    #[test]
+    fn topology_entry_validate_accepts_well_formed() {
+        let entry = TopologyEntry {
+            subsystem: "cards".into(),
+            canonical_code: vec!["orbit-state/crates/core/src/schema.rs".into()],
+            decision_record: vec![],
+            operational_doc: vec![],
+            test_surface: vec![],
+        };
+        assert!(entry.validate().is_ok());
+    }
+
+    #[test]
+    fn topology_entry_validate_rejects_short_subsystem() {
+        // ac-01 verification: subsystem slug shorter than MIN_SUBSYSTEM_LEN
+        // (5 chars) is rejected.
+        let entry = TopologyEntry {
+            subsystem: "card".into(), // 4 chars
+            canonical_code: vec!["x".into()],
+            decision_record: vec![],
+            operational_doc: vec![],
+            test_surface: vec![],
+        };
+        let err = entry.validate().unwrap_err();
+        assert!(err.contains("minimum length"));
+        assert!(err.contains("card"));
+    }
+
+    #[test]
+    fn topology_entry_validate_rejects_non_slug_subsystem() {
+        // ac-01 verification: subsystem with upper-case / underscores / leading
+        // digit / leading hyphen / trailing hyphen / double-hyphen fails.
+        for bad in &[
+            "Cards",     // upper-case
+            "card_db",   // underscore
+            "1cards",    // leading digit
+            "-cards",    // leading hyphen
+            "cards-",    // trailing hyphen
+            "card--db",  // double hyphen
+            "cards/sub", // slash
+            "cards.db",  // dot
+        ] {
+            let entry = TopologyEntry {
+                subsystem: (*bad).into(),
+                canonical_code: vec!["x".into()],
+                decision_record: vec![],
+                operational_doc: vec![],
+                test_surface: vec![],
+            };
+            let err = entry.validate().unwrap_err();
+            assert!(
+                err.contains("slug-shaped") || err.contains("minimum length"),
+                "expected slug-shape rejection for `{bad}`, got: {err}"
+            );
+        }
+    }
+
+    #[test]
+    fn topology_entry_validate_rejects_empty_canonical_code() {
+        let entry = TopologyEntry {
+            subsystem: "cards".into(),
+            canonical_code: vec![],
+            decision_record: vec![],
+            operational_doc: vec![],
+            test_surface: vec![],
+        };
+        let err = entry.validate().unwrap_err();
+        assert!(err.contains("canonical_code"));
+    }
+
+    #[test]
+    fn topology_entry_validate_accepts_known_orbit_substrate_slugs() {
+        // ac-01 verification: the self-describing seed shipped by ac-05 uses
+        // these slugs; verify validate() accepts each.
+        for slug in &["cards", "choices", "specs", "memories", "topology"] {
+            let entry = TopologyEntry {
+                subsystem: (*slug).into(),
+                canonical_code: vec!["x".into()],
+                decision_record: vec![],
+                operational_doc: vec![],
+                test_surface: vec![],
+            };
+            assert!(
+                entry.validate().is_ok(),
+                "expected `{slug}` to validate as a topology slug"
+            );
+        }
     }
 
     #[test]

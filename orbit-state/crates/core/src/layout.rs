@@ -139,6 +139,19 @@ impl OrbitLayout {
         self.root.join("skills")
     }
 
+    /// `.orbit/topology/` — per-subsystem topology yaml directory. Per
+    /// choice 0025 (`topology-substrate-folder`) and spec
+    /// `2026-05-18-topology-substrate-migration` ac-01: substrate-folder
+    /// shape, one file per subsystem, parsed by the existing orbit-state
+    /// machinery.
+    pub fn topology_dir(&self) -> PathBuf {
+        self.root.join("topology")
+    }
+
+    pub fn topology_file(&self, subsystem: &str) -> PathBuf {
+        self.topology_dir().join(format!("{subsystem}.yaml"))
+    }
+
     pub fn skill_invocations_file(&self, skill_id: &str) -> PathBuf {
         self.skills_dir().join(format!("{skill_id}.invocations.jsonl"))
     }
@@ -167,6 +180,7 @@ impl OrbitLayout {
             &self.memories_dir(),
             &self.sessions_dir(),
             &self.locks_dir(),
+            &self.topology_dir(),
         ] {
             std::fs::create_dir_all(dir)?;
         }
@@ -214,6 +228,14 @@ impl OrbitLayout {
 
     pub fn list_session_files(&self) -> std::io::Result<Vec<PathBuf>> {
         list_yaml_files(&self.sessions_dir())
+    }
+
+    /// Return every `<subsystem>.yaml` under `topology/`, sorted by path.
+    /// Mirrors `list_card_files` / `list_choice_files`. Returns an empty
+    /// vec when the directory is absent (substrate is unconfigured) — the
+    /// caller distinguishes absent-vs-empty via `topology_dir().exists()`.
+    pub fn list_topology_files(&self) -> std::io::Result<Vec<PathBuf>> {
+        list_yaml_files(&self.topology_dir())
     }
 }
 

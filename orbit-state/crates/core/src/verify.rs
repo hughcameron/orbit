@@ -30,7 +30,7 @@ use crate::canonical::{parse_yaml, serialise_yaml};
 use crate::index::Index;
 use crate::layout::OrbitLayout;
 use crate::migrations::ensure_current;
-use crate::schema::{Card, Choice, Config, Memory, SchemaVersion, Session, Spec};
+use crate::schema::{Card, Choice, Config, Memory, SchemaVersion, Session, Spec, TopologyEntry};
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use std::path::{Path, PathBuf};
@@ -133,7 +133,16 @@ pub fn verify_all(layout: &OrbitLayout) -> std::io::Result<VerifyOutcome> {
         check_round_trip::<Config>(&layout.config_file(), &mut outcome);
     }
 
-    // 8. Index rebuild check (ac-17).
+    // 8. topology/*.yaml — per-subsystem topology entries (spec
+    //    2026-05-18-topology-substrate-migration ac-01, choice 0025).
+    //    Each file round-trips against TopologyEntry AND must pass the
+    //    non-serde validate() check (slug shape, min length, non-empty
+    //    canonical_code).
+    for path in list_or_empty(layout.list_topology_files()) {
+        check_topology_round_trip(&path, &mut outcome);
+    }
+
+    // 9. Index rebuild check (ac-17).
     //
     // We always rebuild against a fresh in-memory index — that's the hygiene
     // signal. A failure here is a file that parses individually but breaks
@@ -161,6 +170,49 @@ pub fn verify_all(layout: &OrbitLayout) -> std::io::Result<VerifyOutcome> {
 
 fn list_or_empty(result: std::io::Result<Vec<PathBuf>>) -> Vec<PathBuf> {
     result.unwrap_or_default()
+}
+
+/// Topology files get a check_round_trip pass plus a non-serde validate()
+/// step (slug shape / min length / canonical_code non-empty). A validate
+/// failure is reported as ParseFailed so the diagnostic channel stays
+/// uniform with the rest of verify_all.
+fn check_topology_round_trip(path: &Path, outcome: &mut VerifyOutcome) {
+    // Capture the count of round_trip_failures before delegating — if
+    // check_round_trip pushes a failure for this path we skip validate()
+    // so the operator sees one diagnostic per file at a time.
+    let pre_failure_count = outcome.round_trip_failures.len();
+    check_round_trip::<TopologyEntry>(path, outcome);
+    if outcome.round_trip_failures.len() != pre_failure_count {
+        return;
+    }
+    // File round-tripped; now run validate(). Re-read + parse — cheap and
+    // keeps check_round_trip's signature uniform across entity types.
+    let text = match std::fs::read_to_string(path) {
+        Ok(s) => s,
+        Err(e) => {
+            outcome.round_trip_failures.push(RoundTripFailure {
+                path: path.to_path_buf(),
+                kind: RoundTripFailureKind::ParseFailed(format!("validate re-read failed: {e}")),
+            });
+            return;
+        }
+    };
+    let entry: TopologyEntry = match parse_yaml(&text) {
+        Ok(v) => v,
+        Err(e) => {
+            outcome.round_trip_failures.push(RoundTripFailure {
+                path: path.to_path_buf(),
+                kind: RoundTripFailureKind::ParseFailed(format!("validate re-parse failed: {e}")),
+            });
+            return;
+        }
+    };
+    if let Err(msg) = entry.validate() {
+        outcome.round_trip_failures.push(RoundTripFailure {
+            path: path.to_path_buf(),
+            kind: RoundTripFailureKind::ParseFailed(format!("validate failed: {msg}")),
+        });
+    }
 }
 
 fn check_round_trip<T>(path: &Path, outcome: &mut VerifyOutcome)
@@ -474,6 +526,134 @@ mystery_field: ohno
         assert!(
             !parse_failures.is_empty(),
             "expected ParseFailed on config.yaml; got {outcome:?}"
+        );
+    }
+
+    // ----- Topology verify wiring (spec 2026-05-18-topology-substrate-migration ac-01) -----
+
+    #[test]
+    fn verify_clean_when_topology_dir_absent() {
+        // Absence of .orbit/topology/ is tolerated (the directory is created
+        // by ensure_dirs but is empty until orbit topology setup runs).
+        let (_dir, layout) = fresh_layout();
+        // ensure_dirs creates the topology directory empty.
+        layout.ensure_dirs().unwrap();
+        assert!(layout.topology_dir().exists());
+        assert!(layout.list_topology_files().unwrap().is_empty());
+        let outcome = verify_all(&layout).unwrap();
+        assert!(
+            !outcome.has_failures(),
+            "empty topology dir must not fail verify: {outcome:?}"
+        );
+    }
+
+    #[test]
+    fn verify_clean_with_valid_topology_entry() {
+        // A well-formed TopologyEntry round-trips AND validates.
+        let (_dir, layout) = fresh_layout();
+        let entry = TopologyEntry {
+            subsystem: "cards".into(),
+            canonical_code: vec!["orbit-state/crates/core/src/schema.rs".into()],
+            decision_record: vec!["0016".into()],
+            operational_doc: vec!["plugins/orb/skills/card/SKILL.md".into()],
+            test_surface: vec!["orbit-state/crates/core/src/schema.rs".into()],
+        };
+        let yaml = serialise_yaml(&entry).unwrap();
+        write_atomic(layout.topology_file("cards"), yaml.as_bytes()).unwrap();
+        let outcome = verify_all(&layout).unwrap();
+        assert!(
+            !outcome.has_failures(),
+            "valid topology entry must verify clean: {outcome:?}"
+        );
+    }
+
+    #[test]
+    fn verify_detects_unknown_topology_field() {
+        // deny_unknown_fields: an unknown field on a topology entry fails
+        // round-trip with ParseFailed.
+        let (_dir, layout) = fresh_layout();
+        let bad = "\
+subsystem: cards
+canonical_code: [orbit-state/crates/core/src/schema.rs]
+unknown_field: oops
+";
+        write_atomic(layout.topology_file("cards"), bad.as_bytes()).unwrap();
+        let outcome = verify_all(&layout).unwrap();
+        let parse_failures: Vec<_> = outcome
+            .round_trip_failures
+            .iter()
+            .filter(|f| matches!(f.kind, RoundTripFailureKind::ParseFailed(_)))
+            .filter(|f| f.path == layout.topology_file("cards"))
+            .collect();
+        assert!(
+            !parse_failures.is_empty(),
+            "expected ParseFailed on topology entry; got {outcome:?}"
+        );
+    }
+
+    #[test]
+    fn verify_detects_missing_required_field() {
+        // canonical_code is serde-required.
+        let (_dir, layout) = fresh_layout();
+        let bad = "subsystem: cards\n";
+        write_atomic(layout.topology_file("cards"), bad.as_bytes()).unwrap();
+        let outcome = verify_all(&layout).unwrap();
+        assert!(
+            outcome.has_failures(),
+            "missing required field must fail verify: {outcome:?}"
+        );
+    }
+
+    #[test]
+    fn verify_detects_short_subsystem_slug() {
+        // validate() catches subsystem slug below MIN_SUBSYSTEM_LEN (5 chars).
+        // The yaml itself is structurally valid; only validate() fails.
+        let (_dir, layout) = fresh_layout();
+        // Round-trip-clean yaml: subsystem "card" (4 chars, below min).
+        let entry = TopologyEntry {
+            subsystem: "card".into(),
+            canonical_code: vec!["orbit-state/crates/core/src/schema.rs".into()],
+            decision_record: vec![],
+            operational_doc: vec![],
+            test_surface: vec![],
+        };
+        let yaml = serialise_yaml(&entry).unwrap();
+        write_atomic(layout.topology_file("card"), yaml.as_bytes()).unwrap();
+        let outcome = verify_all(&layout).unwrap();
+        let validate_failures: Vec<_> = outcome
+            .round_trip_failures
+            .iter()
+            .filter(|f| {
+                matches!(&f.kind, RoundTripFailureKind::ParseFailed(msg) if msg.contains("validate failed"))
+            })
+            .collect();
+        assert!(
+            !validate_failures.is_empty(),
+            "expected validate-failed on short slug; got {outcome:?}"
+        );
+    }
+
+    #[test]
+    fn verify_detects_dangling_pointer_is_validate_only() {
+        // The verify-time check only round-trips + runs validate() — it does
+        // NOT walk canonical_code paths to check filesystem existence
+        // (that's audit_topology's drift detection, ac-02). A topology entry
+        // whose canonical_code points at a non-existent path still verifies
+        // clean — drift is a separate signal.
+        let (_dir, layout) = fresh_layout();
+        let entry = TopologyEntry {
+            subsystem: "ghosty".into(),
+            canonical_code: vec!["does/not/exist.rs".into()],
+            decision_record: vec![],
+            operational_doc: vec![],
+            test_surface: vec![],
+        };
+        let yaml = serialise_yaml(&entry).unwrap();
+        write_atomic(layout.topology_file("ghosty"), yaml.as_bytes()).unwrap();
+        let outcome = verify_all(&layout).unwrap();
+        assert!(
+            !outcome.has_failures(),
+            "dangling pointer is NOT a verify-time failure (it's an audit-time drift signal): {outcome:?}"
         );
     }
 }
