@@ -2,6 +2,24 @@
 
 All notable changes to orbit are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.4.19] - 2026-05-18
+
+Topology capability becomes self-maintaining. The substrate shipped in 0.4.18's parent spec (`/orb:topology` skill + `Config` schema + `orbit audit topology` verb) now reaches into the moments where it earns its keep — `/orb:setup` scaffolds the config + stub on first project boot, `orbit session prime` surfaces topology drift in its envelope at session start, `orbit spec close` flags warnings when the closing spec text touches a documented subsystem, and `orbit memory remember --label topology` nudges toward `/orb:topology` so the index gets updated at the learning moment rather than at the next gate. Closes 4 of 5 ACs in spec `2026-05-18-topology-substrate-wires` (card 0040); ac-05 is the 2026-06-15 4-week observation audit, calendar-deferred per the ac-taxonomy observation band.
+
+### Added
+
+- `orbit session prime` envelope gains `topology_drift: Option<Vec<TopologyDriftEntry>>`. `Some` whenever `audit_topology(...).configured == true` (`Some([])` on configured-clean), `None` (key omitted) when not configured. Skip-on-default contract: the key is absent both when `.orbit/config.yaml` is missing and when the file exists but `docs.topology` is unset.
+- `orbit spec close` envelope gains `topology_warnings: Vec<TopologyDriftEntry>` (`skip_serializing_if = Vec::is_empty`). Scans the closing spec's `spec.yaml + interview.md + design-note.md` (each when present); case-insensitive `\b<regex::escape(subsystem)>\b` match against topology entries with names ≥ 5 characters. Non-blocking — closure proceeds with exit 0; warnings are advisory. `design-note.md` is in the scan set because it routinely names subsystems by canonical handle.
+- `orbit memory remember --no-nudge` flag + `MemoryRememberResult.nudge: Option<String>` envelope field. When the labels include `topology` and the flag is absent, the nudge fires on the structured envelope (MCP) and on stderr (CLI human mode). Stdout is reserved for the primary verb output.
+- `plugins/orb/scripts/setup-topology.sh` — `/orb:setup` §6d scaffolding. Greenfield path scaffolds `.orbit/config.yaml` + a stub `docs/topology.md` (heading + explainer + empty entry list). Brownfield path prompts before writing; brownfield-accept creates the parent directory tree when the target path nests in non-existent dirs; never overwrites an existing target file. Test affordance `--answer-wire y|n` scripts the prompt.
+- `plugins/orb/scripts/tests/test-setup-topology.sh` — exercises the six fixture states for the setup script (greenfield-accept, brownfield-decline, brownfield-accept with/without existing target, nested target path, idempotent re-run).
+
+### Changed
+
+- `plugins/orb/skills/setup/SKILL.md` gains §6d documenting the topology scaffolding step in the byte-compare-and-prompt voice of §6b. Topology scaffolding runs after §6a–§6c but is independent of them — it neither reads nor writes CLAUDE.md / METHOD.md.
+- `SessionPrimeResult`, `SpecCloseResult`, and `MemoryRememberResult` extended with the new envelope fields. All additions use `skip_serializing_if` so happy-path responses remain byte-identical to the pre-change shape for callers that don't use the new features. `MemoryRememberArgs` gains `no_nudge: bool` (defaulted false; mirrors `--no-edit` / `--no-verify` naming convention).
+- `TopologyDriftEntry` is the shared cross-verb entry shape. `session_prime` and `spec_close` import from `audit_topology`'s definition — no redeclaration.
+
 ## [0.4.18] - 2026-05-18
 
 Codebase mastery becomes operable. `/orb:code-investigate` ships as the agent-equipment surface delivering card 0025 — narrow mode for specific queries (where is X, what calls Y, how many Z), broad mode for neighbourhood awareness, with a tool taxonomy that routes structural queries to ast-grep and tree-sitter, text searches to ripgrep, and command output through rtk-wrapped variants by default. A PreToolUse hook shipped at `plugins/orb/hooks/hooks.json` softly warns when Edit/Write hits an uninvestigated path; the warning is non-blocking and grep-stable so the 4-week audit (ac-07, observation band) can count fires across sessions. Call-points embedded in `/orb:implement`, `/orb:researcher`, and `/orb:review-pr` with imperative voice make the discipline a default reach rather than an optional one. Closes 6 of 7 ACs in spec `2026-05-17-code-investigate-skill` (card 0025); ac-07 defers per the ac-taxonomy observation band.
