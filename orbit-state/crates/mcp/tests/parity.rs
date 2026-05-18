@@ -474,3 +474,224 @@ fn session_distill_mcp_envelope_matches_canonical() {
     );
     assert_eq!(envelope, expected);
 }
+
+// ---------------------------------------------------------------------------
+// Spec 2026-05-18-topology-substrate-wires parity tests
+// ---------------------------------------------------------------------------
+//
+// Each AC's verification language calls for "Parity test on CLI + MCP".
+// The CLI side lives in crates/cli/tests/parity.rs; these are the MCP
+// mirrors. We parse the inner envelope as JSON and assert on the
+// topology_drift / topology_warnings / nudge fields directly — the
+// behavioural contract is "this field appears (or doesn't) in this
+// envelope shape on this transport" and that's what we verify.
+
+// ----- ac-02: session.prime topology_drift -----
+
+#[test]
+fn session_prime_mcp_topology_drift_omitted_when_config_absent() {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::create_dir_all(dir.path().join(".orbit")).unwrap();
+    let inner = run_mcp_tools_call(
+        dir.path(),
+        json!({ "name": "session.prime", "arguments": {} }),
+    );
+    let envelope_text = inner_envelope_text(&inner);
+    let envelope: Value = serde_json::from_str(&envelope_text).unwrap();
+    let result = &envelope["data"]["result"];
+    assert!(
+        result.get("topology_drift").is_none(),
+        "expected key absent when config absent, got {result}",
+    );
+}
+
+#[test]
+fn session_prime_mcp_topology_drift_omitted_when_docs_topology_unset() {
+    let dir = tempfile::tempdir().unwrap();
+    let orbit_dir = dir.path().join(".orbit");
+    std::fs::create_dir_all(&orbit_dir).unwrap();
+    std::fs::write(orbit_dir.join("config.yaml"), "{}\n").unwrap();
+    let inner = run_mcp_tools_call(
+        dir.path(),
+        json!({ "name": "session.prime", "arguments": {} }),
+    );
+    let envelope_text = inner_envelope_text(&inner);
+    let envelope: Value = serde_json::from_str(&envelope_text).unwrap();
+    let result = &envelope["data"]["result"];
+    assert!(
+        result.get("topology_drift").is_none(),
+        "expected key absent when docs.topology unset, got {result}",
+    );
+}
+
+#[test]
+fn session_prime_mcp_topology_drift_empty_array_when_clean() {
+    let dir = tempfile::tempdir().unwrap();
+    let orbit_dir = dir.path().join(".orbit");
+    std::fs::create_dir_all(&orbit_dir).unwrap();
+    std::fs::create_dir_all(dir.path().join("docs")).unwrap();
+    std::fs::write(
+        orbit_dir.join("config.yaml"),
+        "docs:\n  topology: docs/topology.md\n",
+    )
+    .unwrap();
+    std::fs::write(dir.path().join("docs/topology.md"), "# Topology\n").unwrap();
+    let inner = run_mcp_tools_call(
+        dir.path(),
+        json!({ "name": "session.prime", "arguments": {} }),
+    );
+    let envelope_text = inner_envelope_text(&inner);
+    let envelope: Value = serde_json::from_str(&envelope_text).unwrap();
+    let result = &envelope["data"]["result"];
+    let drift = result
+        .get("topology_drift")
+        .expect("topology_drift key must be present when configured");
+    assert_eq!(
+        drift.as_array().expect("array").len(),
+        0,
+        "expected empty array when clean",
+    );
+}
+
+#[test]
+fn session_prime_mcp_topology_drift_populated_when_drift_present() {
+    let dir = tempfile::tempdir().unwrap();
+    let orbit_dir = dir.path().join(".orbit");
+    std::fs::create_dir_all(&orbit_dir).unwrap();
+    std::fs::create_dir_all(dir.path().join("docs")).unwrap();
+    std::fs::create_dir_all(dir.path().join("src/auth")).unwrap();
+    std::fs::write(
+        orbit_dir.join("config.yaml"),
+        "docs:\n  topology: docs/topology.md\n",
+    )
+    .unwrap();
+    std::fs::write(dir.path().join("docs/topology.md"), "# Topology\n").unwrap();
+    let inner = run_mcp_tools_call(
+        dir.path(),
+        json!({ "name": "session.prime", "arguments": {} }),
+    );
+    let envelope_text = inner_envelope_text(&inner);
+    let envelope: Value = serde_json::from_str(&envelope_text).unwrap();
+    let result = &envelope["data"]["result"];
+    let drift = result["topology_drift"].as_array().expect("array");
+    assert_eq!(drift.len(), 1);
+    assert_eq!(drift[0]["subsystem"], "auth");
+    assert_eq!(drift[0]["drift_kind"], "missing_entry");
+}
+
+// ----- ac-03: spec.close topology_warnings -----
+
+#[test]
+fn spec_close_mcp_topology_warnings_populated_on_word_boundary_match() {
+    let dir = tempfile::tempdir().unwrap();
+    let orbit_dir = dir.path().join(".orbit");
+    std::fs::create_dir_all(orbit_dir.join("specs/0001")).unwrap();
+    std::fs::create_dir_all(orbit_dir.join("cards")).unwrap();
+    std::fs::create_dir_all(dir.path().join("docs")).unwrap();
+    std::fs::create_dir_all(dir.path().join("src/session_prime")).unwrap();
+    std::fs::write(
+        dir.path().join("src/session_prime/mod.rs"),
+        "// mod\n",
+    )
+    .unwrap();
+
+    let topology = "## session_prime\n\n- code: src/session_prime/mod.rs\n- decision: src/session_prime/mod.rs\n- operational: src/session_prime/mod.rs\n- tests: src/session_prime/mod.rs\n- what: session prime envelope verb\n";
+    std::fs::write(dir.path().join("docs/topology.md"), topology).unwrap();
+    std::fs::write(
+        orbit_dir.join("config.yaml"),
+        "docs:\n  topology: docs/topology.md\n",
+    )
+    .unwrap();
+
+    let spec_yaml = "id: \"0001\"\ngoal: Adding a topology_drift field to session_prime envelope.\ncards: []\nstatus: open\nlabels: []\nacceptance_criteria: []\n";
+    std::fs::write(orbit_dir.join("specs/0001/spec.yaml"), spec_yaml).unwrap();
+
+    let inner = run_mcp_tools_call(
+        dir.path(),
+        json!({ "name": "spec.close", "arguments": { "id": "0001" } }),
+    );
+    let envelope_text = inner_envelope_text(&inner);
+    let envelope: Value = serde_json::from_str(&envelope_text).unwrap();
+    let result = &envelope["data"]["result"];
+    let warnings = result["topology_warnings"].as_array().expect("array");
+    assert!(
+        warnings.iter().any(|w| w["subsystem"] == "session_prime"),
+        "expected session_prime warning on MCP envelope, got {warnings:?}",
+    );
+}
+
+// ----- ac-04: memory.remember nudge -----
+
+#[test]
+fn memory_remember_mcp_topology_label_envelope_carries_nudge() {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::create_dir_all(dir.path().join(".orbit")).unwrap();
+    let inner = run_mcp_tools_call(
+        dir.path(),
+        json!({
+            "name": "memory.remember",
+            "arguments": {
+                "key": "k1",
+                "body": "body",
+                "labels": ["topology"],
+            }
+        }),
+    );
+    let envelope_text = inner_envelope_text(&inner);
+    let envelope: Value = serde_json::from_str(&envelope_text).unwrap();
+    let result = &envelope["data"]["result"];
+    let nudge = result["nudge"].as_str().expect("nudge present");
+    assert!(
+        nudge.contains("/orb:topology"),
+        "nudge must reference /orb:topology on MCP envelope, got {nudge}",
+    );
+}
+
+#[test]
+fn memory_remember_mcp_no_label_envelope_omits_nudge() {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::create_dir_all(dir.path().join(".orbit")).unwrap();
+    let inner = run_mcp_tools_call(
+        dir.path(),
+        json!({
+            "name": "memory.remember",
+            "arguments": {
+                "key": "k2",
+                "body": "body",
+                "labels": ["unrelated"],
+            }
+        }),
+    );
+    let envelope_text = inner_envelope_text(&inner);
+    let envelope: Value = serde_json::from_str(&envelope_text).unwrap();
+    let result = &envelope["data"]["result"];
+    assert!(
+        result.get("nudge").is_none(),
+        "nudge key must be absent without topology label, got {result}",
+    );
+}
+
+#[test]
+fn memory_remember_mcp_no_nudge_arg_suppresses_envelope_nudge() {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::create_dir_all(dir.path().join(".orbit")).unwrap();
+    let inner = run_mcp_tools_call(
+        dir.path(),
+        json!({
+            "name": "memory.remember",
+            "arguments": {
+                "key": "k3",
+                "body": "body",
+                "labels": ["topology"],
+                "no_nudge": true,
+            }
+        }),
+    );
+    let envelope_text = inner_envelope_text(&inner);
+    let envelope: Value = serde_json::from_str(&envelope_text).unwrap();
+    let result = &envelope["data"]["result"];
+    assert!(
+        result.get("nudge").is_none(),
+        "no_nudge:true must suppress envelope nudge, got {result}",
+    );
+}
