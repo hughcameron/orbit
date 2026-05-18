@@ -1,0 +1,67 @@
+id: 0040-documentation-topology
+feature: Documentation topology — architecture-level investigation discipline made cheap
+as_a: agent investigating how a multi-file subsystem works
+i_want: a single subsystem-keyed index that points to the canonical code, decision record, operational doc, and test surface for each subsystem
+so_that: I reach for the substrate's existing answer rather than extrapolating from one source file under time pressure
+goal: agents investigating any architectural question find the canonical sources within one file-read; the index stays correct without duplicating content because it carries only pointers
+maturity: planned
+scenarios:
+- name: Subsystem-keyed index, not file-keyed
+  given: a multi-file subsystem whose documentation lives in five-plus places — module docstrings, MADRs, ERD docs, demonstrator scripts, DI/wiring files
+  when: an agent asks "how does subsystem X work?"
+  then: a single topology entry surfaces all five sources by topic, not by filename — the agent reads one entry and knows which canonical files to load
+  gate: true
+- name: Pointer-only — no content duplication
+  given: a topology entry referencing canonical sources
+  when: an authoritative file's docstring updates
+  then: the topology entry stays correct because it carries no content of its own — only pointers
+  gate: true
+- name: Posture line makes the reach the default
+  given: an agent about to reason about how a subsystem works
+  when: the agent encounters a CLAUDE.md / METHOD.md posture line
+  then: it greps the code tree and `docs/` for the subsystem before extrapolating — substrate beats extrapolation
+  gate: true
+- name: Specs cite topology entries instead of rehearsing context
+  given: a spec whose work touches a subsystem with a topology entry
+  when: the spec is being written
+  then: the spec cites the topology entry for architectural backdrop rather than rehearsing the subsystem's data shape, warmup, or wiring — the intent contract stays sharp
+  gate: false
+- name: Skills target canonical files per subsystem
+  given: a skill investigating subsystem X
+  when: the skill prose loads context
+  then: it routes to the canonical files (authoritative code, MADR, operational doc, test surface) named in the topology entry — rather than coaching every agent to re-grep the tree
+  gate: false
+- name: Index accretes with releases
+  given: a release that lands a new subsystem
+  when: the release ships
+  then: the topology entry for the new subsystem is added in the same release; specs that touch existing subsystems update their entries in passing — substrate that compounds rather than rots
+  gate: false
+- name: Architecture-level counterpart to /orb:code-investigate
+  given: orbit already ships /orb:code-investigate for cheap file-level investigation
+  when: an architectural-level question is asked (subsystem boundaries, data shape, wiring)
+  then: the topology index is the architecture-level analogue — the same cheap-discipline-then-default-posture pattern, applied one level up
+  gate: false
+specs: []
+relations:
+- card: 0025-codebase-mastery
+  type: feeds
+  reason: shares the legibility design contract — both make investigation discipline cheap (codebase-mastery at file level, doc-topology at architecture level)
+- card: 0037-memory-gates-decisions
+  type: feeds
+  reason: sibling in the agent-side substrate-engagement cluster — both make agents reach for the substrate at decision moments rather than extrapolate
+- card: 0038-skills-infer-or-prompt-before-halt
+  type: feeds
+  reason: sibling in the agent-side substrate-engagement cluster — both narrow the gap between "the substrate has the answer" and "the agent uses the answer"
+- card: 0033-see-the-tree
+  type: feeds
+  reason: see-the-tree surfaces the orbit-substrate graph; doc-topology surfaces the codebase-substrate graph — paired navigation surfaces over different graphs
+references:
+- '.orbit/memos/2026-05-18-documentation-topology-index.md: distillation source'
+- '.orbit/cards/0025-codebase-mastery.yaml: file-level analogue — same legibility / token-frugal contract'
+- '.orbit/cards/0037-memory-gates-decisions.yaml: cluster sibling — memory side of substrate engagement'
+- '.orbit/cards/0038-skills-infer-or-prompt-before-halt.yaml: cluster sibling — skill behaviour side of substrate engagement'
+notes:
+- open question — orbit-provided convention (template doc shipped with /orb:setup) vs consumer-repo decision (METHOD.md guideline); deferred to /orb:design
+- open question — location of the topology file (docs/topology.md, .orbit/topology.md, repo root); deferred to /orb:design
+- open question — scaffold-skill yes/no (does orbit ship /orb:topology); deferred to /orb:design
+- open question — maintenance mechanism (build-time check, release-boundary review, drift audit); deferred to /orb:design
