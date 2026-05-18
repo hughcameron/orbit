@@ -1,0 +1,42 @@
+id: 0039-setup-conformance-check
+feature: Setup conformance check — /orb:setup verifies the full canonical surface
+as_a: orbit user with an orbit-using repo
+i_want: /orb:setup to check every canonical file the plugin ships (STYLE.md, METHOD.md, .orbit/.gitignore, and any future canonical file) against my repo and offer to update each drift
+so_that: when a new plugin release ships updated canonical files, running /orb:setup brings my repo back in spec without per-file hand-editing or guessing what changed
+goal: running /orb:setup on an existing orbit repo reports drift across every canonical file the plugin owns; the operator confirms updates per file; the verb is idempotent on a clean repo
+maturity: planned
+scenarios:
+- name: Conformance covers the full canonical surface
+  given: an orbit-using repo and a plugin release that ships updated canonical files
+  when: the operator invokes /orb:setup
+  then: setup byte-compares every plugin-shipped canonical file (STYLE.md, METHOD.md, .orbit/.gitignore, and any others) against the repo's copies and reports each drift
+  gate: true
+- name: Drift is surfaced; matching files are silent
+  given: a conformance run against a repo where some canonical files match and others drift
+  when: setup completes the byte-compare
+  then: drifted files are named with a short description of the divergence; matching files are not surfaced as noise; the operator can act only on what changed
+  gate: true
+- name: Update prompts preserve operator agency
+  given: drift reported on one or more canonical files
+  when: the operator is prompted to overwrite
+  then: the operator can accept, decline, or accept selectively per file; declined files remain locally edited; the prompt shape matches the existing METHOD.md byte-compare pattern at /orb:setup §6b
+  gate: false
+- name: Idempotent on a clean repo
+  given: an orbit-using repo already conforming to the latest plugin release
+  when: the operator invokes /orb:setup
+  then: the conformance check reports zero drift; setup exits cleanly without modifying any file
+  gate: false
+- name: Canonical surface is enumerated
+  given: the operator wants to know which files the plugin considers canonical
+  when: /orb:setup runs (or a verbose mode is invoked)
+  then: setup enumerates every canonical file it owns so the boundary between plugin-owned and project-owned files is explicit
+  gate: false
+specs: []
+relations:
+- card: 0017-setup-is-bead-aware
+  type: depends-on
+  reason: /orb:setup's existing §6b METHOD.md byte-compare is the seed pattern; this card generalises that to every canonical file the plugin owns, building on the §6b mechanism shipped under 0017
+references:
+- '.orbit/memos/2026-05-16-setup-conformance-check.md: distillation source — single-question memo asking how to check STYLE.md and METHOD.md conformance'
+- 'plugins/orb/skills/setup/SKILL.md: existing §6b byte-compare-and-prompt mechanism for METHOD.md (the pattern this card generalises)'
+notes: []
