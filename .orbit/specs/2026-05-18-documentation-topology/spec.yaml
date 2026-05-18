@@ -1,0 +1,80 @@
+id: 2026-05-18-documentation-topology
+goal: Ship /orb:topology as the architecture-level analogue of /orb:code-investigate — a skill that scaffolds, writes, and audits a subsystem-keyed pointer-only doc whose location is consumer-owned via a .orbit/config.yaml pointer. Update triggers fire at learning moments (/orb:distill completion, orbit memory remember with the topology label) and at session boundaries (orbit session prime surfaces drift). Audit warns at gate moments (spec.close, orbit release) without blocking. Intent contract and design decisions in .orbit/specs/2026-05-18-documentation-topology/interview.md.
+cards:
+- 0040-documentation-topology
+status: open
+labels:
+- spec
+acceptance_criteria:
+- id: ac-01
+  description: '/orb:topology skill exists at plugins/orb/skills/topology/SKILL.md with three documented modes. Write mode — agent passes a subsystem name and the skill scaffolds or updates an entry (interview-style if scaffolding; targeted edit if updating); each entry is five lines (authoritative code file / owning architectural decision / operational doc / test surface / one-sentence "what this gives you"). Read mode — agent passes a subsystem name (or a question like "how does X work?") and the skill returns the entry, citing the canonical sources by path. Audit mode — agent invokes without a subsystem name and the skill reports drift across the whole topology doc (stale pointers, missing entries for subsystems detected in the codebase, entries whose pointer targets no longer exist). Skill front-matter follows the curator convention from card 0022 (name, description, created_by, created_at, pinned). Skill prose names the architecture-level analogue framing (parallel to /orb:code-investigate at the file level).'
+
+  gate: true
+  verification: 'File exists at plugins/orb/skills/topology/SKILL.md. Front-matter parses and includes the curator fields. Prose grep returns hits for "write mode", "read mode", "audit mode", "subsystem", "pointer-only". Invocation as /orb:topology from a fresh Claude Code session resolves the skill (not "skill not found"). Smoke: invoke write mode in a scratch repo, assert the topology doc gains a five-line entry; invoke read mode against the same subsystem, assert the entry is returned; invoke audit mode, assert drift is reported when a pointer target is deleted.'
+  ac_type: doc
+- id: ac-02
+  description: 'Config pointer mechanism — .orbit/config.yaml carries a docs.topology key naming the consumer-chosen path for the topology doc (default docs/topology.md). The config file is added to the orbit-state schema as a new top-level artefact (parallel to Card / Spec / Choice / Memory) with #[serde(deny_unknown_fields)] and a corresponding FIELDS constant. orbit verify validates the config file when present; absence is tolerated (the topology capability is opt-in). The pointer is read by /orb:topology, orbit audit topology, /orb:setup, and the spec.close / release warning emitters — none of them hard-code the doc location.'
+
+  gate: true
+  verification: '.orbit/config.yaml parses against the new schema; orbit verify exits 0 with a valid config; orbit verify exits non-zero with an invalid one (e.g. wrong type on docs.topology). Unit test added alongside the existing FIELDS-drift tests asserting Config::FIELDS matches the struct''s serde representation. Manual smoke: configure docs.topology to a non-default path, run orbit audit topology, assert the verb reads from the configured path rather than the default.'
+
+  ac_type: config
+- id: ac-03
+  description: 'METHOD.md gains a posture line in the substrate-rules section — verbatim or close-paraphrase of "Before reasoning about how a subsystem works, grep the code tree and docs/ for it. Substrate beats extrapolation." The line lives where the other substrate-rules bullets live (memory loop, session prime, task tracking). METHOD.md also gains a brief mention of the topology label convention (parallel to the existing --label code-investigate documentation) naming "topology" as the canonical label that triggers the update-on-learning prompt in /orb:topology.'
+
+  gate: true
+  verification: 'Grep METHOD.md for "Substrate beats extrapolation" — at least one hit. Grep METHOD.md for "topology" label mention — at least one hit naming the label as canonical for topology-relevant memories. /orb:setup''s byte-compare propagates the updated METHOD.md to consumer repos on next setup invocation (existing mechanism per §6b; no new wiring needed here).'
+
+  ac_type: doc
+- id: ac-04
+  description: 'orbit audit topology verb on CLI + MCP. Reads the docs.topology pointer from .orbit/config.yaml; if absent, exits cleanly with a "topology capability not configured" envelope (not an error). When configured, walks the topology doc, parses entries, and reports drift in three categories — (a) stale pointer (entry names a path that no longer exists), (b) missing entry (subsystem detected in the codebase by a configurable heuristic — initially "directory under src/ or crates/ with no entry"), (c) shape drift (entry doesn''t follow the five-line convention). Output is the standard ok envelope with a topology_drift array; exit 0 when clean, exit 0 with non-empty array when drift exists (drift is informational, not an error). Parity test on CLI + MCP.'
+
+  gate: true
+  verification: 'orbit audit topology returns ok envelope on a fixture with a clean topology doc (empty topology_drift). Returns ok envelope with populated topology_drift on a fixture with each of the three drift categories injected. Returns "topology capability not configured" envelope on a fixture without .orbit/config.yaml. Parity test in orbit-state/crates/cli/tests/parity.rs and crates/mcp/tests/parity.rs confirms CLI + MCP emit the same envelope.'
+
+  ac_type: code
+- id: ac-05
+  description: '/orb:setup integration. Greenfield path scaffolds .orbit/config.yaml with docs.topology pointing at docs/topology.md (the memo''s suggested default) and creates a stub docs/topology.md with a heading + a one-paragraph explainer + an empty entry list. Brownfield path detects whether .orbit/config.yaml exists and prompts to add the docs.topology key if missing (operator can decline; declining leaves the topology capability unconfigured but the rest of orbit still works). The /orb:setup SKILL.md gains a §6e (or equivalent placement) documenting the new scaffolding step in the same byte-compare-and-prompt voice as §6b for METHOD.md.'
+
+  gate: false
+  verification: 'Invoke /orb:setup in a scratch greenfield repo; assert .orbit/config.yaml exists with docs.topology=docs/topology.md and docs/topology.md exists with the stub content. Invoke /orb:setup in a scratch brownfield repo with no .orbit/config.yaml; assert the operator is prompted; accept; assert the file is created. Re-invoke /orb:setup on the same brownfield repo; assert no prompt (idempotent on clean repo). Grep /orb:setup SKILL.md for the new step.'
+
+  ac_type: code
+- id: ac-06
+  description: 'orbit session prime envelope extends with a topology_drift field listing subsystems with drift (each entry is { subsystem, drift_kind } where drift_kind matches the categories from ac-04). The field is added to the existing envelope (item_bound / memories / next_step / open_specs) — additive, not breaking. When .orbit/config.yaml is absent or the topology capability is not configured, the field is omitted (not empty) per skip-on-default convention. When configured and clean, the field is an empty array. Parity test on CLI + MCP confirms the envelope shape.'
+
+  gate: true
+  verification: 'orbit session prime --json on a fixture with a configured + clean topology returns an envelope with topology_drift: []. Same on a fixture with drift returns the populated array. Same on a fixture without .orbit/config.yaml returns an envelope without a topology_drift key (skip-on-default). Parity test in cli/tests/parity.rs and mcp/tests/parity.rs. Pre-write the envelope key check against the binary per memory spec-verification-against-real-envelope-shape — confirm the actual key name before encoding it into tests.'
+  ac_type: code
+- id: ac-07
+  description: 'spec.close emits a non-blocking topology_warnings field in its ok envelope when drift exists in subsystems the closing spec touched. "Subsystems touched" is detected by reading the spec''s interview.md / spec.yaml for path mentions and intersecting against topology entries — initially a coarse heuristic (substring match on the subsystem name in spec text); precision improvements are out of scope for this spec. The warnings do not block closure (closure proceeds, exit 0) — they appear in the ok envelope''s topology_warnings array for the operator to act on. Parity test confirms the envelope shape on both CLI + MCP.'
+
+  gate: true
+  verification: 'spec close on a fixture spec touching a drifted subsystem returns exit 0 with topology_warnings populated in the ok envelope. spec close on a fixture spec touching only clean subsystems returns exit 0 with topology_warnings: []. spec close in a repo without .orbit/config.yaml returns the existing envelope shape (no topology_warnings key — skip-on-default). Parity test on CLI + MCP.'
+  ac_type: code
+- id: ac-08
+  description: '/orb:release SKILL.md gains a topology-drift surface step that runs orbit audit topology and reports drift to the release operator before bumping the version. Implementation is skill-prose only (the release flow is already author-facing prose, not a binary verb) — the new step sits in the pre-bump checklist and surfaces the audit output verbatim with a one-line framing ("topology drift surfaced — review before bumping"). Operator can proceed regardless (release is not gated by topology drift per Q4 of the interview).'
+
+  gate: false
+  verification: 'Grep plugins/orb/skills/release/SKILL.md for "orbit audit topology" — at least one hit in the pre-bump section. Prose review confirms the step is positioned before the version bump and uses the "review before bumping" voice. Manual smoke: invoke /orb:release on a repo with topology drift, observe the audit output surfaces in the operator''s view before the bump prompt.'
+
+  ac_type: doc
+- id: ac-09
+  description: '/orb:distill SKILL.md gains an update-on-learning nudge at the §5 Write phase. After the cards are written, the skill prose prompts the agent to consider whether any of the new cards correspond to subsystems that should be added to or updated in the topology doc — invoking /orb:topology write-mode when the answer is yes. The nudge is conditional (only fires if .orbit/config.yaml is present and docs.topology is configured) and quality-gated (the skill prose frames it as "if this distillation corresponds to a subsystem-level capability, consider..." rather than firing every time).'
+
+  gate: false
+  verification: 'Grep plugins/orb/skills/distill/SKILL.md for "/orb:topology" or "topology" — at least one hit in the §5 Write section. Prose review confirms the nudge is conditional and quality-gated, not unconditional. Manual smoke: invoke /orb:distill on a memo that produces a subsystem-flavoured card; observe the agent reaches for /orb:topology after the write phase.'
+
+  ac_type: doc
+- id: ac-10
+  description: 'orbit memory remember with --label topology emits a "consider /orb:topology" nudge to stderr (or to the ok envelope as an advisory field) after the memory is stored. Implementation is in the memory remember verb''s post-store hook — checks the labels for "topology" and emits the nudge when present. The nudge is non-blocking (memory still stores successfully) and quiet (suppressible via --no-nudge flag or equivalent — final flag name decided in implementation). Parity test confirms the nudge fires on CLI + MCP.'
+
+  gate: false
+  verification: 'orbit memory remember <key> "<body>" --label topology stores the memory and emits the nudge ("consider /orb:topology" or near-equivalent — exact wording locked at implementation). Without the label, no nudge fires. Parity test on CLI + MCP. Grep the verbs.rs handler for the nudge-emission code path.'
+  ac_type: code
+- id: ac-11
+  description: 'Observation-band: 4-week usage audit of the topology capability. Earliest fire date: 4 weeks after this spec ships. Audit reads (a) the topology doc in this repo and any consumer repos where /orb:topology has been adopted, tabulating entry count and update frequency by subsystem, (b) memories labelled topology over the 4-week window, (c) topology_warnings counts emitted by spec.close over the window, (d) topology_drift counts emitted by session prime. Audit produces a memo at .orbit/memos/<ship-date+4w>-topology-4-week-audit.md with the data tables and a recommendation — keep coaching as-is, tighten the audit heuristic, expand the trigger surfaces, or open a follow-on spec if the learning loop revealed a substrate gap.'
+  gate: false
+  verification: 'Audit memo exists at .orbit/memos/<ship-date+4w>-topology-4-week-audit.md on or after the spec ship-date + 4 weeks. Memo includes entry-count table, update-frequency table, labelled-memory count, topology_warnings count, topology_drift count, recommendation. spec.close treats this AC as deferrable per the ac-taxonomy observation band (does not block close).'
+
+  ac_type: observation
