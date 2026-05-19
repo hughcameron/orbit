@@ -31,7 +31,8 @@ scenarios:
   when: the agent is tempted to halt for confirmation
   then: memory + contract is treated as load-bearing authorisation; halting against it constitutes ignoring the substrate the discipline was built on
   gate: false
-specs: []
+specs:
+- .orbit/specs/2026-05-19-act-when-authorised/spec.yaml
 relations:
 - card: 0005-drive
   type: feeds
