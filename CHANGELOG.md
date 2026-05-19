@@ -2,6 +2,27 @@
 
 All notable changes to orbit are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.4.21] - 2026-05-19
+
+`orbit audit conformance` lands as the agent-on-demand workflow conformance audit. The verb aggregates the existing `audit.drift` + `audit.topology` results under `aggregated.{drift,topology}` and surfaces three new finding families — plugin-canonical-file drift (`.orbit/METHOD.md` byte-compare against compile-time canonical bytes), card-state (cards at `maturity:planned` with empty specs, ready for design), memo staleness (filename-date > 7 days) — alongside a plugin-version pin state derived from `.orbit/config.yaml`. Each finding carries an explicit `remediation.verb` the agent runs without translation (`orbit setup`, `/orb:design <id>`, `/orb:distill <path>`). Audience is agent-first: zero-finding case is silent; operator sees output only on agent escalation. Ships spec `2026-05-19-workflow-conformance` end-to-end (8/8 ACs, card 0039 maturity planned → emerging).
+
+### Added
+
+- `ConformanceFinding` / `Remediation` / `AggregatedAudits` / `PinState` types in `orbit-state` (deny-unknown-fields, severity / state slug strings for forward-compat).
+- `audit_conformance` Rust verb (CLI + MCP) — `orbit audit conformance [--json]`. Read-only, idempotent. Composes existing audits rather than subsuming them — `audit drift` and `audit topology` retain their independent surfaces.
+- `Config.plugin_version: Option<String>` field — per-repo pin storage in `.orbit/config.yaml`. `Config::FIELDS` extended so the canonicaliser recognises the key. `None` defaults to current (orbit-state binary's `CARGO_PKG_VERSION` under lockstep release).
+- Pin-state model: `unpinned` / `matches` / `pin_behind` / `pin_ahead`. `pin_behind` (installed > pinned) and `pin_ahead` (installed < pinned) each fire ONE dominant finding and suppress per-file findings (single-finding dominance).
+- `Layout::list_memo_files()` + `Layout::repo_root()` helpers in `orbit-state-core`.
+- `CANONICAL_FILES` v1 inventory: `.orbit/METHOD.md` is the single plugin-canonical file in v1; the inventory expands as the plugin adds more (no spec change required).
+- 21 unit tests covering schema round-trip, deny-unknown-fields, card-state matrix, memo-staleness boundary cases, byte-drift matrix, pin-state derivation, pin-state suppression, aggregation byte-equality, and dispatch.
+- CLI + MCP parity tests on the clean-fixture envelope.
+- /orb:setup SKILL.md §6e + METHOD.md substrate-rules line documenting the verb for agent / operator discovery.
+
+### Changed
+
+- `time` workspace feature set extended with `parsing` + `local-offset` (memo filename-date parsing + `OffsetDateTime::now_local`).
+- Card 0039 slug renamed `setup-conformance-check` → `workflow-conformance`; scope reframed from artefact byte-compare to substrate-vs-plugin-contract evidence.
+
 ## [0.4.20] - 2026-05-18
 
 Topology moves out of the documentation tree and into the agent substrate. Per choice 0025 (`topology-substrate-folder`), the canonical shape is per-subsystem yaml at `.orbit/topology/<subsystem>.yaml` parsed against the new `TopologyEntry` schema — pointer-only, agent-queryable, prunable with `rm`. The substrate-engagement envelopes shipped in 0.4.19 (`session.prime` `topology_drift`, `spec.close` `topology_warnings`, `memory.remember` `--label topology` nudge) are preserved against the new parser, so consumer-facing envelope shapes don't break. Ships spec `2026-05-18-topology-substrate-migration` end-to-end (5/5 ACs, card 0040 maturity planned → emerging).
