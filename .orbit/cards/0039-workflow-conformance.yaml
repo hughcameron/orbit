@@ -46,7 +46,8 @@ scenarios:
   when: the agent processes them
   then: the agent decides which to remediate (e.g. propose /orb:distill on a stale memo) and which to surface to the operator (e.g. widespread plugin-canonical drift warranting a pin bump); zero-finding case is silent
   gate: false
-specs: []
+specs:
+- .orbit/specs/2026-05-19-workflow-conformance/spec.yaml
 relations:
 - card: 0017-setup-is-bead-aware
   type: depends-on
