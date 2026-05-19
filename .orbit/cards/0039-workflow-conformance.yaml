@@ -1,0 +1,62 @@
+id: 0039-workflow-conformance
+feature: Workflow conformance — agent-on-demand audit of substrate vs plugin contract
+as_a: orbit agent operating on an orbit-using repo
+i_want: an on-demand verb that reports findings where the repo's substrate has drifted from the (pinned) plugin's current contract — across plugin-canonical files, card lifecycle state, and memo staleness
+so_that: I can triage workflow drift without operator translation — each finding carries the next-action verb I should run, and the operator only sees output when I escalate
+goal: '`orbit audit conformance` returns a structured findings envelope (severity / subject / state / evidence / remediation.verb per finding) covering three families — plugin-canonical-file drift, card-state findings (planned + empty specs), memo staleness (>7d) — aggregated alongside existing audit_drift and audit_topology results; clean repo returns zero findings'
+maturity: planned
+scenarios:
+- name: Agent reads conformance and gets actionable findings
+  given: an orbit-using repo where STYLE.md byte-differs from the pinned plugin canonical, and some card has maturity planned with empty specs
+  when: the agent invokes `orbit audit conformance --json`
+  then: the envelope contains two findings, each with subject, state, severity, evidence, and remediation.verb (`orbit setup` and `/orb:design <id>` respectively)
+  gate: true
+- name: Aggregates over existing audits
+  given: a repo with both schema field drift (audit_drift target) and topology pointer drift (audit_topology target)
+  when: conformance runs
+  then: the findings envelope includes the audit_drift and audit_topology results as part of the unified output — the agent does not need to call them separately
+  gate: true
+- name: Memo staleness fires on time-based threshold
+  given: an undistilled memo at .orbit/memos/YYYY-MM-DD-slug.md whose filename-date is more than 7 days before today
+  when: conformance runs
+  then: a finding fires with subject = the memo path, state = stale, remediation.verb = `/orb:distill <memo-path>`, severity = medium
+  gate: true
+- name: Card-state finding fires on planned + empty specs
+  given: a card at maturity planned with an empty specs array
+  when: conformance runs
+  then: a finding fires with subject = the card id, state = ready_for_design, remediation.verb = `/orb:design <id>`, severity = medium
+  gate: true
+- name: Plugin-canonical-file drift via byte-compare
+  given: a repo whose .orbit/STYLE.md or METHOD.md or .gitignore byte-differs from the pinned plugin canonical
+  when: conformance runs
+  then: a finding fires per drifted file with state = byte_drift, evidence naming the canonical path, remediation.verb = `orbit setup`
+  gate: true
+- name: Pin-behind state collapses per-file findings
+  given: a repo with plugin_version pinned to an older release while the installed plugin is ahead
+  when: conformance runs
+  then: a single finding fires with state = pin_behind, evidence = {pinned, current}, remediation.verb = `orbit setup --bump-pin` — per-new-file findings under the newer plugin are suppressed under pin-behind state
+  gate: false
+- name: Clean repo returns zero findings
+  given: an orbit-using repo whose substrate matches the pinned plugin contract on all three families
+  when: conformance runs
+  then: zero findings; exits 0 cleanly; idempotent on re-run
+  gate: false
+- name: Agent acts; operator reads on escalation
+  given: conformance findings exist
+  when: the agent processes them
+  then: the agent decides which to remediate (e.g. propose /orb:distill on a stale memo) and which to surface to the operator (e.g. widespread plugin-canonical drift warranting a pin bump); zero-finding case is silent
+  gate: false
+specs: []
+relations:
+- card: 0017-setup-is-bead-aware
+  type: depends-on
+  reason: /orb:setup §6b's byte-compare-and-prompt voice (METHOD.md) and §6d's topology scaffolding establish the seed pattern for plugin-canonical handling; conformance generalises and aggregates these alongside substrate-state checks
+- card: 0040-documentation-topology
+  type: depends-on
+  reason: audit_topology (shipped under card 0040) is one of the aggregated audits — conformance composes it rather than reimplementing topology drift detection
+references:
+- '.orbit/specs/2026-05-19-workflow-conformance/interview.md: discovery session — establishes the agent-first audience, aggregate layering, pin-and-current model, and three v1 finding families'
+- 'plugins/orb/skills/setup/SKILL.md: existing §6b byte-compare-and-prompt mechanism and §6d topology scaffolding (the seed patterns generalised by this card)'
+- 'orbit-state/crates/core/src/verbs.rs: audit_drift + audit_topology (the audits this card aggregates)'
+notes:
+- 2026-05-19 — Card scope reframed from "setup verifies the canonical file surface" (artefact byte-compare) to "workflow conformance" (substrate vs plugin contract, agent-consumed). Slug renamed from setup-conformance-check to workflow-conformance; id 0039 retained. Original framing was the artefact-oriented subset; the new framing makes file-byte drift one finding family among three (alongside card-state and memo staleness). Discovery interview at .orbit/specs/2026-05-19-workflow-conformance/interview.md captures the pivot in full.
