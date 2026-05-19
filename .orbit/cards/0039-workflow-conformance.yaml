@@ -4,7 +4,7 @@ as_a: orbit agent operating on an orbit-using repo
 i_want: an on-demand verb that reports findings where the repo's substrate has drifted from the (pinned) plugin's current contract — across plugin-canonical files, card lifecycle state, and memo staleness
 so_that: I can triage workflow drift without operator translation — each finding carries the next-action verb I should run, and the operator only sees output when I escalate
 goal: '`orbit audit conformance` returns a structured findings envelope (severity / subject / state / evidence / remediation.verb per finding) covering three families — plugin-canonical-file drift, card-state findings (planned + empty specs), memo staleness (>7d) — aggregated alongside existing audit_drift and audit_topology results; clean repo returns zero findings'
-maturity: planned
+maturity: emerging
 scenarios:
 - name: Agent reads conformance and gets actionable findings
   given: an orbit-using repo where STYLE.md byte-differs from the pinned plugin canonical, and some card has maturity planned with empty specs

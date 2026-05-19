@@ -244,6 +244,8 @@ The verb returns a **structured findings envelope** ({severity, subsystem, subje
 
 Each finding carries an explicit **`remediation.verb`** the agent runs without translation. The verb is agent-first: zero-finding case is silent; the operator only sees output on agent escalation. Read-only — invoking it produces no on-disk changes. Per spec 2026-05-19-workflow-conformance.
 
+**Pin remediation.** When `pin_behind` or `pin_ahead` fires, the finding's `remediation.verb` is `orbit setup --bump-pin`. As of orbit 0.4.20 the pin is **operator-managed** — the operator hand-edits `.orbit/config.yaml` to set `plugin_version: "<vN.N.N>"`. The `--bump-pin` invocation is the documented handle for a follow-on spec that automates the rewrite. Agents should surface the finding to the operator (per the agent-first / escalation contract) rather than attempt to bump the pin programmatically until the flag ships.
+
 ### 7. First Card Tutorial
 
 Walk the author through writing their first feature card using `/orb:card`. Explain:

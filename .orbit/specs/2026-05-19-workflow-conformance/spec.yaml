@@ -2,7 +2,7 @@ id: 2026-05-19-workflow-conformance
 goal: 'Ship `orbit audit conformance` as the agent-on-demand workflow audit. The verb returns a structured findings envelope (severity / subsystem / subject / state / evidence / remediation.verb per finding) covering three new finding families — plugin-canonical-file drift (METHOD.md byte-compare in v1; the inventory expands as the plugin adds further canonical files), card-state (maturity:planned + empty specs), and memo staleness (filename-date >7d) — alongside aggregated audit_drift and audit_topology results carried verbatim under `aggregated.{drift,topology}`. Each finding carries an explicit remediation verb the agent can run without translation. Per-repo plugin-version pin in `.orbit/config.yaml` defaults to current (sourced from the orbit-state binary''s CARGO_PKG_VERSION under lockstep release); pin_behind and pin_ahead each fire a single pin-state finding and suppress per-file findings (single-finding dominance). Audience is agent-first: zero-finding case is silent; the operator only sees output on agent escalation. Intent contract and full pivot rationale in interview.md.'
 cards:
 - 0039-workflow-conformance
-status: open
+status: closed
 labels: []
 acceptance_criteria:
 - id: ac-01
