@@ -2,7 +2,7 @@ id: 2026-05-19-skills-infer-or-prompt-before-halt
 goal: every /orb:* skill with a required contextual argument follows the same three-step recovery (infer → prompt → halt) — zero silent halts on recoverable missing-arg cases
 cards:
 - 0038-skills-infer-or-prompt-before-halt
-status: open
+status: closed
 labels: []
 acceptance_criteria:
 - id: ac-01
