@@ -1,0 +1,9 @@
+id: 2026-05-20-memory-match-bm25
+goal: migrate orbit memory match's body-overlap ranker to FTS5/BM25 while keeping the label-overlap signal as a parallel scalar
+cards:
+- 0037-memory-gates-decisions
+status: open
+labels:
+- deferred
+- ranker
+acceptance_criteria: []
