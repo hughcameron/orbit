@@ -183,10 +183,12 @@ ac-05).
 **Pre-commit halts have stage scope, not surface scope.** A halt
 registered against a surface during `/orb:implement` does NOT
 auto-widen to cover the same surface during `/orb:review-spec` or
-`/orb:design`. The hook reads the current pipeline stage from
-`drive.yaml` and treats stage-cross widening as a violation of
-question 3 — conservative widening turns a stage gate into a surface
-gate. Per spec 2026-05-19-act-when-authorised (ac-04).
+`/orb:design`. When the hook fires, the agent reading the prompt
+consults `drive.yaml` for the current stage and treats any
+stage-cross widening as a violation of question 3 — conservative
+widening turns a stage gate into a surface gate. The match is the
+agent's, not the hook's; the hook prompts, the agent decides. Per
+spec 2026-05-19-act-when-authorised (ac-04).
 
 **Mechanical reinforcement.** Under `ORBIT_NONINTERACTIVE=1` with a
 `drive.yaml` present, the PreToolUse hook at

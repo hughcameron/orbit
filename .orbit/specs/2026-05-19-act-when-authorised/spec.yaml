@@ -6,7 +6,7 @@ status: open
 labels: []
 acceptance_criteria:
 - id: ac-01
-  description: A PreToolUse hook at `plugins/orb/hooks/three-question-test.sh`, registered in `plugins/orb/.claude-plugin/plugin.json` against `AskUserQuestion`, prints the three substrate-typed questions (recommendation? evidence? contract authorisation?) to stderr. The hook is scope-gated — it only fires when `ORBIT_NONINTERACTIVE=1` AND a `.orbit/specs/<id>/drive.yaml` is present in the working tree; under those conditions it exits non-zero to suppress the halt and force the agent to either act or escalate via the structural NO-GO path. `plugins/orb/skills/drive/SKILL.md` carries a prose pointer to the same test.
+  description: A PreToolUse hook at `plugins/orb/hooks/three-question-test.sh`, registered in `plugins/orb/hooks/hooks.json` against `AskUserQuestion`, prints the three substrate-typed questions (recommendation? evidence? contract authorisation?) to stderr. The hook is scope-gated — it only fires when `ORBIT_NONINTERACTIVE=1` AND a `.orbit/specs/<id>/drive.yaml` is present in the working tree; under those conditions it exits non-zero to suppress the halt and force the agent to either act or escalate via the structural NO-GO path. `plugins/orb/skills/drive/SKILL.md` carries a prose pointer to the same test.
   gate: true
   checked: true
 - id: ac-02
@@ -20,7 +20,7 @@ acceptance_criteria:
   checked: true
   ac_type: doc
 - id: ac-04
-  description: '`plugins/orb/skills/drive/SKILL.md` documents that pre-commit halts named in spec text apply only to the stage in which they were registered. The D1 hook reads the current pipeline stage from `drive.yaml` and treats stage-cross widening as a violation of the authorisation question.'
+  description: '`plugins/orb/skills/drive/SKILL.md` documents that pre-commit halts named in spec text apply only to the stage in which they were registered. The D1 hook prompts the agent (via question 3) to consult `drive.yaml` for the current stage; the stage-match is performed by the agent reading the prompt, not by hook logic.'
   gate: false
   checked: true
   ac_type: doc
