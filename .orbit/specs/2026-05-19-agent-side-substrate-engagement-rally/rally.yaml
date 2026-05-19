@@ -15,7 +15,7 @@ children:
 - card_path: .orbit/cards/0038-skills-infer-or-prompt-before-halt.yaml
   spec_id: 2026-05-19-skills-infer-or-prompt-before-halt
   branch: rally/skills-infer-or-prompt-before-halt
-  card_phase: implementing
+  card_phase: complete
   dep_predecessors: []
   worktree: /home/hugh/github/meridian-online/orbit-rally-skills-infer-or-prompt-before-halt
   rally_id: 2026-05-19-agent-side-substrate-engagement-rally
