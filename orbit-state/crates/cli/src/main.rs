@@ -24,7 +24,8 @@ use orbit_state_core::Error as OrbitError;
 use orbit_state_core::{
     canonicalise_all, envelope_err_string, envelope_ok_string, execute, reconcile_all,
     CanonicaliseReport, ReconcileReport,
-    AuditDriftArgs, AuditDriftResult, AuditTopologyArgs, AuditTopologyResult, TopologySetupArgs, TopologySetupResult,
+    AuditConformanceArgs, AuditConformanceResult, AuditDriftArgs, AuditDriftResult,
+    AuditTopologyArgs, AuditTopologyResult, TopologySetupArgs, TopologySetupResult,
     CardListArgs, CardSearchArgs, CardShowArgs, CardShowResult,
     CardSpecsArgs, CardSpecsResult, CardTreeArgs, CardTreeEdge, CardTreeResult, ChoiceListArgs,
     ChoiceListResult, GraphArgs, GraphFormat, GraphResult, OverviewArgs, OverviewResult,
@@ -301,6 +302,12 @@ enum AuditAction {
     /// missing_entry, shape_drift. Exits 0 in all three states (clean,
     /// drift present, not configured); discrimination is via the envelope.
     Topology,
+    /// Workflow-conformance audit. Aggregates `audit.drift` + `audit.topology`
+    /// results and surfaces new finding families: card-state (planned + empty
+    /// specs), memo staleness (>7d), plugin-canonical-file drift, plugin-
+    /// version pin state. Each finding carries a `remediation.verb` the agent
+    /// can run without translation. Per spec 2026-05-19-workflow-conformance.
+    Conformance,
 }
 
 #[derive(Debug, Subcommand)]
@@ -1085,6 +1092,9 @@ fn build_request(layout: &OrbitLayout, command: &Command) -> Result<VerbRequest,
             AuditAction::Topology => {
                 VerbRequest::AuditTopology(AuditTopologyArgs::default())
             }
+            AuditAction::Conformance => {
+                VerbRequest::AuditConformance(AuditConformanceArgs::default())
+            }
         },
         Command::Topology { action } => match action {
             TopologyAction::Setup { answer_wire } => {
@@ -1151,6 +1161,7 @@ fn render_human(response: &VerbResponse) {
         VerbResponse::Graph(result) => render_graph(result),
         VerbResponse::AuditDrift(result) => render_audit_drift(result),
         VerbResponse::AuditTopology(result) => render_audit_topology(result),
+        VerbResponse::AuditConformance(result) => render_audit_conformance(result),
         VerbResponse::TopologySetup(result) => render_topology_setup(result),
         VerbResponse::ChoiceShow(result) => render_choice_show(result),
         VerbResponse::ChoiceList(result) | VerbResponse::ChoiceSearch(result) => {
@@ -1374,6 +1385,39 @@ fn render_audit_topology(result: &AuditTopologyResult) {
         println!(
             "  {}\t{}{}",
             entry.subsystem, entry.drift_kind, detail
+        );
+    }
+}
+
+fn render_audit_conformance(result: &AuditConformanceResult) {
+    let aggregated_count =
+        result.aggregated.drift.drift.len() + result.aggregated.topology.topology_drift.len();
+    if result.findings.is_empty() && aggregated_count == 0 {
+        println!(
+            "audit.conformance: clean (pin {}, no findings)",
+            result.pin.status
+        );
+        return;
+    }
+    println!(
+        "audit.conformance: {} finding{} (pin {})",
+        result.findings.len(),
+        if result.findings.len() == 1 { "" } else { "s" },
+        result.pin.status,
+    );
+    for f in &result.findings {
+        println!(
+            "  [{}] {}/{}: {} → {}",
+            f.severity, f.subsystem, f.state, f.subject, f.remediation.verb,
+        );
+    }
+    if aggregated_count > 0 {
+        println!(
+            "  aggregated: audit.drift {} entr{}, audit.topology {} entr{}",
+            result.aggregated.drift.drift.len(),
+            if result.aggregated.drift.drift.len() == 1 { "y" } else { "ies" },
+            result.aggregated.topology.topology_drift.len(),
+            if result.aggregated.topology.topology_drift.len() == 1 { "y" } else { "ies" },
         );
     }
 }

@@ -126,7 +126,7 @@ impl Relation {
 }
 
 impl Config {
-    pub const FIELDS: &'static [&'static str] = &["docs"];
+    pub const FIELDS: &'static [&'static str] = &["docs", "plugin_version"];
 }
 
 impl DocsConfig {
@@ -547,6 +547,14 @@ pub struct Config {
     /// "topology capability not configured").
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub docs: Option<DocsConfig>,
+    /// Plugin-version pin — semver-compatible string identifying the
+    /// plugin release this repo's substrate conforms to. Per spec
+    /// 2026-05-19-workflow-conformance ac-05. When `None`, conformance
+    /// audits the repo against the currently-installed plugin (the
+    /// orbit-state binary's `CARGO_PKG_VERSION` under the lockstep
+    /// release contract).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub plugin_version: Option<String>,
 }
 
 /// Documentation-surface inner config. Per spec
@@ -1137,6 +1145,7 @@ unknown_field: oops
             docs: Some(DocsConfig {
                 topology: Some("docs/topology.md".into()),
             }),
+            plugin_version: Some("0.4.20".into()),
         };
         let value = serde_yaml::to_value(&config).unwrap();
         let got = top_level_keys(&value);
@@ -1226,6 +1235,7 @@ unknown_inner: nope
             docs: Some(DocsConfig {
                 topology: Some("docs/topology.md".into()),
             }),
+            plugin_version: Some("0.4.20".into()),
         };
         let yaml = serde_yaml::to_string(&config).unwrap();
         let parsed: Config = serde_yaml::from_str(&yaml).unwrap();

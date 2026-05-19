@@ -251,6 +251,21 @@ fn card_tree_mcp_unknown_id_returns_error_envelope_with_is_error() {
 }
 
 #[test]
+fn audit_conformance_mcp_clean_envelope() {
+    let dir = tempfile::tempdir().unwrap();
+    common::populate_conformance_clean_fixture(dir.path());
+
+    let inner = run_mcp_tools_call(
+        dir.path(),
+        json!({ "name": "audit.conformance", "arguments": {} }),
+    );
+    let envelope = inner_envelope_text(&inner);
+
+    let expected = common::expected_envelope_for_audit_conformance_clean();
+    assert_eq!(envelope, expected, "MCP envelope diverged from canonical");
+}
+
+#[test]
 fn audit_drift_mcp_envelope_matches_canonical_envelope() {
     let dir = tempfile::tempdir().unwrap();
     common::populate_card_with_drift(dir.path());

@@ -229,6 +229,21 @@ Steps the verb performs:
 
 Topology scaffolding is independent of §6a-§6c (it neither reads nor writes CLAUDE.md / METHOD.md). It runs after them in the §6 sequence but can be invoked standalone via `orbit topology setup`.
 
+**6e. Workflow conformance audit — `orbit audit conformance`.** After setup completes, agents can ask whether the operator's repo is operating against the current plugin contract by invoking the **workflow conformance** verb:
+
+```
+orbit audit conformance --json
+```
+
+The verb returns a **structured findings envelope** ({severity, subsystem, subject, state, evidence, remediation} per finding) covering three v1 finding families plus aggregated `audit.drift` + `audit.topology` results:
+
+- **plugin-canonical-file drift** — `.orbit/METHOD.md` byte-compared against the canonical bytes embedded in the orbit-state binary; firing remediation = `orbit setup`.
+- **card-state** — cards at `maturity: planned` with empty specs (ready for design); firing remediation = `/orb:design <id>`.
+- **memo staleness** — memos undistilled > 7 days; firing remediation = `/orb:distill <memo-path>`.
+- **plugin-version pin** — per-repo pin in `.orbit/config.yaml` (`plugin_version: "0.4.20"`); `pin_behind` / `pin_ahead` each fire a single dominant finding and suppress per-file findings.
+
+Each finding carries an explicit **`remediation.verb`** the agent runs without translation. The verb is agent-first: zero-finding case is silent; the operator only sees output on agent escalation. Read-only — invoking it produces no on-disk changes. Per spec 2026-05-19-workflow-conformance.
+
 ### 7. First Card Tutorial
 
 Walk the author through writing their first feature card using `/orb:card`. Explain:

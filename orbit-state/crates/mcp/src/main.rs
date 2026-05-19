@@ -433,6 +433,15 @@ fn tool_descriptors() -> Vec<Value> {
             }
         }),
         json!({
+            "name": "audit.conformance",
+            "description": "Workflow-conformance audit (per spec 2026-05-19-workflow-conformance). Aggregates audit.drift + audit.topology results under `aggregated.{drift,topology}` and surfaces new finding families: card-state (planned + empty specs), memo staleness (>7d), plugin-canonical-file drift, plugin-version pin state. Each finding carries `remediation.verb` — the agent acts without translation. Read-only; returns zero findings on a clean repo.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {},
+                "additionalProperties": false
+            }
+        }),
+        json!({
             "name": "topology.setup",
             "description": "Scaffold .orbit/topology/ with self-describing seed entries (one per .orbit/ entity) and opportunistically strip legacy docs.topology from .orbit/config.yaml. Idempotent on re-runs. Per spec 2026-05-18-topology-substrate-migration ac-05.",
             "inputSchema": {

@@ -237,6 +237,23 @@ impl OrbitLayout {
     pub fn list_topology_files(&self) -> std::io::Result<Vec<PathBuf>> {
         list_yaml_files(&self.topology_dir())
     }
+
+    /// Return every `*.md` under `memos/`, sorted by path. Mirrors
+    /// `list_card_files` / `list_memory_files`. Returns an empty vec
+    /// when the directory is absent. Used by `audit.conformance`'s
+    /// memo-staleness finding (per spec
+    /// 2026-05-19-workflow-conformance ac-03).
+    pub fn list_memo_files(&self) -> std::io::Result<Vec<PathBuf>> {
+        list_md_files(&self.memos_dir())
+    }
+
+    /// Path to the repo root — the parent of the `.orbit/` substrate
+    /// dir. Some verbs (e.g. `audit.conformance`) need to compute
+    /// repo-relative paths for findings whose subject is operator-
+    /// surface (e.g. `.orbit/METHOD.md`).
+    pub fn repo_root(&self) -> &Path {
+        self.root.parent().unwrap_or(&self.root)
+    }
 }
 
 fn list_yaml_files(dir: &Path) -> std::io::Result<Vec<PathBuf>> {
@@ -260,6 +277,23 @@ fn list_yaml_files(dir: &Path) -> std::io::Result<Vec<PathBuf>> {
             .and_then(|s| s.to_str())
             .is_some_and(|s| s.contains('.'));
         if stem_has_dot {
+            continue;
+        }
+        out.push(path);
+    }
+    out.sort();
+    Ok(out)
+}
+
+fn list_md_files(dir: &Path) -> std::io::Result<Vec<PathBuf>> {
+    if !dir.exists() {
+        return Ok(vec![]);
+    }
+    let mut out = Vec::new();
+    for entry in std::fs::read_dir(dir)? {
+        let entry = entry?;
+        let path = entry.path();
+        if path.extension().and_then(|e| e.to_str()) != Some("md") {
             continue;
         }
         out.push(path);

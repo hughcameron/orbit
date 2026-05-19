@@ -244,6 +244,42 @@ pub fn expected_envelope_for_audit_drift_one_unknown() -> String {
     orbit_state_core::envelope_ok_string(&response).expect("infallible")
 }
 
+/// Populate `<root>/.orbit/` with only the canonical METHOD.md so
+/// `audit conformance` returns zero findings (parity baseline for
+/// the new verb). Per spec 2026-05-19-workflow-conformance ac-01.
+pub fn populate_conformance_clean_fixture(root: &Path) {
+    let orbit_dir = root.join(".orbit");
+    std::fs::create_dir_all(&orbit_dir).unwrap();
+    let canonical = include_str!("../../../../../plugins/orb/skills/setup/METHOD.md");
+    std::fs::write(orbit_dir.join("METHOD.md"), canonical).unwrap();
+}
+
+/// Expected canonical envelope for `audit conformance` against the
+/// conformance-clean fixture (per `populate_conformance_clean_fixture`):
+/// empty findings, drift clean, topology unconfigured, pin unpinned.
+pub fn expected_envelope_for_audit_conformance_clean() -> String {
+    use orbit_state_core::{
+        AggregatedAudits, AuditConformanceResult, AuditDriftResult, AuditTopologyResult, PinState,
+        VerbResponse,
+    };
+    let response = VerbResponse::AuditConformance(AuditConformanceResult {
+        findings: vec![],
+        aggregated: AggregatedAudits {
+            drift: AuditDriftResult { drift: vec![] },
+            topology: AuditTopologyResult {
+                configured: false,
+                topology_drift: vec![],
+            },
+        },
+        pin: PinState {
+            pinned: None,
+            current: env!("CARGO_PKG_VERSION").to_string(),
+            status: "unpinned".into(),
+        },
+    });
+    orbit_state_core::envelope_ok_string(&response).expect("infallible")
+}
+
 /// Expected canonical envelope for `graph` (mermaid, unscoped) against
 /// the two-related-cards fixture.
 pub fn expected_envelope_for_graph_mermaid_two_related_cards() -> String {

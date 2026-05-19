@@ -110,6 +110,8 @@ pub enum VerbRequest {
     AuditDrift(AuditDriftArgs),
     #[serde(rename = "audit.topology")]
     AuditTopology(AuditTopologyArgs),
+    #[serde(rename = "audit.conformance")]
+    AuditConformance(AuditConformanceArgs),
     #[serde(rename = "topology.setup")]
     TopologySetup(TopologySetupArgs),
     #[serde(rename = "choice.show")]
@@ -434,6 +436,14 @@ pub struct AuditDriftArgs {}
 #[serde(deny_unknown_fields)]
 pub struct AuditTopologyArgs {}
 
+/// Args for `audit.conformance` — aggregate workflow-conformance audit
+/// per spec 2026-05-19-workflow-conformance ac-01. No public fields in
+/// v1; test injection of a controllable `today` lands on the sibling
+/// private helper `audit_conformance_at(layout, today)`.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct AuditConformanceArgs {}
+
 /// Args for `topology.setup` — scaffolds the `.orbit/topology/`
 /// substrate folder and writes the self-describing seed entries, with
 /// opportunistic brownfield cleanup of any legacy `docs.topology`
@@ -644,6 +654,8 @@ pub enum VerbResponse {
     AuditDrift(AuditDriftResult),
     #[serde(rename = "audit.topology")]
     AuditTopology(AuditTopologyResult),
+    #[serde(rename = "audit.conformance")]
+    AuditConformance(AuditConformanceResult),
     #[serde(rename = "topology.setup")]
     TopologySetup(TopologySetupResult),
     #[serde(rename = "choice.show")]
@@ -908,6 +920,89 @@ pub struct AuditTopologyResult {
     /// Drift entries, one per detected issue. Empty when configured + clean
     /// AND when not configured.
     pub topology_drift: Vec<TopologyDriftEntry>,
+}
+
+/// Result for `audit.conformance` — workflow-conformance audit.
+/// Aggregates `audit.drift` + `audit.topology` results verbatim under
+/// `aggregated.{drift,topology}` and surfaces new finding families
+/// (plugin-canonical-file drift, card-state, memo staleness, pin
+/// state) under `findings`. Per spec 2026-05-19-workflow-conformance
+/// ac-01.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct AuditConformanceResult {
+    /// New finding families produced by this verb (NOT audit.drift /
+    /// audit.topology results — those live under `aggregated`).
+    pub findings: Vec<ConformanceFinding>,
+    /// Existing sub-verb results carried verbatim. Byte-equal contract:
+    /// the JSON for `aggregated.drift` is byte-identical to the
+    /// standalone `audit.drift --json` `data.result` payload; same for
+    /// `aggregated.topology`.
+    pub aggregated: AggregatedAudits,
+    /// Plugin-version pin state. Per ac-05.
+    pub pin: PinState,
+}
+
+/// Aggregated sub-verb audit results. Per ac-06.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct AggregatedAudits {
+    pub drift: AuditDriftResult,
+    pub topology: AuditTopologyResult,
+}
+
+/// A single workflow-conformance finding. Severity / state are
+/// slug-shaped strings (not enums) for forward-compatibility — future
+/// finding families add new state values without a schema break.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct ConformanceFinding {
+    /// Severity band: "high" | "medium" | "low".
+    pub severity: String,
+    /// Subsystem the finding belongs to: "cards" | "memos" | "setup".
+    pub subsystem: String,
+    /// Opaque subject identifier — typically a card id or a file path.
+    pub subject: String,
+    /// State slug describing the gap: "ready_for_design" | "stale" |
+    /// "byte_drift" | "missing" | "pin_behind" | "pin_ahead".
+    pub state: String,
+    /// Optional finding-family-specific structured context.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub evidence: Option<serde_yaml::Value>,
+    /// Next-action handle the agent can run without translation.
+    pub remediation: Remediation,
+}
+
+/// Remediation handle attached to every ConformanceFinding.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct Remediation {
+    /// The agent-runnable verb: "orbit setup", "/orb:design 39",
+    /// "/orb:distill .orbit/memos/...", etc.
+    pub verb: String,
+    /// Short rationale — why this remediation matches the finding.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rationale: Option<String>,
+}
+
+/// Plugin-version pin state. The "installed" version is the
+/// orbit-state binary's `CARGO_PKG_VERSION` at compile time
+/// (lockstep release with the plugin manifest version). The
+/// "pinned" version is read from `.orbit/config.yaml`'s
+/// `plugin_version` field. Per ac-05.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct PinState {
+    /// The `plugin_version` value from `.orbit/config.yaml`, or `None`
+    /// if the field is absent.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pinned: Option<String>,
+    /// The installed plugin version (orbit-state binary's
+    /// `CARGO_PKG_VERSION`).
+    pub current: String,
+    /// Derived state: "unpinned" | "matches" | "pin_behind" |
+    /// "pin_ahead".
+    pub status: String,
 }
 
 /// Result for `topology.setup`. Per spec
@@ -1185,6 +1280,9 @@ pub fn execute(layout: &OrbitLayout, request: &VerbRequest) -> Result<VerbRespon
         VerbRequest::TopologySetup(args) => topology_setup(layout, args).map(VerbResponse::TopologySetup),
         VerbRequest::AuditTopology(args) => {
             audit_topology(layout, args).map(VerbResponse::AuditTopology)
+        }
+        VerbRequest::AuditConformance(args) => {
+            audit_conformance(layout, args).map(VerbResponse::AuditConformance)
         }
         VerbRequest::ChoiceShow(args) => choice_show(layout, args).map(VerbResponse::ChoiceShow),
         VerbRequest::ChoiceList(args) => choice_list(layout, args).map(VerbResponse::ChoiceList),
@@ -3141,6 +3239,383 @@ fn audit_topology(
         configured: true,
         topology_drift: drift,
     })
+}
+
+// ============================================================================
+// audit.conformance — workflow-conformance audit
+//
+// Per spec 2026-05-19-workflow-conformance. Aggregates `audit.drift` and
+// `audit.topology` results verbatim under `aggregated.{drift,topology}` and
+// surfaces new finding families under `findings`:
+//
+// - ac-02: card-state — `maturity:planned` + empty specs
+// - ac-03: memo-staleness — filename-date >7 days before today
+// - ac-04: plugin-canonical-file drift — operator `.orbit/METHOD.md` vs
+//   the compile-time canonical bytes embedded via `include_str!`
+// - ac-05: plugin-version pin — `unpinned` | `matches` | `pin_behind` |
+//   `pin_ahead`; `pin_behind` and `pin_ahead` BOTH suppress ac-04 per-file
+//   findings (single-finding dominance).
+//
+// All findings carry `remediation.verb` — the agent acts without
+// translation.
+// ============================================================================
+
+/// Memo-staleness threshold in days. Memos older than this fire a
+/// finding under ac-03. Fixed at v1; no `.orbit/config.yaml` override.
+const MEMO_STALENESS_THRESHOLD_DAYS: i64 = 7;
+
+/// v1 plugin-canonical-file inventory — `(operator_relative_path,
+/// canonical_bytes)` pairs. The bytes are pulled at compile time via
+/// `include_str!`, which means they always match the orbit-state
+/// binary's `CARGO_PKG_VERSION` (lockstep release contract). The
+/// inventory is the set of files `/orb:setup` copies verbatim from the
+/// plugin into the operator's `.orbit/`. As of orbit 0.4.20, only
+/// METHOD.md qualifies. When future plugin releases add canonical
+/// files, extend this const; no spec change required.
+const CANONICAL_FILES: &[(&str, &str)] = &[(
+    ".orbit/METHOD.md",
+    include_str!("../../../../plugins/orb/skills/setup/METHOD.md"),
+)];
+
+/// Public verb entry — calls into the testable helper with today's
+/// local date. The helper takes `today` as a parameter so unit tests
+/// can drive memo-staleness deterministically.
+fn audit_conformance(
+    layout: &OrbitLayout,
+    args: &AuditConformanceArgs,
+) -> Result<AuditConformanceResult> {
+    let today = time::OffsetDateTime::now_local()
+        .map_err(|e| {
+            Error::malformed("audit.conformance", format!("local offset unavailable: {e}"))
+        })?
+        .date();
+    audit_conformance_at(layout, args, today)
+}
+
+/// Private testable helper. `today` is injected so unit tests can fix
+/// the date — see ac-03 verification.
+fn audit_conformance_at(
+    layout: &OrbitLayout,
+    _args: &AuditConformanceArgs,
+    today: time::Date,
+) -> Result<AuditConformanceResult> {
+    const VERB: &str = "audit.conformance";
+    let _ = VERB;
+    let _ = today;
+
+    let drift = audit_drift(layout, &AuditDriftArgs::default())?;
+    let topology = audit_topology(layout, &AuditTopologyArgs::default())?;
+    let pin = derive_pin_state(layout)?;
+
+    let mut findings: Vec<ConformanceFinding> = Vec::new();
+
+    // ac-05: pin_behind / pin_ahead each fire a SINGLE finding AND
+    // suppress per-file (ac-04) findings. Single-finding dominance:
+    // the pin issue is upstream of file drift.
+    let pin_dominates = matches!(pin.status.as_str(), "pin_behind" | "pin_ahead");
+    if pin_dominates {
+        findings.push(pin_finding(&pin));
+    }
+
+    // ac-02: card-state findings.
+    findings.extend(card_state_findings(layout)?);
+
+    // ac-03: memo-staleness findings.
+    findings.extend(memo_staleness_findings(layout, today)?);
+
+    // ac-04: plugin-canonical-file drift findings (suppressed when
+    // pin_dominates).
+    if !pin_dominates {
+        findings.extend(canonical_file_findings(layout)?);
+    }
+
+    Ok(AuditConformanceResult {
+        findings,
+        aggregated: AggregatedAudits { drift, topology },
+        pin,
+    })
+}
+
+/// ac-02: walk `.orbit/cards/*.yaml`; emit a finding for each card at
+/// `maturity:planned` with an empty specs array. Remediation:
+/// `/orb:design <numeric-id>`.
+fn card_state_findings(layout: &OrbitLayout) -> Result<Vec<ConformanceFinding>> {
+    const VERB: &str = "audit.conformance";
+    let mut findings = Vec::new();
+    let card_files = layout.list_card_files().unwrap_or_default();
+    for path in card_files {
+        let raw = match std::fs::read_to_string(&path) {
+            Ok(r) => r,
+            Err(_) => continue,
+        };
+        let card: crate::schema::Card = match serde_yaml::from_str(&raw) {
+            Ok(c) => c,
+            Err(_) => continue,
+        };
+        // Match the deserialised maturity. Card maturity is an enum;
+        // serde rename_all = snake_case → "planned" in the on-disk yaml.
+        let is_planned = matches!(card.maturity, crate::schema::CardMaturity::Planned);
+        if !is_planned || !card.specs.is_empty() {
+            continue;
+        }
+        // Card.id is Option<String> for backwards-compat — fall back to
+        // the filename slug if unset.
+        let card_id = card.id.clone().unwrap_or_else(|| {
+            path.file_stem()
+                .and_then(|s| s.to_str())
+                .unwrap_or("")
+                .to_string()
+        });
+        if card_id.is_empty() {
+            continue;
+        }
+        let numeric_id = numeric_id_from_card_id(&card_id);
+        let mut evidence = serde_yaml::Mapping::new();
+        evidence.insert(
+            serde_yaml::Value::String("maturity".into()),
+            serde_yaml::Value::String("planned".into()),
+        );
+        evidence.insert(
+            serde_yaml::Value::String("specs_count".into()),
+            serde_yaml::Value::Number(0i64.into()),
+        );
+        findings.push(ConformanceFinding {
+            severity: "medium".into(),
+            subsystem: "cards".into(),
+            subject: card_id,
+            state: "ready_for_design".into(),
+            evidence: Some(serde_yaml::Value::Mapping(evidence)),
+            remediation: Remediation {
+                verb: format!("/orb:design {numeric_id}"),
+                rationale: Some("card has scenarios but no design pass".into()),
+            },
+        });
+    }
+    let _ = VERB;
+    Ok(findings)
+}
+
+/// Extract the leading numeric id from a card slug like
+/// `0039-workflow-conformance` → `"39"` (drops leading zeros). When
+/// the slug has no leading digits, returns the slug verbatim.
+fn numeric_id_from_card_id(id: &str) -> String {
+    let digits: String = id.chars().take_while(|c| c.is_ascii_digit()).collect();
+    if digits.is_empty() {
+        return id.to_string();
+    }
+    let trimmed = digits.trim_start_matches('0');
+    if trimmed.is_empty() {
+        "0".to_string()
+    } else {
+        trimmed.to_string()
+    }
+}
+
+/// ac-03: walk `.orbit/memos/*.md`; emit a finding for each memo whose
+/// filename-date is more than `MEMO_STALENESS_THRESHOLD_DAYS` before
+/// today. Remediation: `/orb:distill <relative-path>`.
+fn memo_staleness_findings(
+    layout: &OrbitLayout,
+    today: time::Date,
+) -> Result<Vec<ConformanceFinding>> {
+    let mut findings = Vec::new();
+    let memo_files = layout.list_memo_files().unwrap_or_default();
+    for path in memo_files {
+        let filename = match path.file_name().and_then(|s| s.to_str()) {
+            Some(f) => f,
+            None => continue,
+        };
+        if filename.len() < 10 {
+            continue;
+        }
+        let date_str = &filename[..10];
+        let format = match time::format_description::parse("[year]-[month]-[day]") {
+            Ok(f) => f,
+            Err(_) => continue,
+        };
+        let memo_date = match time::Date::parse(date_str, &format) {
+            Ok(d) => d,
+            Err(_) => continue,
+        };
+        let days_old = (today - memo_date).whole_days();
+        if days_old <= MEMO_STALENESS_THRESHOLD_DAYS {
+            continue;
+        }
+        // Compute path relative to `.orbit/` for the subject/remediation.
+        let rel_subject = path
+            .strip_prefix(layout.repo_root())
+            .map(|p| p.to_string_lossy().into_owned())
+            .unwrap_or_else(|_| path.to_string_lossy().into_owned());
+        let mut evidence = serde_yaml::Mapping::new();
+        evidence.insert(
+            serde_yaml::Value::String("filename_date".into()),
+            serde_yaml::Value::String(date_str.to_string()),
+        );
+        evidence.insert(
+            serde_yaml::Value::String("days_old".into()),
+            serde_yaml::Value::Number(days_old.into()),
+        );
+        findings.push(ConformanceFinding {
+            severity: "medium".into(),
+            subsystem: "memos".into(),
+            subject: rel_subject.clone(),
+            state: "stale".into(),
+            evidence: Some(serde_yaml::Value::Mapping(evidence)),
+            remediation: Remediation {
+                verb: format!("/orb:distill {rel_subject}"),
+                rationale: Some("memo undistilled past 7-day threshold".into()),
+            },
+        });
+    }
+    Ok(findings)
+}
+
+/// ac-04: byte-compare each operator file in `CANONICAL_FILES`
+/// against the compile-time canonical bytes. Emit `byte_drift` for
+/// differing files and `missing` for absent files. Remediation:
+/// `orbit setup`.
+fn canonical_file_findings(layout: &OrbitLayout) -> Result<Vec<ConformanceFinding>> {
+    let mut findings = Vec::new();
+    let root = layout.repo_root();
+    for (rel, canonical) in CANONICAL_FILES {
+        let path = root.join(rel);
+        let exists = path.exists();
+        if !exists {
+            findings.push(ConformanceFinding {
+                severity: "medium".into(),
+                subsystem: "setup".into(),
+                subject: (*rel).to_string(),
+                state: "missing".into(),
+                evidence: None,
+                remediation: Remediation {
+                    verb: "orbit setup".into(),
+                    rationale: Some("re-run setup to overwrite with canonical".into()),
+                },
+            });
+            continue;
+        }
+        let operator = match std::fs::read_to_string(&path) {
+            Ok(b) => b,
+            Err(_) => continue,
+        };
+        if operator.as_bytes() == canonical.as_bytes() {
+            continue;
+        }
+        let mut evidence = serde_yaml::Mapping::new();
+        evidence.insert(
+            serde_yaml::Value::String("canonical_size".into()),
+            serde_yaml::Value::Number((canonical.len() as i64).into()),
+        );
+        evidence.insert(
+            serde_yaml::Value::String("operator_size".into()),
+            serde_yaml::Value::Number((operator.len() as i64).into()),
+        );
+        findings.push(ConformanceFinding {
+            severity: "medium".into(),
+            subsystem: "setup".into(),
+            subject: (*rel).to_string(),
+            state: "byte_drift".into(),
+            evidence: Some(serde_yaml::Value::Mapping(evidence)),
+            remediation: Remediation {
+                verb: "orbit setup".into(),
+                rationale: Some("re-run setup to overwrite with canonical".into()),
+            },
+        });
+    }
+    Ok(findings)
+}
+
+/// ac-05: derive PinState. The installed plugin version is read from
+/// the orbit-state binary's `CARGO_PKG_VERSION` (lockstep release
+/// contract with the plugin manifest version). The pinned version is
+/// read from `Config.plugin_version`.
+fn derive_pin_state(layout: &OrbitLayout) -> Result<PinState> {
+    let current = env!("CARGO_PKG_VERSION").to_string();
+    let pinned = read_pinned_version(layout);
+    let status = match pinned.as_deref() {
+        None => "unpinned",
+        Some(p) if p == current => "matches",
+        Some(p) => match compare_versions(p, &current) {
+            std::cmp::Ordering::Less => "pin_behind",
+            std::cmp::Ordering::Greater => "pin_ahead",
+            std::cmp::Ordering::Equal => "matches",
+        },
+    }
+    .to_string();
+    Ok(PinState {
+        pinned,
+        current,
+        status,
+    })
+}
+
+/// Read `Config.plugin_version` from `.orbit/config.yaml`. Returns
+/// `None` if the config file is absent OR the field is absent. Parse
+/// failures are also `None` — verify is the gate for malformed config.
+fn read_pinned_version(layout: &OrbitLayout) -> Option<String> {
+    let config_path = layout.config_file();
+    let raw = std::fs::read_to_string(&config_path).ok()?;
+    let config: crate::schema::Config = serde_yaml::from_str(&raw).ok()?;
+    config.plugin_version
+}
+
+/// Lexicographic semver-ish compare on dotted-numeric strings. Treats
+/// each dot-separated segment as a u64; non-numeric segments fall back
+/// to string compare. Adequate for `MAJOR.MINOR.PATCH` strings; not a
+/// full semver implementation.
+fn compare_versions(a: &str, b: &str) -> std::cmp::Ordering {
+    let a_parts: Vec<&str> = a.split('.').collect();
+    let b_parts: Vec<&str> = b.split('.').collect();
+    let len = a_parts.len().max(b_parts.len());
+    for i in 0..len {
+        let av = a_parts.get(i).copied().unwrap_or("0");
+        let bv = b_parts.get(i).copied().unwrap_or("0");
+        let ord = match (av.parse::<u64>(), bv.parse::<u64>()) {
+            (Ok(an), Ok(bn)) => an.cmp(&bn),
+            _ => av.cmp(bv),
+        };
+        if ord != std::cmp::Ordering::Equal {
+            return ord;
+        }
+    }
+    std::cmp::Ordering::Equal
+}
+
+/// Build the pin-state finding from a derived PinState. Only called
+/// when `pin.status` is `pin_behind` or `pin_ahead`.
+fn pin_finding(pin: &PinState) -> ConformanceFinding {
+    let (severity, rationale) = match pin.status.as_str() {
+        "pin_ahead" => (
+            "high",
+            "installed plugin is older than pinned version — install matching plugin or rewrite pin",
+        ),
+        _ => (
+            "medium",
+            "installed plugin is ahead of pinned version — bump or re-run setup",
+        ),
+    };
+    let mut evidence = serde_yaml::Mapping::new();
+    if let Some(p) = &pin.pinned {
+        evidence.insert(
+            serde_yaml::Value::String("pinned".into()),
+            serde_yaml::Value::String(p.clone()),
+        );
+    }
+    evidence.insert(
+        serde_yaml::Value::String("current".into()),
+        serde_yaml::Value::String(pin.current.clone()),
+    );
+    ConformanceFinding {
+        severity: severity.into(),
+        subsystem: "setup".into(),
+        subject: ".orbit/config.yaml".into(),
+        state: pin.status.clone(),
+        evidence: Some(serde_yaml::Value::Mapping(evidence)),
+        remediation: Remediation {
+            verb: "orbit setup --bump-pin".into(),
+            rationale: Some(rationale.into()),
+        },
+    }
 }
 
 /// `topology.setup` — scaffold the `.orbit/topology/` substrate folder
@@ -7782,5 +8257,419 @@ canonical_code:
         // Lock the canonical text via a const — tests grep for this to
         // confirm the implementation matches the documented contract.
         assert!(TOPOLOGY_NUDGE.contains("consider /orb:topology"));
+    }
+
+    // ----- audit.conformance tests (spec 2026-05-19-workflow-conformance) -----
+
+    fn fresh_conformance_layout() -> (tempfile::TempDir, OrbitLayout) {
+        let dir = tempfile::tempdir().unwrap();
+        let orbit_dir = dir.path().join(".orbit");
+        std::fs::create_dir_all(&orbit_dir).unwrap();
+        let layout = OrbitLayout::at_orbit_dir(&orbit_dir);
+        (dir, layout)
+    }
+
+    fn date(y: i32, m: u8, d: u8) -> time::Date {
+        time::Date::from_calendar_date(y, time::Month::try_from(m).unwrap(), d).unwrap()
+    }
+
+    fn write_card_v2(
+        layout: &OrbitLayout,
+        slug: &str,
+        maturity: crate::schema::CardMaturity,
+        specs: Vec<String>,
+    ) {
+        use crate::schema::{Card, Scenario};
+        let card = Card {
+            id: Some(slug.to_string()),
+            feature: "feature".into(),
+            as_a: Some("agent".into()),
+            i_want: Some("want".into()),
+            so_that: Some("because".into()),
+            goal: "goal".into(),
+            maturity,
+            scenarios: vec![Scenario {
+                name: "s1".into(),
+                given: "g".into(),
+                when: "w".into(),
+                then: "t".into(),
+                gate: true,
+            }],
+            specs,
+            relations: vec![],
+            references: vec![],
+            notes: vec![],
+        };
+        std::fs::create_dir_all(layout.cards_dir()).unwrap();
+        std::fs::write(layout.card_file(slug), serialise_yaml(&card).unwrap()).unwrap();
+    }
+
+    #[test]
+    fn conformance_finding_serde_round_trip() {
+        let finding = ConformanceFinding {
+            severity: "medium".into(),
+            subsystem: "memos".into(),
+            subject: ".orbit/memos/2026-01-01-foo.md".into(),
+            state: "stale".into(),
+            evidence: None,
+            remediation: Remediation {
+                verb: "/orb:distill .orbit/memos/2026-01-01-foo.md".into(),
+                rationale: Some("memo undistilled past 7-day threshold".into()),
+            },
+        };
+        let yaml = serde_yaml::to_string(&finding).unwrap();
+        let parsed: ConformanceFinding = serde_yaml::from_str(&yaml).unwrap();
+        assert_eq!(finding, parsed);
+    }
+
+    #[test]
+    fn conformance_finding_rejects_unknown_field() {
+        let yaml = r#"
+severity: medium
+subsystem: memos
+subject: foo
+state: stale
+remediation:
+  verb: bar
+unknown: surprise
+"#;
+        let result: std::result::Result<ConformanceFinding, _> = serde_yaml::from_str(yaml);
+        assert!(result.is_err());
+    }
+
+    fn write_canonical_method_md(layout: &OrbitLayout) {
+        let canonical = CANONICAL_FILES
+            .iter()
+            .find(|(p, _)| *p == ".orbit/METHOD.md")
+            .map(|(_, c)| *c)
+            .unwrap();
+        std::fs::write(layout.root.join("METHOD.md"), canonical).unwrap();
+    }
+
+    #[test]
+    fn conformance_clean_repo_zero_findings() {
+        let (_dir, layout) = fresh_conformance_layout();
+        write_canonical_method_md(&layout);
+        let result =
+            audit_conformance_at(&layout, &AuditConformanceArgs::default(), date(2026, 5, 19))
+                .unwrap();
+        assert!(result.findings.is_empty(), "expected zero findings, got {:?}", result.findings);
+        assert!(result.aggregated.drift.drift.is_empty());
+        assert!(!result.aggregated.topology.configured);
+        assert_eq!(result.pin.status, "unpinned");
+    }
+
+    #[test]
+    fn conformance_idempotent_two_invocations_byte_equal() {
+        let (_dir, layout) = fresh_conformance_layout();
+        write_canonical_method_md(&layout);
+        let r1 =
+            audit_conformance_at(&layout, &AuditConformanceArgs::default(), date(2026, 5, 19))
+                .unwrap();
+        let r2 =
+            audit_conformance_at(&layout, &AuditConformanceArgs::default(), date(2026, 5, 19))
+                .unwrap();
+        let j1 = serde_json::to_string(&r1).unwrap();
+        let j2 = serde_json::to_string(&r2).unwrap();
+        assert_eq!(j1, j2);
+    }
+
+    #[test]
+    fn conformance_card_state_fires_on_planned_empty_specs() {
+        let (_dir, layout) = fresh_conformance_layout();
+        write_card_v2(&layout, "0099-planned-empty", crate::schema::CardMaturity::Planned, vec![]);
+        let result =
+            audit_conformance_at(&layout, &AuditConformanceArgs::default(), date(2026, 5, 19))
+                .unwrap();
+        let card_findings: Vec<_> =
+            result.findings.iter().filter(|f| f.subsystem == "cards").collect();
+        assert_eq!(card_findings.len(), 1);
+        let f = card_findings[0];
+        assert_eq!(f.subject, "0099-planned-empty");
+        assert_eq!(f.state, "ready_for_design");
+        assert_eq!(f.severity, "medium");
+        assert_eq!(f.remediation.verb, "/orb:design 99");
+    }
+
+    #[test]
+    fn conformance_card_state_skips_planned_with_specs() {
+        let (_dir, layout) = fresh_conformance_layout();
+        write_card_v2(
+            &layout,
+            "0099-planned-non-empty",
+            crate::schema::CardMaturity::Planned,
+            vec![".orbit/specs/foo/spec.yaml".into()],
+        );
+        let result =
+            audit_conformance_at(&layout, &AuditConformanceArgs::default(), date(2026, 5, 19))
+                .unwrap();
+        assert!(result.findings.iter().all(|f| f.subsystem != "cards"));
+    }
+
+    #[test]
+    fn conformance_card_state_skips_emerging_maturity() {
+        let (_dir, layout) = fresh_conformance_layout();
+        write_card_v2(&layout, "0099-emerging", crate::schema::CardMaturity::Emerging, vec![]);
+        let result =
+            audit_conformance_at(&layout, &AuditConformanceArgs::default(), date(2026, 5, 19))
+                .unwrap();
+        assert!(result.findings.iter().all(|f| f.subsystem != "cards"));
+    }
+
+    #[test]
+    fn conformance_memo_stale_fires_at_eight_days() {
+        let (_dir, layout) = fresh_conformance_layout();
+        std::fs::create_dir_all(layout.memos_dir()).unwrap();
+        std::fs::write(
+            layout.memos_dir().join("2026-05-11-old.md"),
+            "stale memo body\n",
+        )
+        .unwrap();
+        // 2026-05-19 - 2026-05-11 = 8 days
+        let result =
+            audit_conformance_at(&layout, &AuditConformanceArgs::default(), date(2026, 5, 19))
+                .unwrap();
+        let memo_findings: Vec<_> =
+            result.findings.iter().filter(|f| f.subsystem == "memos").collect();
+        assert_eq!(memo_findings.len(), 1);
+        let f = memo_findings[0];
+        assert_eq!(f.state, "stale");
+        assert!(f.subject.ends_with("2026-05-11-old.md"));
+        assert!(f.remediation.verb.starts_with("/orb:distill "));
+    }
+
+    #[test]
+    fn conformance_memo_no_finding_at_seven_days_strict() {
+        let (_dir, layout) = fresh_conformance_layout();
+        std::fs::create_dir_all(layout.memos_dir()).unwrap();
+        std::fs::write(
+            layout.memos_dir().join("2026-05-12-recent.md"),
+            "memo body\n",
+        )
+        .unwrap();
+        // 2026-05-19 - 2026-05-12 = 7 days; strict > means no finding.
+        let result =
+            audit_conformance_at(&layout, &AuditConformanceArgs::default(), date(2026, 5, 19))
+                .unwrap();
+        assert!(result.findings.iter().all(|f| f.subsystem != "memos"));
+    }
+
+    #[test]
+    fn conformance_memo_no_finding_at_six_days() {
+        let (_dir, layout) = fresh_conformance_layout();
+        std::fs::create_dir_all(layout.memos_dir()).unwrap();
+        std::fs::write(
+            layout.memos_dir().join("2026-05-13-fresh.md"),
+            "memo body\n",
+        )
+        .unwrap();
+        let result =
+            audit_conformance_at(&layout, &AuditConformanceArgs::default(), date(2026, 5, 19))
+                .unwrap();
+        assert!(result.findings.iter().all(|f| f.subsystem != "memos"));
+    }
+
+    #[test]
+    fn conformance_memo_malformed_filename_no_panic() {
+        let (_dir, layout) = fresh_conformance_layout();
+        std::fs::create_dir_all(layout.memos_dir()).unwrap();
+        std::fs::write(layout.memos_dir().join("notes.md"), "body\n").unwrap();
+        std::fs::write(layout.memos_dir().join("2026-99-99-bad.md"), "body\n").unwrap();
+        let result =
+            audit_conformance_at(&layout, &AuditConformanceArgs::default(), date(2026, 5, 19))
+                .unwrap();
+        assert!(result.findings.iter().all(|f| f.subsystem != "memos"));
+    }
+
+    #[test]
+    fn conformance_byte_drift_fires_when_method_md_differs() {
+        let (_dir, layout) = fresh_conformance_layout();
+        std::fs::write(layout.root.join("METHOD.md"), "hand-edited\n").unwrap();
+        let result =
+            audit_conformance_at(&layout, &AuditConformanceArgs::default(), date(2026, 5, 19))
+                .unwrap();
+        let setup_findings: Vec<_> =
+            result.findings.iter().filter(|f| f.subsystem == "setup").collect();
+        assert_eq!(setup_findings.len(), 1);
+        assert_eq!(setup_findings[0].state, "byte_drift");
+        assert_eq!(setup_findings[0].subject, ".orbit/METHOD.md");
+        assert_eq!(setup_findings[0].remediation.verb, "orbit setup");
+    }
+
+    #[test]
+    fn conformance_byte_drift_silent_when_method_md_matches_canonical() {
+        let (_dir, layout) = fresh_conformance_layout();
+        let canonical = CANONICAL_FILES
+            .iter()
+            .find(|(p, _)| *p == ".orbit/METHOD.md")
+            .map(|(_, c)| *c)
+            .unwrap();
+        std::fs::write(layout.root.join("METHOD.md"), canonical).unwrap();
+        let result =
+            audit_conformance_at(&layout, &AuditConformanceArgs::default(), date(2026, 5, 19))
+                .unwrap();
+        assert!(result.findings.iter().all(|f| f.subsystem != "setup"));
+    }
+
+    #[test]
+    fn conformance_missing_fires_when_method_md_absent() {
+        let (_dir, layout) = fresh_conformance_layout();
+        let result =
+            audit_conformance_at(&layout, &AuditConformanceArgs::default(), date(2026, 5, 19))
+                .unwrap();
+        let setup_findings: Vec<_> =
+            result.findings.iter().filter(|f| f.subsystem == "setup").collect();
+        assert_eq!(setup_findings.len(), 1);
+        assert_eq!(setup_findings[0].state, "missing");
+        assert_eq!(setup_findings[0].subject, ".orbit/METHOD.md");
+    }
+
+    fn write_config_with_pin(layout: &OrbitLayout, pinned: &str) {
+        let yaml = format!("plugin_version: \"{pinned}\"\n");
+        std::fs::write(layout.config_file(), yaml).unwrap();
+    }
+
+    #[test]
+    fn conformance_pin_unpinned_when_field_absent() {
+        let (_dir, layout) = fresh_conformance_layout();
+        let result =
+            audit_conformance_at(&layout, &AuditConformanceArgs::default(), date(2026, 5, 19))
+                .unwrap();
+        assert_eq!(result.pin.status, "unpinned");
+        assert!(result.pin.pinned.is_none());
+        assert!(result.findings.iter().all(|f| f.state != "pin_behind" && f.state != "pin_ahead"));
+    }
+
+    #[test]
+    fn conformance_pin_matches_when_field_equals_current() {
+        let (_dir, layout) = fresh_conformance_layout();
+        write_config_with_pin(&layout, env!("CARGO_PKG_VERSION"));
+        let result =
+            audit_conformance_at(&layout, &AuditConformanceArgs::default(), date(2026, 5, 19))
+                .unwrap();
+        assert_eq!(result.pin.status, "matches");
+        assert!(result.findings.iter().all(|f| f.state != "pin_behind" && f.state != "pin_ahead"));
+    }
+
+    #[test]
+    fn conformance_pin_behind_fires_and_suppresses_byte_drift() {
+        let (_dir, layout) = fresh_conformance_layout();
+        write_config_with_pin(&layout, "0.0.1");
+        // Add a byte-drift fixture that WOULD fire under matches/unpinned.
+        std::fs::write(layout.root.join("METHOD.md"), "hand-edited\n").unwrap();
+        let result =
+            audit_conformance_at(&layout, &AuditConformanceArgs::default(), date(2026, 5, 19))
+                .unwrap();
+        assert_eq!(result.pin.status, "pin_behind");
+        let pin_findings: Vec<_> =
+            result.findings.iter().filter(|f| f.state == "pin_behind").collect();
+        assert_eq!(pin_findings.len(), 1);
+        assert_eq!(pin_findings[0].severity, "medium");
+        assert_eq!(pin_findings[0].remediation.verb, "orbit setup --bump-pin");
+        // ac-04 byte-drift findings are SUPPRESSED under pin_behind.
+        assert!(
+            result.findings.iter().all(|f| f.state != "byte_drift"),
+            "expected byte_drift suppression, got {:?}",
+            result.findings
+        );
+    }
+
+    #[test]
+    fn conformance_pin_ahead_fires_and_suppresses_byte_drift() {
+        let (_dir, layout) = fresh_conformance_layout();
+        write_config_with_pin(&layout, "99.99.99");
+        std::fs::write(layout.root.join("METHOD.md"), "hand-edited\n").unwrap();
+        let result =
+            audit_conformance_at(&layout, &AuditConformanceArgs::default(), date(2026, 5, 19))
+                .unwrap();
+        assert_eq!(result.pin.status, "pin_ahead");
+        let pin_findings: Vec<_> =
+            result.findings.iter().filter(|f| f.state == "pin_ahead").collect();
+        assert_eq!(pin_findings.len(), 1);
+        assert_eq!(pin_findings[0].severity, "high");
+        // ac-05 single-finding dominance: pin_ahead also suppresses byte_drift.
+        assert!(
+            result.findings.iter().all(|f| f.state != "byte_drift"),
+            "expected byte_drift suppression, got {:?}",
+            result.findings
+        );
+    }
+
+    #[test]
+    fn conformance_aggregated_drift_and_topology_present() {
+        let (_dir, layout) = fresh_conformance_layout();
+        write_canonical_method_md(&layout);
+        let result =
+            audit_conformance_at(&layout, &AuditConformanceArgs::default(), date(2026, 5, 19))
+                .unwrap();
+        // The aggregated fields are populated unconditionally — even on
+        // an empty fixture.
+        assert!(result.aggregated.drift.drift.is_empty());
+        assert!(!result.aggregated.topology.configured);
+        assert!(result.aggregated.topology.topology_drift.is_empty());
+    }
+
+    #[test]
+    fn conformance_aggregated_drift_byte_equal_to_standalone() {
+        // Build a fixture with one schema drift entry, invoke conformance
+        // and standalone audit_drift, assert byte-equal JSON for the
+        // aggregated.drift slice vs the standalone result.
+        let (dir, layout) = fresh_conformance_layout();
+        std::fs::create_dir_all(layout.cards_dir()).unwrap();
+        let card_with_unknown_field = "id: 0099-bad
+feature: test
+as_a: u
+i_want: i
+so_that: s
+goal: g
+maturity: planned
+scenarios:
+- name: s
+  given: g
+  when: w
+  then: t
+  gate: true
+specs: []
+relations: []
+references: []
+notes: []
+mystery_field: surprise
+";
+        std::fs::write(
+            layout.card_file("0099-bad"),
+            card_with_unknown_field,
+        )
+        .unwrap();
+        let standalone = audit_drift(&layout, &AuditDriftArgs::default()).unwrap();
+        let conformance =
+            audit_conformance_at(&layout, &AuditConformanceArgs::default(), date(2026, 5, 19))
+                .unwrap();
+        let j_standalone = serde_json::to_string(&standalone).unwrap();
+        let j_agg = serde_json::to_string(&conformance.aggregated.drift).unwrap();
+        assert_eq!(j_standalone, j_agg);
+        let _ = dir;
+    }
+
+    #[test]
+    fn numeric_id_from_card_id_strips_leading_zeros() {
+        assert_eq!(numeric_id_from_card_id("0039-workflow-conformance"), "39");
+        assert_eq!(numeric_id_from_card_id("0001-spec-foo"), "1");
+        assert_eq!(numeric_id_from_card_id("0010-foo"), "10");
+        assert_eq!(numeric_id_from_card_id("9999-foo"), "9999");
+    }
+
+    #[test]
+    fn audit_conformance_dispatched_through_execute() {
+        let (_dir, layout) = fresh_conformance_layout();
+        write_canonical_method_md(&layout);
+        let request = VerbRequest::AuditConformance(AuditConformanceArgs::default());
+        let response = execute(&layout, &request).unwrap();
+        match response {
+            VerbResponse::AuditConformance(result) => {
+                assert!(result.findings.is_empty());
+                assert_eq!(result.pin.status, "unpinned");
+            }
+            other => panic!("unexpected response: {other:?}"),
+        }
     }
 }
