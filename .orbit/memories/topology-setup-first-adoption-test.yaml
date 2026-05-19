@@ -1,0 +1,5 @@
+key: topology-setup-first-adoption-test
+body: 'First production adoption of `orbit topology setup` (0.4.20) against orbit''s own repo on 2026-05-19: PASSED first try, no fixes needed. Pre-state: empty .orbit/topology/ dir (existed but no entries), no .orbit/config.yaml (greenfield). First run wrote 5 seeds (cards/choices/memories/specs-substrate/topology) with dir_created=false (dir already existed empty), seeds_created.len()=5, config_cleaned=false. Re-run idempotent: dir_created=false, seeds_created=[], seeds_skipped=[5 entries] — operator-edit-preserving by design. orbit verify clean + orbit audit topology clean post-seed. Refinement to handover expectation: dir_created can be false on first run if the dir was created earlier by some other path (mkdir, prior partial work) — the verb treats empty pre-existing dir as functional greenfield and seeds anyway. The contract is ''seeds present when done'' not ''dir_created=true on first run''.'
+timestamp: 2026-05-18T22:47:06.321878505Z
+labels:
+- topology

@@ -1,0 +1,45 @@
+id: 1b6cd40e-bb3a-444b-95ec-59349c9d35b8
+started_at: 2026-05-18T22:47:29.398401578Z
+ended_at: 2026-05-18T22:47:29.398401578Z
+distillate: |-
+  ## TL;DR
+
+  Smoke test passed first try; orbit 0.4.20 `topology setup` verb is production-clean on real-repo contact. Recommend resuming card 0039 (setup-conformance-check) as the next concrete task, with a brief cluster-synthesis decision surfaced separately.
+
+  ## Recommendation
+
+  Resume `/orb:design` on card 0039 — its ac-04 canonical-surface check now has a natural hook to extend with `.orbit/topology/` directory presence, closing the loop the topology rethink derailed last session.
+
+  ## Why
+
+  - **0039 is warmest concrete work**: paused mid-design with a clean re-entry; topology-as-substrate gives ac-04 a new verification surface that didn't exist when 0039 was paused.
+  - **Cluster synthesis is a separate decision band**: opening a synthesis card before working code lands risks premature framing. The 5+ instances will still be there after 0039 ships.
+  - **No open specs, clean substrate, release shipped**: lowest-friction moment to start a fresh design pass.
+
+  ## Smoke test — what happened
+
+  | Field | Expected (handover) | Actual | Result |
+  |---|---|---|---|
+  | Seed entries | 5 | 5 (cards, choices, memories, specs-substrate, topology) | PASS |
+  | `dir_created` | true | **false** — empty `.orbit/topology/` pre-existed | refinement |
+  | `seeds_created.len()` | 5 | 5 | PASS |
+  | `config_cleaned` | false (no config) | false | PASS |
+  | Idempotent re-run | no changes | `seeds_skipped=[5 entries]`, no writes | PASS |
+  | Verify / audit | clean | both clean | PASS |
+
+  One refinement saved to memory: `dir_created=false` on first run is normal when the dir pre-exists empty. Contract is "seeds present when done," not "dir_created=true on first run."
+
+  ## Cluster-synthesis side-channel
+
+  Signal stands at 5+ instances (0025 / 0037 / 0038 / 0040 + autonomy-too-ready-to-halt + this session's first-adoption test reinforcing the "substrate engages back" pattern). Default: defer until 0039 ships, then re-look with one more data point. Override by saying "open synthesis card now."
+
+  ## Available on request
+
+  - Card 0039 current state (design notes, paused entry conditions)
+  - The four orphan cards' headline framings
+  - 2026-06-15 observation audit shape (already in memory)
+
+  ## Confidence
+
+  High on smoke-test verdict; medium on 0039-vs-synthesis ordering — assumption is that one more concrete instance strengthens the synthesis framing rather than weakening it.
+labels: []
