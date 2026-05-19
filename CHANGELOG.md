@@ -2,6 +2,15 @@
 
 All notable changes to orbit are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.4.22] - 2026-05-19
+
+Fixes the 0.4.21 cross-compile failure. The `audit.conformance` verb's `include_str!` of `plugins/orb/skills/setup/METHOD.md` reached outside `cross`'s docker mount during aarch64-linux builds. Vendored the canonical bytes into `orbit-state/crates/core/canonical/METHOD.md` and added a /orb:release pre-flight step to keep the vendored copy in sync with the plugin source. No behavioural changes vs the (un-released) 0.4.21 — same 8 ACs of spec `2026-05-19-workflow-conformance`.
+
+### Changed
+
+- `audit.conformance` reads canonical METHOD.md bytes from a vendored copy at `orbit-state/crates/core/canonical/METHOD.md` rather than the plugin source path. New unit test `conformance_vendored_method_md_matches_plugin` is the local drift detector.
+- /orb:release §1.5 adds the vendored-METHOD.md sync as a pre-flight step when substrate changed in the release window.
+
 ## [0.4.21] - 2026-05-19
 
 `orbit audit conformance` lands as the agent-on-demand workflow conformance audit. The verb aggregates the existing `audit.drift` + `audit.topology` results under `aggregated.{drift,topology}` and surfaces three new finding families — plugin-canonical-file drift (`.orbit/METHOD.md` byte-compare against compile-time canonical bytes), card-state (cards at `maturity:planned` with empty specs, ready for design), memo staleness (filename-date > 7 days) — alongside a plugin-version pin state derived from `.orbit/config.yaml`. Each finding carries an explicit `remediation.verb` the agent runs without translation (`orbit setup`, `/orb:design <id>`, `/orb:distill <path>`). Audience is agent-first: zero-finding case is silent; operator sees output only on agent escalation. Ships spec `2026-05-19-workflow-conformance` end-to-end (8/8 ACs, card 0039 maturity planned → emerging).

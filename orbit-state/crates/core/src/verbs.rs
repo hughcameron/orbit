@@ -3272,9 +3272,18 @@ const MEMO_STALENESS_THRESHOLD_DAYS: i64 = 7;
 /// plugin into the operator's `.orbit/`. As of orbit 0.4.20, only
 /// METHOD.md qualifies. When future plugin releases add canonical
 /// files, extend this const; no spec change required.
+// The canonical bytes are vendored into the crate at
+// `crates/core/canonical/METHOD.md` so `include_str!` works under
+// cross-compilation (cross's docker mount is limited to the workspace
+// dir and can't reach `../plugins/`). The vendored copy is kept in
+// sync with `plugins/orb/skills/setup/METHOD.md` as a /orb:release
+// pre-flight step — drift between the two is a release-discipline
+// concern, surfaced by `cargo test conformance_vendored_method_md_matches_plugin`
+// when both files are readable (local) and by /orb:release's pre-flight
+// when only one is (CI).
 const CANONICAL_FILES: &[(&str, &str)] = &[(
     ".orbit/METHOD.md",
-    include_str!("../../../../plugins/orb/skills/setup/METHOD.md"),
+    include_str!("../canonical/METHOD.md"),
 )];
 
 /// Public verb entry — calls into the testable helper with today's
@@ -8656,6 +8665,39 @@ mystery_field: surprise
         assert_eq!(numeric_id_from_card_id("0001-spec-foo"), "1");
         assert_eq!(numeric_id_from_card_id("0010-foo"), "10");
         assert_eq!(numeric_id_from_card_id("9999-foo"), "9999");
+    }
+
+    #[test]
+    fn conformance_vendored_method_md_matches_plugin() {
+        // The vendored `crates/core/canonical/METHOD.md` is the canonical
+        // bytes baked into the orbit-state binary; it must match the
+        // plugin's `plugins/orb/skills/setup/METHOD.md` (the source
+        // /orb:setup copies into operator repos). They drift only between
+        // a plugin edit and the next /orb:release pre-flight sync.
+        //
+        // The plugin path resolves locally but NOT under cross-build's
+        // restricted docker mount (the very reason we vendor in the
+        // first place). Read-and-compare; if the plugin path is
+        // unreadable, skip rather than fail — this test is a local
+        // drift detector, not a CI gate.
+        let manifest_dir = env!("CARGO_MANIFEST_DIR");
+        let plugin_path = std::path::PathBuf::from(manifest_dir)
+            .join("../../../plugins/orb/skills/setup/METHOD.md");
+        let plugin_bytes = match std::fs::read_to_string(&plugin_path) {
+            Ok(b) => b,
+            Err(_) => {
+                eprintln!(
+                    "skipping vendored-METHOD.md sync check: plugin path unreadable at {}",
+                    plugin_path.display()
+                );
+                return;
+            }
+        };
+        let vendored = include_str!("../canonical/METHOD.md");
+        assert_eq!(
+            vendored, plugin_bytes,
+            "vendored METHOD.md is out of sync with plugins/orb/skills/setup/METHOD.md — run `cp plugins/orb/skills/setup/METHOD.md orbit-state/crates/core/canonical/METHOD.md` before release",
+        );
     }
 
     #[test]

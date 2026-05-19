@@ -66,7 +66,15 @@ Run these checks from the orbit repo's working tree (the skill expects to be inv
 
    Stop. The release is a no-op until resolved.
 
-5. **Topology drift surface (non-blocking).** Run `orbit audit topology` (only when `.orbit/topology/` exists and is populated — the canonical predicate per choice 0025; the audit auto-detects this and exits cleanly with a "topology capability not configured" envelope when the directory is absent or empty).
+5. **Vendored canonical METHOD.md sync (blocking when substrate touched).** The `audit.conformance` verb embeds METHOD.md canonical bytes via `include_str!` from `orbit-state/crates/core/canonical/METHOD.md`. This file is a vendored copy of `plugins/orb/skills/setup/METHOD.md` (needed because `cross`'s docker mount can't reach the plugin tree during aarch64-linux cross-compilation). The two must match. If §1.4 detected substrate changes, sync the vendored copy before bumping:
+
+   ```bash
+   cp plugins/orb/skills/setup/METHOD.md orbit-state/crates/core/canonical/METHOD.md
+   ```
+
+   When the plugin's METHOD.md hasn't changed in this release window the copy is a no-op; when it has changed, this step keeps the embedded canonical bytes current. The unit test `conformance_vendored_method_md_matches_plugin` is the local drift detector; CI cross-compilation only sees the vendored copy.
+
+6. **Topology drift surface (non-blocking).** Run `orbit audit topology` (only when `.orbit/topology/` exists and is populated — the canonical predicate per choice 0025; the audit auto-detects this and exits cleanly with a "topology capability not configured" envelope when the directory is absent or empty).
 
    - **Envelope `topology_drift` empty or absent** → no-op.
    - **Envelope `topology_drift` has ≤ 10 entries** → surface the full list verbatim with a one-line framing: `topology drift surfaced — review before bumping`. Operator can proceed regardless (release is NOT gated by topology drift).
