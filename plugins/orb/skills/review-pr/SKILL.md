@@ -25,7 +25,19 @@ The skill takes an orbit-state spec id — the spec's `acceptance_criteria` are 
 
 ### 1. Identify What to Review
 
-- The spec-id is required via $ARGUMENTS. If not provided, report `no spec-id provided — review-pr requires a spec-id under the orbit-state substrate` and stop.
+- If a spec-id is supplied via $ARGUMENTS: use it.
+- If not: call `orbit --json spec resolve --skill review-pr` and apply the
+  three-step recovery from spec
+  `2026-05-19-skills-infer-or-prompt-before-halt`:
+  - **`outcome=resolved`** → use `data.result.id`; surface
+    `data.result.source` (`bound_card` / `single_open`) in the
+    response preamble so the reviewer sees which spec was picked.
+  - **`outcome=prompt`** → present `data.result.candidates[]` as a
+    single AskUserQuestion (one round trip). Each candidate carries
+    `id` + `goal_first_line` — use both in the choice label.
+  - **Verb exits non-zero with `spec.resolve: unavailable: ...`** →
+    surface the message verbatim. The verb owns the two canonical
+    halt templates (terminal and recoverable); do not paraphrase.
 - If a branch name or PR number is provided alongside the spec-id: use it.
 - If not: use the current branch or most recent PR.
 - Gather the diff: `git diff main...HEAD`.

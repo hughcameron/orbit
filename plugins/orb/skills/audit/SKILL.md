@@ -26,7 +26,25 @@ It also handles the reality that not every AC is testable code. Document deliver
 
 ### 1. Locate Specs
 
-If `$ARGUMENTS` provides a spec id, use it. Otherwise:
+If `$ARGUMENTS` provides a spec id, use it.
+
+If no argument is supplied **and the author's intent is "audit one
+spec"** (rather than "audit every spec"), call
+`orbit --json spec resolve --skill audit` and apply the canonical
+three-step recovery from spec
+`2026-05-19-skills-infer-or-prompt-before-halt`:
+
+- **`outcome=resolved`** → audit `data.result.id`; surface
+  `data.result.source` in the report's scope line.
+- **`outcome=prompt`** → present `data.result.candidates[]` as a
+  single AskUserQuestion. Each candidate carries `id` +
+  `goal_first_line`.
+- **Verb exits non-zero with `spec.resolve: unavailable: ...`** →
+  surface the message verbatim.
+
+If the author's intent is "audit everything" (the project-wide sweep
+that produces the multi-spec summary table below), bypass `spec
+resolve` and run:
 
 ```bash
 orbit --json spec list

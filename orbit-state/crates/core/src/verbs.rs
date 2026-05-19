@@ -64,6 +64,8 @@ pub enum VerbRequest {
     SpecList(SpecListArgs),
     #[serde(rename = "spec.show")]
     SpecShow(SpecShowArgs),
+    #[serde(rename = "spec.resolve")]
+    SpecResolve(SpecResolveArgs),
     #[serde(rename = "spec.note")]
     SpecNote(SpecNoteArgs),
     #[serde(rename = "spec.create")]
@@ -153,6 +155,51 @@ pub struct SpecListArgs {
 #[serde(deny_unknown_fields)]
 pub struct SpecShowArgs {
     pub id: String,
+}
+
+/// Args for `spec.resolve` — return the spec id a skill should act on when
+/// no explicit id was passed at invocation. Per spec
+/// 2026-05-19-skills-infer-or-prompt-before-halt and the rally
+/// "agent-side-substrate-engagement" decision pack: the resolver implements
+/// the three-step recovery (infer → prompt → halt) once in the substrate so
+/// every spec-id consumer skill (`/orb:implement`, `/orb:review-pr`,
+/// `/orb:review-spec`, `/orb:audit`, `/orb:drive`) emits the same behaviour.
+///
+/// Resolution order (per decision D2):
+///
+/// 1. **Infer from the bound card.** If `.orbit/.session-card` is bound to
+///    a card slug and that card has exactly one open spec, return
+///    `Resolved { id }`. (The optional `card` arg overrides
+///    `.session-card` — a skill can scope the resolution to a specific
+///    card without flipping the session binding.)
+/// 2. **Prompt with a menu.** If no card is bound, or the bound card has
+///    multiple open specs, return `Prompt { candidates }` where each
+///    candidate carries the spec id and a one-line goal label
+///    (`goal_first_line`) so the skill can present a self-describing
+///    AskUserQuestion.
+/// 3. **Halt.** If both fallbacks fail (no bound card AND no open specs,
+///    or the bound card exists but has no open specs), return
+///    `Error::unavailable` carrying one of the two canonical halt-message
+///    templates from decision D5.
+///
+/// Skills never expand the prose; they call this verb and either use the
+/// resolved id, present the prompt menu, or surface the `unavailable`
+/// error message verbatim.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct SpecResolveArgs {
+    /// Calling skill name, surfaced in halt-message templates so the
+    /// user sees which skill emitted the halt (e.g. `implement`,
+    /// `review-pr`). Optional; omitted when an inline caller doesn't
+    /// know its own name.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub skill: Option<String>,
+    /// Override the card binding. When set, the resolver scopes
+    /// inference to this card instead of reading `.session-card`. Slug
+    /// shape; resolved via the same `resolve_numeric_slug` path as
+    /// `card.show`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub card: Option<String>,
 }
 
 /// Args for `spec.create` — write a new spec file.
@@ -643,6 +690,8 @@ pub enum VerbResponse {
     SpecList(SpecListResult),
     #[serde(rename = "spec.show")]
     SpecShow(SpecShowResult),
+    #[serde(rename = "spec.resolve")]
+    SpecResolve(SpecResolveResult),
     #[serde(rename = "spec.note")]
     SpecNote(SpecNoteResult),
     #[serde(rename = "spec.create")]
@@ -729,6 +778,62 @@ pub struct SpecListResult {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct SpecShowResult {
     pub spec: Spec,
+}
+
+/// Result for `spec.resolve`. The two success branches map to D1's
+/// `{resolved: "<id>"}` and `{prompt_with: [...]}`; the halt branch is an
+/// `Error::unavailable` carrying the canonical D5 halt message and so does
+/// not appear here.
+///
+/// Wire shape is tagged on `outcome`: `{"outcome": "resolved", "id": "..."}`
+/// or `{"outcome": "prompt", "candidates": [...]}`. Skills branch on
+/// `outcome` and never expand the prose.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(tag = "outcome", rename_all = "snake_case")]
+pub enum SpecResolveResult {
+    /// Single open spec found via inference (the bound card's only open
+    /// spec, or the only open spec project-wide). Skills use this id
+    /// without prompting.
+    Resolved {
+        /// The resolved spec id (full slug, e.g.
+        /// `2026-05-19-skills-infer-or-prompt-before-halt`).
+        id: String,
+        /// Why this id was chosen — `bound_card` (single open spec
+        /// under `.orbit/.session-card`), `card_arg` (single open spec
+        /// under the explicit `--card` override), or `single_open`
+        /// (project-wide fallback). Skills surface this in their
+        /// "before doing other work" preamble so the user sees the
+        /// inference chain.
+        source: String,
+    },
+    /// Multiple open specs match; the skill must AskUserQuestion. Each
+    /// candidate carries the spec id and a one-line goal label so the
+    /// menu is self-describing without a second `spec.show` round-trip.
+    /// Per decision D4.
+    Prompt {
+        /// Open specs to present in the menu, sorted by id.
+        candidates: Vec<SpecResolveCandidate>,
+        /// Why the prompt fires — `unbound` (no `.session-card` and
+        /// multiple open specs project-wide), `bound_card_multi`
+        /// (`.session-card` bound to a card with multiple open specs),
+        /// or `card_arg_multi` (explicit `--card` with multiple opens).
+        /// Surfaces in the prompt preamble.
+        source: String,
+    },
+}
+
+/// A spec entry the resolver returns in the prompt branch. Per decision
+/// D4: spec id plus a one-line goal label is the high-leverage middle
+/// ground — bare ids are uninterpretable in a many-spec project, full
+/// goals are noisy in a menu.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct SpecResolveCandidate {
+    /// Full spec id (e.g. `2026-05-19-skills-infer-or-prompt-before-halt`).
+    pub id: String,
+    /// First newline-bounded line of the spec's `goal` field. Matches
+    /// the CLI's `first_line` helper. Empty goal yields an empty
+    /// string; the caller renders it verbatim into the menu label.
+    pub goal_first_line: String,
 }
 
 /// Result for `spec.note` — echoes the appended event so callers can confirm
@@ -1318,6 +1423,7 @@ pub fn execute(layout: &OrbitLayout, request: &VerbRequest) -> Result<VerbRespon
     match request {
         VerbRequest::SpecList(args) => spec_list(layout, args).map(VerbResponse::SpecList),
         VerbRequest::SpecShow(args) => spec_show(layout, args).map(VerbResponse::SpecShow),
+        VerbRequest::SpecResolve(args) => spec_resolve(layout, args).map(VerbResponse::SpecResolve),
         VerbRequest::SpecNote(args) => spec_note(layout, args).map(VerbResponse::SpecNote),
         VerbRequest::SpecCreate(args) => spec_create(layout, args).map(VerbResponse::SpecCreate),
         VerbRequest::SpecUpdate(args) => spec_update(layout, args).map(VerbResponse::SpecUpdate),
@@ -5034,6 +5140,202 @@ fn spec_show(layout: &OrbitLayout, args: &SpecShowArgs) -> Result<SpecShowResult
     Ok(SpecShowResult { spec })
 }
 
+/// `spec.resolve` — return the spec id a skill should act on when no
+/// explicit id was passed. Implements the three-step recovery (infer →
+/// prompt → halt) from spec
+/// `2026-05-19-skills-infer-or-prompt-before-halt`.
+///
+/// Resolution order:
+///
+/// 1. **Read the card binding.** If `args.card` is set, use it. Otherwise
+///    read `.orbit/.session-card`. The card slug — if any — narrows the
+///    open-spec pool to the specs that list this card in their
+///    `cards` array.
+/// 2. **Enumerate open specs.** If a card binding is in force, scope the
+///    list to specs where `Spec.cards` contains the resolved card slug.
+///    Otherwise list every open spec project-wide.
+/// 3. **Branch on count.**
+///    - **Exactly one** → `Resolved { id, source }`.
+///    - **Multiple** → `Prompt { candidates, source }`.
+///    - **Zero** → `Error::unavailable` with one of the two D5 halt-
+///      message templates: a card-narrowed halt names the bound card and
+///      tells the user how to create a spec under it; an unscoped halt
+///      names the lack of both fallbacks.
+///
+/// The skill prose owns the AskUserQuestion call — this verb only
+/// returns the menu data structurally. Per decision D1, the prose is
+/// fixed in the verb so all skills emit the same halt message.
+fn spec_resolve(layout: &OrbitLayout, args: &SpecResolveArgs) -> Result<SpecResolveResult> {
+    const VERB: &str = "spec.resolve";
+
+    let skill_label = args
+        .skill
+        .as_deref()
+        .map(|s| format!("/orb:{s}"))
+        .unwrap_or_else(|| "/orb:<skill>".to_string());
+
+    // Card binding: explicit `--card` arg beats `.session-card`. An empty
+    // string arg is treated as malformed so callers never accidentally
+    // request "the bound card and just kidding, no card" semantics.
+    if let Some(c) = args.card.as_deref() {
+        if c.is_empty() {
+            return Err(Error::malformed(VERB, "card must not be empty when provided"));
+        }
+        if c.contains('/') || c.contains('\\') || c.contains("..") {
+            return Err(Error::malformed(
+                VERB,
+                format!("card must not contain path separators or '..': '{c}'"),
+            ));
+        }
+    }
+
+    let bound_card_source = if args.card.is_some() {
+        Some(BoundCardSource::Arg)
+    } else {
+        match read_session_card(layout, VERB)? {
+            Some(_) => Some(BoundCardSource::Session),
+            None => None,
+        }
+    };
+
+    let bound_card_slug: Option<String> = match bound_card_source {
+        Some(BoundCardSource::Arg) => args.card.clone(),
+        Some(BoundCardSource::Session) => read_session_card(layout, VERB)?,
+        None => None,
+    };
+
+    // Resolve the card slug to its canonical form (matches card.show
+    // semantics: bare unpadded number, padded NNNN, or full slug all work).
+    let resolved_card: Option<String> = if let Some(slug) = bound_card_slug.as_deref() {
+        let cards_dir = layout.cards_dir();
+        match resolve_numeric_slug(VERB, &cards_dir, slug)? {
+            Some(canonical) => Some(canonical),
+            None => Some(slug.to_string()),
+        }
+    } else {
+        None
+    };
+
+    // Enumerate every open spec, optionally narrowed by the bound card.
+    let open_specs = enumerate_open_specs(layout, VERB)?;
+    let candidates: Vec<&OpenSpec> = match resolved_card.as_deref() {
+        Some(card_slug) => open_specs
+            .iter()
+            .filter(|s| s.cards.iter().any(|c| c == card_slug))
+            .collect(),
+        None => open_specs.iter().collect(),
+    };
+
+    match candidates.len() {
+        1 => {
+            let s = candidates[0];
+            let source = match bound_card_source {
+                Some(BoundCardSource::Arg) => "card_arg",
+                Some(BoundCardSource::Session) => "bound_card",
+                None => "single_open",
+            };
+            Ok(SpecResolveResult::Resolved {
+                id: s.id.clone(),
+                source: source.to_string(),
+            })
+        }
+        n if n >= 2 => {
+            let mut cands: Vec<SpecResolveCandidate> = candidates
+                .iter()
+                .map(|s| SpecResolveCandidate {
+                    id: s.id.clone(),
+                    goal_first_line: first_line(&s.goal).to_string(),
+                })
+                .collect();
+            cands.sort_by(|a, b| a.id.cmp(&b.id));
+            let source = match bound_card_source {
+                Some(BoundCardSource::Arg) => "card_arg_multi",
+                Some(BoundCardSource::Session) => "bound_card_multi",
+                None => "unbound",
+            };
+            Ok(SpecResolveResult::Prompt {
+                candidates: cands,
+                source: source.to_string(),
+            })
+        }
+        _ => {
+            // Zero candidates: emit one of the two canonical D5 halt
+            // templates as the `unavailable` message. Skills surface the
+            // string verbatim — never paraphrase or wrap with prose.
+            let message = match resolved_card.as_deref() {
+                Some(card_slug) => {
+                    // Recoverable: a card is bound but has no open specs.
+                    // The user can either create one under this card or
+                    // rebind to another.
+                    format!(
+                        "no open spec under the bound card {card_slug}. Create one with /orb:spec, or rebind with orbit session set-card <id>."
+                    )
+                }
+                None => {
+                    // Terminal: nothing bound AND no open specs.
+                    format!(
+                        "no spec to act on for {skill_label} — both fallbacks failed (.session-card is unbound and no open specs exist). Create one with /orb:spec."
+                    )
+                }
+            };
+            Err(Error::unavailable(VERB, message))
+        }
+    }
+}
+
+/// Tiny enum tracking where the card binding came from, so the resolver
+/// can label `Resolved.source` / `Prompt.source` precisely without
+/// re-reading the env later.
+enum BoundCardSource {
+    /// Explicit `--card` argument on the CLI.
+    Arg,
+    /// `.orbit/.session-card` file.
+    Session,
+}
+
+/// Minimal projection of an open spec — id, goal, cards. Built once by
+/// `enumerate_open_specs` so the resolver can filter and count without
+/// re-reading the file system.
+struct OpenSpec {
+    id: String,
+    goal: String,
+    cards: Vec<String>,
+}
+
+/// Walk `.orbit/specs/<id>/spec.yaml`, parse each, return the open ones.
+/// Shares parse semantics with `spec_list` but returns the leaner
+/// projection the resolver needs.
+fn enumerate_open_specs(layout: &OrbitLayout, verb: &str) -> Result<Vec<OpenSpec>> {
+    let files = layout
+        .list_spec_files()
+        .map_err(|e| Error::unavailable(verb, format!("list specs dir: {e}")))?;
+
+    let mut out = Vec::with_capacity(files.len());
+    for path in files {
+        let text = std::fs::read_to_string(&path).map_err(|e| {
+            Error::unavailable(verb, format!("read {}: {e}", path.display()))
+        })?;
+        let spec: Spec = parse_yaml(&text).map_err(|mut e| {
+            e.verb = verb.into();
+            e
+        })?;
+        if matches!(spec.status, SpecStatus::Open) {
+            out.push(OpenSpec {
+                id: spec.id,
+                goal: spec.goal,
+                cards: spec.cards,
+            });
+        }
+    }
+    Ok(out)
+}
+
+/// First newline-bounded line of a string. Empty input yields empty
+/// string. Mirrors the CLI's `first_line` helper at `cli/src/main.rs`.
+fn first_line(s: &str) -> &str {
+    s.lines().next().unwrap_or("")
+}
+
 // ============================================================================
 // Wire envelope
 // ============================================================================
@@ -5309,6 +5611,427 @@ mod tests {
                 "expected malformed for id={bad:?}, got {err}"
             );
         }
+    }
+
+    // ------------------------------------------------------------------------
+    // spec.resolve tests (spec 2026-05-19-skills-infer-or-prompt-before-halt)
+    // ------------------------------------------------------------------------
+    //
+    // The verb implements three-step recovery: infer (single open spec under
+    // a bound card → Resolved), prompt (multi-open → Prompt with candidates),
+    // halt (zero opens → Error::unavailable with one of two canonical
+    // D5 halt-message templates). These tests cover all three branches plus
+    // the boundary cases that drive the bound-card vs unbound paths.
+
+    fn write_spec_with_cards(
+        layout: &OrbitLayout,
+        id: &str,
+        goal: &str,
+        status: SpecStatus,
+        cards: Vec<String>,
+    ) {
+        let spec = Spec {
+            id: id.into(),
+            goal: goal.into(),
+            cards,
+            status,
+            labels: vec![],
+            acceptance_criteria: vec![],
+        };
+        layout.ensure_spec_dir(id).unwrap();
+        std::fs::write(layout.spec_file(id), serialise_yaml(&spec).unwrap()).unwrap();
+    }
+
+    fn write_card_for_resolve(layout: &OrbitLayout, slug: &str) {
+        // Lightweight card writer for resolve tests — the spec.resolve verb
+        // never reads card content beyond the resolve_numeric_slug pass that
+        // canonicalises the slug shape.
+        let card = crate::schema::Card {
+            id: Some(slug.to_string()),
+            feature: format!("feature-{slug}"),
+            as_a: None,
+            i_want: None,
+            so_that: None,
+            goal: "g".into(),
+            maturity: crate::schema::CardMaturity::Planned,
+            scenarios: vec![],
+            specs: vec![],
+            relations: vec![],
+            references: vec![],
+            notes: vec![],
+        };
+        let yaml = serialise_yaml(&card).unwrap();
+        std::fs::write(layout.card_file(slug), yaml).unwrap();
+    }
+
+    fn write_session_card(layout: &OrbitLayout, slug: &str) {
+        std::fs::write(layout.session_card_file(), format!("{slug}\n")).unwrap();
+    }
+
+    fn unwrap_resolve(resp: VerbResponse) -> SpecResolveResult {
+        match resp {
+            VerbResponse::SpecResolve(r) => r,
+            other => panic!("expected SpecResolve variant, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn spec_resolve_ac01_uses_bound_card_when_card_has_single_open_spec() {
+        // ac-01: skill uses the bound spec when no argument is supplied,
+        // surfacing which spec it picked. Resolved.source = "bound_card".
+        let dir = tempdir().unwrap();
+        let layout = OrbitLayout::at(dir.path());
+        layout.ensure_dirs().unwrap();
+        write_card_for_resolve(&layout, "0001-card-a");
+        write_card_for_resolve(&layout, "0002-card-b");
+        write_spec_with_cards(
+            &layout,
+            "2026-05-01-a",
+            "goal a",
+            SpecStatus::Open,
+            vec!["0001-card-a".into()],
+        );
+        write_spec_with_cards(
+            &layout,
+            "2026-05-02-b",
+            "goal b",
+            SpecStatus::Open,
+            vec!["0002-card-b".into()],
+        );
+        write_session_card(&layout, "0001-card-a");
+
+        let resp = execute(
+            &layout,
+            &VerbRequest::SpecResolve(SpecResolveArgs::default()),
+        )
+        .unwrap();
+
+        match unwrap_resolve(resp) {
+            SpecResolveResult::Resolved { id, source } => {
+                assert_eq!(id, "2026-05-01-a");
+                assert_eq!(source, "bound_card");
+            }
+            other => panic!("expected Resolved variant, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn spec_resolve_ac01_falls_back_to_single_open_when_unbound() {
+        // ac-01 boundary: no .session-card binding but a single open spec
+        // project-wide still resolves (Resolved.source = "single_open").
+        // This is the "argumentless `/orb:implement` on a one-spec project"
+        // shape.
+        let dir = tempdir().unwrap();
+        let layout = OrbitLayout::at(dir.path());
+        layout.ensure_dirs().unwrap();
+        write_spec_with_cards(
+            &layout,
+            "2026-05-01-only",
+            "lone goal",
+            SpecStatus::Open,
+            vec![],
+        );
+
+        let resp = execute(
+            &layout,
+            &VerbRequest::SpecResolve(SpecResolveArgs::default()),
+        )
+        .unwrap();
+
+        match unwrap_resolve(resp) {
+            SpecResolveResult::Resolved { id, source } => {
+                assert_eq!(id, "2026-05-01-only");
+                assert_eq!(source, "single_open");
+            }
+            other => panic!("expected Resolved variant, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn spec_resolve_ac02_prompts_when_unbound_and_multiple_open() {
+        // ac-02: skill prompts with a menu when nothing is bound. Verb
+        // returns Prompt { candidates, source: "unbound" } with each
+        // candidate carrying a goal_first_line so the skill's
+        // AskUserQuestion can be self-describing without a second
+        // spec.show.
+        let dir = tempdir().unwrap();
+        let layout = OrbitLayout::at(dir.path());
+        layout.ensure_dirs().unwrap();
+        write_spec_with_cards(
+            &layout,
+            "2026-05-01-a",
+            "first goal line\nsecond line should not appear",
+            SpecStatus::Open,
+            vec![],
+        );
+        write_spec_with_cards(
+            &layout,
+            "2026-05-02-b",
+            "second spec goal",
+            SpecStatus::Open,
+            vec![],
+        );
+
+        let resp = execute(
+            &layout,
+            &VerbRequest::SpecResolve(SpecResolveArgs::default()),
+        )
+        .unwrap();
+
+        match unwrap_resolve(resp) {
+            SpecResolveResult::Prompt { candidates, source } => {
+                assert_eq!(source, "unbound");
+                assert_eq!(candidates.len(), 2);
+                // Candidates are sorted by id (deterministic menu order).
+                assert_eq!(candidates[0].id, "2026-05-01-a");
+                assert_eq!(candidates[0].goal_first_line, "first goal line");
+                assert_eq!(candidates[1].id, "2026-05-02-b");
+                assert_eq!(candidates[1].goal_first_line, "second spec goal");
+            }
+            other => panic!("expected Prompt variant, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn spec_resolve_ac02_prompts_when_bound_card_has_multiple_open_specs() {
+        // ac-02 boundary: a bound card with multiple open specs prompts
+        // with a card-narrowed menu. Prompt.source = "bound_card_multi".
+        // Specs for other cards are not in the menu.
+        let dir = tempdir().unwrap();
+        let layout = OrbitLayout::at(dir.path());
+        layout.ensure_dirs().unwrap();
+        write_card_for_resolve(&layout, "0001-card-a");
+        write_card_for_resolve(&layout, "0002-card-b");
+        write_spec_with_cards(
+            &layout,
+            "2026-05-01-a1",
+            "card-a goal 1",
+            SpecStatus::Open,
+            vec!["0001-card-a".into()],
+        );
+        write_spec_with_cards(
+            &layout,
+            "2026-05-02-a2",
+            "card-a goal 2",
+            SpecStatus::Open,
+            vec!["0001-card-a".into()],
+        );
+        write_spec_with_cards(
+            &layout,
+            "2026-05-03-b1",
+            "card-b goal — must not appear",
+            SpecStatus::Open,
+            vec!["0002-card-b".into()],
+        );
+        write_session_card(&layout, "0001-card-a");
+
+        let resp = execute(
+            &layout,
+            &VerbRequest::SpecResolve(SpecResolveArgs::default()),
+        )
+        .unwrap();
+
+        match unwrap_resolve(resp) {
+            SpecResolveResult::Prompt { candidates, source } => {
+                assert_eq!(source, "bound_card_multi");
+                let ids: Vec<&str> = candidates.iter().map(|c| c.id.as_str()).collect();
+                assert_eq!(ids, vec!["2026-05-01-a1", "2026-05-02-a2"]);
+            }
+            other => panic!("expected Prompt variant, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn spec_resolve_ac03_halts_terminal_when_unbound_and_no_open_specs() {
+        // ac-03: both fallbacks fail. No .session-card, no open specs.
+        // The error message is the D5 terminal halt template verbatim
+        // and skills surface it without paraphrasing.
+        let dir = tempdir().unwrap();
+        let layout = OrbitLayout::at(dir.path());
+        layout.ensure_dirs().unwrap();
+        // No specs, no .session-card.
+
+        let err = execute(
+            &layout,
+            &VerbRequest::SpecResolve(SpecResolveArgs {
+                skill: Some("implement".into()),
+                card: None,
+            }),
+        )
+        .unwrap_err();
+
+        assert_eq!(err.category, Category::Unavailable);
+        assert_eq!(err.verb, "spec.resolve");
+        // D5 terminal template — byte-identical, named skill rendered as
+        // /orb:<skill>.
+        assert_eq!(
+            err.message,
+            "no spec to act on for /orb:implement — both fallbacks failed (.session-card is unbound and no open specs exist). Create one with /orb:spec."
+        );
+    }
+
+    #[test]
+    fn spec_resolve_ac03_halts_recoverable_when_bound_card_has_no_open_specs() {
+        // ac-03 boundary: .session-card bound to a card with no open
+        // specs. The D5 recoverable halt template fires; the message
+        // names the bound card and tells the user how to make progress
+        // (create a spec under it, or rebind).
+        let dir = tempdir().unwrap();
+        let layout = OrbitLayout::at(dir.path());
+        layout.ensure_dirs().unwrap();
+        write_card_for_resolve(&layout, "0001-card-a");
+        // A closed spec under card-a — does not count as open.
+        write_spec_with_cards(
+            &layout,
+            "2026-05-01-closed",
+            "closed",
+            SpecStatus::Closed,
+            vec!["0001-card-a".into()],
+        );
+        write_session_card(&layout, "0001-card-a");
+
+        let err = execute(
+            &layout,
+            &VerbRequest::SpecResolve(SpecResolveArgs {
+                skill: Some("review-spec".into()),
+                card: None,
+            }),
+        )
+        .unwrap_err();
+
+        assert_eq!(err.category, Category::Unavailable);
+        // D5 recoverable template — byte-identical, names the resolved
+        // bound card slug.
+        assert_eq!(
+            err.message,
+            "no open spec under the bound card 0001-card-a. Create one with /orb:spec, or rebind with orbit session set-card <id>."
+        );
+    }
+
+    #[test]
+    fn spec_resolve_card_arg_overrides_session_card() {
+        // The explicit `--card` arg beats `.session-card`. Resolved
+        // single-open spec under the arg-supplied card is labelled
+        // source = "card_arg" so the skill's "before doing other work"
+        // preamble can distinguish arg-scoped from session-scoped
+        // inference.
+        let dir = tempdir().unwrap();
+        let layout = OrbitLayout::at(dir.path());
+        layout.ensure_dirs().unwrap();
+        write_card_for_resolve(&layout, "0001-card-a");
+        write_card_for_resolve(&layout, "0002-card-b");
+        write_spec_with_cards(
+            &layout,
+            "2026-05-01-a",
+            "card-a spec",
+            SpecStatus::Open,
+            vec!["0001-card-a".into()],
+        );
+        write_spec_with_cards(
+            &layout,
+            "2026-05-02-b",
+            "card-b spec",
+            SpecStatus::Open,
+            vec!["0002-card-b".into()],
+        );
+        write_session_card(&layout, "0001-card-a");
+
+        let resp = execute(
+            &layout,
+            &VerbRequest::SpecResolve(SpecResolveArgs {
+                skill: None,
+                card: Some("0002-card-b".into()),
+            }),
+        )
+        .unwrap();
+
+        match unwrap_resolve(resp) {
+            SpecResolveResult::Resolved { id, source } => {
+                assert_eq!(id, "2026-05-02-b");
+                assert_eq!(source, "card_arg");
+            }
+            other => panic!("expected Resolved variant, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn spec_resolve_omits_skill_label_uses_placeholder() {
+        // Without `skill`, the halt template falls back to a
+        // placeholder so the message format stays consistent. Useful
+        // for ad-hoc inline invocation where the caller is a human
+        // running `orbit spec resolve` directly.
+        let dir = tempdir().unwrap();
+        let layout = OrbitLayout::at(dir.path());
+        layout.ensure_dirs().unwrap();
+
+        let err = execute(
+            &layout,
+            &VerbRequest::SpecResolve(SpecResolveArgs::default()),
+        )
+        .unwrap_err();
+
+        assert!(
+            err.message.contains("/orb:<skill>"),
+            "expected placeholder skill label, got {}",
+            err.message
+        );
+    }
+
+    #[test]
+    fn spec_resolve_rejects_path_traversal_in_card_arg() {
+        // Defence-in-depth: `--card ..` must not escape the cards dir.
+        let dir = tempdir().unwrap();
+        let layout = OrbitLayout::at(dir.path());
+        layout.ensure_dirs().unwrap();
+
+        for bad in ["../etc/passwd", "..", "0001/../..", "a/b", ""] {
+            let err = execute(
+                &layout,
+                &VerbRequest::SpecResolve(SpecResolveArgs {
+                    skill: None,
+                    card: Some(bad.into()),
+                }),
+            )
+            .unwrap_err();
+            assert_eq!(err.category, Category::Malformed, "for card={bad:?}");
+            assert_eq!(err.verb, "spec.resolve");
+        }
+    }
+
+    #[test]
+    fn spec_resolve_round_trips_through_json_wire() {
+        // MCP surface: the resolver's response must serialise through the
+        // standard envelope. This pins the wire shape so consumers
+        // (MCP clients, the rally lead, future SDK bindings) can rely
+        // on `outcome=resolved|prompt` as the tag.
+        let resp = VerbResponse::SpecResolve(SpecResolveResult::Resolved {
+            id: "2026-05-19-x".into(),
+            source: "bound_card".into(),
+        });
+        let s = envelope_ok_string(&resp).unwrap();
+        assert!(s.contains(r#""outcome":"resolved""#), "got {s}");
+        assert!(s.contains(r#""id":"2026-05-19-x""#), "got {s}");
+        assert!(s.contains(r#""source":"bound_card""#), "got {s}");
+    }
+
+    #[test]
+    fn spec_resolve_prompt_round_trips_through_json_wire() {
+        let resp = VerbResponse::SpecResolve(SpecResolveResult::Prompt {
+            source: "unbound".into(),
+            candidates: vec![
+                SpecResolveCandidate {
+                    id: "2026-05-01-a".into(),
+                    goal_first_line: "goal a".into(),
+                },
+                SpecResolveCandidate {
+                    id: "2026-05-02-b".into(),
+                    goal_first_line: "goal b".into(),
+                },
+            ],
+        });
+        let s = envelope_ok_string(&resp).unwrap();
+        assert!(s.contains(r#""outcome":"prompt""#), "got {s}");
+        assert!(s.contains(r#""goal_first_line":"goal a""#), "got {s}");
     }
 
     // ------------------------------------------------------------------------
