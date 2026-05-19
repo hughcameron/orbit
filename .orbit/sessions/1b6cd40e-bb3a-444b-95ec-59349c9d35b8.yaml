@@ -1,45 +1,53 @@
 id: 1b6cd40e-bb3a-444b-95ec-59349c9d35b8
 started_at: 2026-05-18T22:47:29.398401578Z
-ended_at: 2026-05-18T22:47:29.398401578Z
-distillate: |-
-  ## TL;DR
+ended_at: 2026-05-19T05:38:56.349962882Z
+distillate: |
+  Card 0039 (workflow-conformance) shipped end-to-end this session. orbit 0.4.22 released; /reload-plugins live; 391 workspace tests passing on main (was 365 at session start). Conformance verb is now available against this repo — its output IS the next-session backlog.
 
-  Smoke test passed first try; orbit 0.4.20 `topology setup` verb is production-clean on real-repo contact. Recommend resuming card 0039 (setup-conformance-check) as the next concrete task, with a brief cluster-synthesis decision surfaced separately.
+  Read first:
+    orbit session prime  # surfaces session-close-2026-05-19 + topology-2026-06-15 calendar
+    orbit audit conformance --json  # the current backlog signal
 
-  ## Recommendation
+  Priorities for next session, in order:
 
-  Resume `/orb:design` on card 0039 — its ac-04 canonical-surface check now has a natural hook to extend with `.orbit/topology/` directory presence, closing the loop the topology rethink derailed last session.
+  1. STALE MEMOS — DISTILL OR DELETE.
+     Three memos surface as stale (>7d):
+       - 2026-04-29-rally-cold-fork-degradation
+       - 2026-05-01-pilot-rollout-check-in
+       - 2026-05-08-cross-reference-integrity-gap
+     Cheapest move (5-15 min each via /orb:distill or delete-with-note). Cleans the conformance baseline so future drift stands out.
 
-  ## Why
+  2. CARD BACKLOG TRIAGE — 13 PLANNED + EMPTY.
+     Conformance surfaces 13 cards ready for /orb:design (0010, 0011, 0012, 0013, 0014, 0015, 0018, 0019, 0020, 0021, 0029, 0037, 0038). Do NOT design through them sequentially — TRIAGE first into (a) design-now (warmest 1-2), (b) parked-deliberately (annotate card.notes), (c) supersede/merge. The accumulation of 13 is itself worth reflecting on before designing any.
 
-  - **0039 is warmest concrete work**: paused mid-design with a clean re-entry; topology-as-substrate gives ac-04 a new verification surface that didn't exist when 0039 was paused.
-  - **Cluster synthesis is a separate decision band**: opening a synthesis card before working code lands risks premature framing. The 5+ instances will still be there after 0039 ships.
-  - **No open specs, clean substrate, release shipped**: lowest-friction moment to start a fresh design pass.
+  3. CLUSTER SYNTHESIS — 3RD DEFERRAL.
+     Substrate-engagement cluster (0025/0037/0038/0040 + autonomy-too-ready memo + this session's conformance-verb-as-substrate-engager) at 6+ instances. Worth a deliberate look — open a synthesis card or confirm "still watching, not yet" with one-line rationale.
 
-  ## Smoke test — what happened
+  4. v0.4.21 TAG ARTEFACT.
+     v0.4.21 tag exists on origin pointing at failed-CI build. No GitHub release published. Leave-as-is (default per CLAUDE.md destructive-action caution) or force-delete for hygiene. Hugh's call.
 
-  | Field | Expected (handover) | Actual | Result |
-  |---|---|---|---|
-  | Seed entries | 5 | 5 (cards, choices, memories, specs-substrate, topology) | PASS |
-  | `dir_created` | true | **false** — empty `.orbit/topology/` pre-existed | refinement |
-  | `seeds_created.len()` | 5 | 5 | PASS |
-  | `config_cleaned` | false (no config) | false | PASS |
-  | Idempotent re-run | no changes | `seeds_skipped=[5 entries]`, no writes | PASS |
-  | Verify / audit | clean | both clean | PASS |
+  5. --BUMP-PIN FOLLOW-ON SPEC.
+     review-pr LOW: orbit audit conformance's pin_behind remediation cites `orbit setup --bump-pin` which doesn't exist. /orb:setup §6e documents this as aspirational. Follow-on spec lands the flag — small scope, 1-2 ACs. Card 0017 or 0039 reads naturally.
 
-  One refinement saved to memory: `dir_created=false` on first run is normal when the dir pre-exists empty. Contract is "seeds present when done," not "dir_created=true on first run."
+  6. RTK HOOK POSTURE NOTE.
+     rtk denied both edits AND reads of ~/.claude/plugins/installed_plugins.json this session ("Self-Modification of agent plugin registry"). /plugin + /reload-plugins handled the install record. Worth a /orb:memo capturing that /orb:release §6 is effectively superseded by /plugin in the Claude Code era.
 
-  ## Cluster-synthesis side-channel
+  7. CALENDAR — 2026-06-15.
+     ac-05 of spec 2026-05-18-topology-substrate-wires (4-week topology observation audit) fires earliest on 2026-06-15. See memory topology-2026-06-15-observation-audit.
 
-  Signal stands at 5+ instances (0025 / 0037 / 0038 / 0040 + autonomy-too-ready-to-halt + this session's first-adoption test reinforcing the "substrate engages back" pattern). Default: defer until 0039 ships, then re-look with one more data point. Override by saying "open synthesis card now."
+  8. INTERNALISE FEEDBACK MEMORIES (UNCHANGED).
+     review-pr-medium-findings-default-policy, orb-release-parity-gate-first-substrate-bump, slash-command-args-vs-skill-tool-args — all held up cleanly this session.
 
-  ## Available on request
+  State at close:
+    - 0 open specs
+    - 391 workspace tests passing on main
+    - origin/main at v0.4.22 (release.yml run 26076164167 green)
+    - v0.4.21 tag = failed-CI artefact (left as-is)
+    - orbit binary on PATH at 0.4.22
+    - /reload-plugins live: 5 plugins · 6 agents · 1 hook
+    - .orbit/ substrate clean (orbit verify clean)
+    - .orbit/topology/ populated with 5 seed entries
+    - conformance baseline: 16 findings (13 cards + 3 memos)
 
-  - Card 0039 current state (design notes, paused entry conditions)
-  - The four orphan cards' headline framings
-  - 2026-06-15 observation audit shape (already in memory)
-
-  ## Confidence
-
-  High on smoke-test verdict; medium on 0039-vs-synthesis ordering — assumption is that one more concrete instance strengthens the synthesis framing rather than weakening it.
+  Session closed.
 labels: []
