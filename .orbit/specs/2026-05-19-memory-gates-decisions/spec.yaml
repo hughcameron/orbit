@@ -1,0 +1,31 @@
+id: 2026-05-19-memory-gates-decisions
+goal: zero "memory existed and was ignored" incidents — every memory matching active work is reconciled at the decision moment, whether or not a spec exists
+cards:
+- 0037-memory-gates-decisions
+status: open
+labels: []
+acceptance_criteria:
+- id: ac-01
+  description: Matching memories surface at design time — matching memories are surfaced into the interview before the agent commits to an approach
+  gate: true
+  checked: false
+- id: ac-02
+  description: Inline memory match during fluid work — matching memories are returned so the agent can reconcile them before typing the implementation
+  gate: true
+  checked: false
+- id: ac-03
+  description: Spec records which memories were considered — a memories_considered field lists each matching memory and how it was applied — adopted, partially adopted with reason, or NA with reason
+  gate: true
+  checked: false
+- id: ac-04
+  description: spec.close blocks on unreconciled memories — closure is refused — the spec must reconcile each matching memory before it can close
+  gate: true
+  checked: false
+- id: ac-05
+  description: Memory shape favours mechanism over state — the memory leads with what to do (a mechanism clause — "use X for Y"), not what is observed (a state clause — "Y is hard"), so future decision-moment surfacing has something actionable to gate on
+  gate: false
+  checked: false
+- id: ac-06
+  description: Skill-prompt-only enforcement is insufficient — the instruction loses to recency bias and sunk-cost momentum — enforcement must combine a callable surface (inline memory match) with structural gates (design-time surfacing, spec.close block), not behavioural reminders alone
+  gate: false
+  checked: false

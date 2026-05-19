@@ -1,0 +1,27 @@
+id: 2026-05-19-act-when-authorised
+goal: agents in mid-session autonomy halt only when at least one of {recommendation, evidence, authorisation} is genuinely missing; the three-question test fires at every halt-temptation moment as the inverse of "consult the substrate first"
+cards:
+- 0042-act-when-authorised
+status: open
+labels: []
+acceptance_criteria:
+- id: ac-01
+  description: Three-question test at halt-temptation — the agent first checks three questions — do I have a recommendation? do I have evidence to act on it? does the contract authorise me to proceed? three yeses → act, do not ask
+  gate: true
+  checked: false
+- id: ac-02
+  description: Severity is reviewer-language, not autonomy-language — severity informs how to address (priority, order) but not whether to address; REQUEST_CHANGES under guided autonomy is absorbed by the §1.6 cycle budget, not surfaced to the operator
+  gate: false
+  checked: false
+- id: ac-03
+  description: Decision Brief framing does not justify menu-presenting — the frame is for closing recommendations to the operator, not for in-flight decisions; the imperative single action is correct mid-autonomy
+  gate: false
+  checked: false
+- id: ac-04
+  description: Pre-commit halts have stage scope, not surface scope — the halt does not auto-widen — its scope is the stage it was registered against; conservative widening turns a stage gate into a surface gate
+  gate: false
+  checked: false
+- id: ac-05
+  description: Memory plus contract is sufficient authorisation — memory + contract is treated as load-bearing authorisation; halting against it constitutes ignoring the substrate the discipline was built on
+  gate: false
+  checked: false
