@@ -8,7 +8,7 @@ children:
 - card_path: .orbit/cards/0037-memory-gates-decisions.yaml
   spec_id: 2026-05-19-memory-gates-decisions
   branch: rally/memory-gates-decisions
-  card_phase: implementing
+  card_phase: complete
   dep_predecessors: []
   worktree: /home/hugh/github/meridian-online/orbit-rally-memory-gates-decisions
   rally_id: 2026-05-19-agent-side-substrate-engagement-rally
