@@ -61,10 +61,13 @@ If no orphans are found, move on silently.
 **Then load broader evidence:**
 
 1. Check `.orbit/memos/` for related memos
-2. If the card has `references`, read them — these may contain empirical results
-3. Search the codebase for experiments, sweeps, or benchmarks related to the card's topic
+2. **Surface matching memories** — run `orbit memory match <card-slug> --label <card-slug>` (or pass a richer topic phrase) before composing any questions. The verb returns ranked memories relevant to this decision moment — distinct from operator-keyword `memory search`. Anything that scores above the project-wide threshold (currently `0.3`) is a candidate constraint the spec will be asked to reconcile at close time. Per spec 2026-05-19-memory-gates-decisions ac-01.
+3. If the card has `references`, read them — these may contain empirical results
+4. Search the codebase for experiments, sweeps, or benchmarks related to the card's topic
 
 **Apply the evidence hierarchy** (see `/orb:interviewer`): findings with data are constraints, not questions. Only ask about areas where evidence is silent or contradictory.
+
+**The matching memories are not a checklist to dismiss.** Each one is either *adopted* (its mechanism shapes the spec), *partially adopted* (its mechanism shapes part of the spec, with the divergence named), or *not applicable* (the match was a false positive — the reason names why). Capture the disposition for each matching memory under **Implementation Notes** in the interview record; `/orb:spec` will lift them into the spec's `memories_considered` field, and `spec.close` will refuse closure until each one is reconciled. Skipping a memory at design time means the close-time gate will fire — better to address them now while the design space is fresh.
 
 ### 3. Assess the Design Space
 

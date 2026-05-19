@@ -60,6 +60,7 @@ impl Spec {
         "status",
         "labels",
         "acceptance_criteria",
+        "memories_considered",
     ];
 }
 
@@ -224,6 +225,15 @@ pub struct Spec {
     /// Acceptance criteria, in declaration order. Gate ACs block subsequent ones.
     #[serde(default)]
     pub acceptance_criteria: Vec<AcceptanceCriterion>,
+    /// Memories the spec author reconciled at design time. Each entry names
+    /// the memory key, the adoption disposition, and a short reason. Per
+    /// spec 2026-05-19-memory-gates-decisions ac-03 (D3a). Read by
+    /// `spec.close` to decide whether matching memories are unreconciled
+    /// (D4). `#[serde(default, skip_serializing_if = "Vec::is_empty")]`
+    /// keeps existing specs byte-identical on disk — the field only
+    /// materialises when memories were actually considered.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub memories_considered: Vec<MemoryReconciliation>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -231,6 +241,34 @@ pub struct Spec {
 pub enum SpecStatus {
     Open,
     Closed,
+}
+
+/// One reconciliation record on `Spec.memories_considered`. Stores which
+/// memory was reviewed at design time, the disposition (adopted, partially
+/// adopted, or not applicable), and a one-sentence reason. Per spec
+/// 2026-05-19-memory-gates-decisions ac-03 (D3a).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct MemoryReconciliation {
+    /// The memory key being reconciled (e.g. `"drive-autonomy-default-to-action"`).
+    pub key: String,
+    /// How the memory was applied.
+    pub disposition: ReconciliationDisposition,
+    /// One-sentence rationale — why the memory was adopted, partially
+    /// adopted, or considered not applicable.
+    pub reason: String,
+}
+
+/// Adoption status for one reconciled memory.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum ReconciliationDisposition {
+    /// The memory's mechanism is followed in this spec.
+    Adopted,
+    /// Part of the memory applies; the reason names the divergence.
+    PartiallyAdopted,
+    /// The memory matched but is not applicable to this spec's goal.
+    NotApplicable,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -759,6 +797,11 @@ unknown_field: oops
                 verification: Some("v".into()),
                 ac_type: AcType::Observation,
             }],
+            memories_considered: vec![MemoryReconciliation {
+                key: "k".into(),
+                disposition: ReconciliationDisposition::Adopted,
+                reason: "r".into(),
+            }],
         };
         let value = serde_yaml::to_value(&spec).unwrap();
         let got = top_level_keys(&value);
@@ -1056,6 +1099,7 @@ unknown_field: oops
                 verification: Some("v1".into()),
                 ac_type: AcType::Code,
             }],
+            memories_considered: vec![],
         };
         let yaml = serde_yaml::to_string(&spec).unwrap();
         let parsed: Spec = serde_yaml::from_str(&yaml).unwrap();

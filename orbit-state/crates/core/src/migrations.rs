@@ -21,7 +21,7 @@ use crate::layout::OrbitLayout;
 use crate::schema::{SchemaVersion, Spec};
 
 /// Current schema version shipped by this build.
-pub const CURRENT_SCHEMA_VERSION: &str = "0.4";
+pub const CURRENT_SCHEMA_VERSION: &str = "0.5";
 
 /// A single schema migration step.
 #[derive(Debug)]
@@ -56,6 +56,14 @@ pub struct Migration {
 /// so existing Session YAML files (which carry no `card_id` key) remain
 /// parseable without rewriting. The migration step only advances the
 /// recorded version; no files are touched.
+///
+/// 0.4 → 0.5 (spec 2026-05-19-memory-gates-decisions ac-03 / D3a):
+/// structural no-op. The change adds a `memories_considered:
+/// Vec<MemoryReconciliation>` field to `Spec` with
+/// `#[serde(default, skip_serializing_if = "Vec::is_empty")]`, so existing
+/// 0.4 spec.yaml files (which carry no `memories_considered` key) remain
+/// parseable and round-trip byte-identically. The migration step only
+/// advances the recorded version; no files are touched.
 pub fn registry() -> &'static [Migration] {
     &[
         Migration {
@@ -73,7 +81,21 @@ pub fn registry() -> &'static [Migration] {
             to: "0.4",
             apply: migrate_add_card_id_to_session,
         },
+        Migration {
+            from: "0.4",
+            to: "0.5",
+            apply: migrate_add_memories_considered_to_spec,
+        },
     ]
+}
+
+/// 0.4 → 0.5 migration: structural no-op. The new `Spec.memories_considered`
+/// field is `Vec<MemoryReconciliation>` with `#[serde(default,
+/// skip_serializing_if = "Vec::is_empty")]`, so existing on-disk spec.yaml
+/// files remain parseable under the new schema without rewriting. The
+/// runner advances the version after this returns Ok.
+fn migrate_add_memories_considered_to_spec(_layout: &OrbitLayout) -> Result<()> {
+    Ok(())
 }
 
 /// 0.3 → 0.4 migration: structural no-op. The new `Session.card_id` field
@@ -473,18 +495,21 @@ mod tests {
     }
 
     #[test]
-    fn registry_at_v0_4_has_three_entries() {
-        // spec 2026-05-16-session-handover ac-02: the registry now carries
-        // 0.1 → 0.2 (no-op), 0.2 → 0.3 (time_gated → ac_type), and
-        // 0.3 → 0.4 (additive Session.card_id no-op).
+    fn registry_at_v0_5_has_four_entries() {
+        // spec 2026-05-19-memory-gates-decisions ac-03: the registry now
+        // carries 0.1 → 0.2 (no-op), 0.2 → 0.3 (time_gated → ac_type),
+        // 0.3 → 0.4 (additive Session.card_id no-op), and 0.4 → 0.5
+        // (additive Spec.memories_considered no-op).
         let r = registry();
-        assert_eq!(r.len(), 3, "expected three migration entries at v0.4");
+        assert_eq!(r.len(), 4, "expected four migration entries at v0.5");
         assert_eq!(r[0].from, "0.1");
         assert_eq!(r[0].to, "0.2");
         assert_eq!(r[1].from, "0.2");
         assert_eq!(r[1].to, "0.3");
         assert_eq!(r[2].from, "0.3");
         assert_eq!(r[2].to, "0.4");
+        assert_eq!(r[3].from, "0.4");
+        assert_eq!(r[3].to, "0.5");
     }
 
     #[test]
@@ -513,8 +538,8 @@ mod tests {
         assert_eq!(report.from, "0.1");
         assert_eq!(report.to, CURRENT_SCHEMA_VERSION);
         assert_eq!(
-            report.applied, 3,
-            "expected 0.1 → 0.2, 0.2 → 0.3, and 0.3 → 0.4 steps"
+            report.applied, 4,
+            "expected 0.1 → 0.2, 0.2 → 0.3, 0.3 → 0.4, and 0.4 → 0.5 steps"
         );
         assert!(!report.skipped);
 
@@ -591,11 +616,12 @@ mod tests {
         write_atomic(&spec_path, legacy_yaml.as_bytes()).unwrap();
 
         let report = run(&layout, CURRENT_SCHEMA_VERSION).unwrap();
-        // Chain from 0.2 covers 0.2 → 0.3 (time_gated → ac_type) and
-        // 0.3 → 0.4 (Session.card_id additive no-op). Both apply.
+        // Chain from 0.2 covers 0.2 → 0.3 (time_gated → ac_type),
+        // 0.3 → 0.4 (Session.card_id additive no-op), and 0.4 → 0.5
+        // (Spec.memories_considered additive no-op).
         assert_eq!(
-            report.applied, 2,
-            "expected two steps (0.2 → 0.3 and 0.3 → 0.4)"
+            report.applied, 3,
+            "expected three steps (0.2 → 0.3, 0.3 → 0.4, and 0.4 → 0.5)"
         );
 
         let migrated = std::fs::read_to_string(&spec_path).unwrap();

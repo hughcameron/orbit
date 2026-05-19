@@ -92,6 +92,8 @@ pub enum VerbRequest {
     MemoryList(MemoryListArgs),
     #[serde(rename = "memory.search")]
     MemorySearch(MemorySearchArgs),
+    #[serde(rename = "memory.match")]
+    MemoryMatch(MemoryMatchArgs),
     #[serde(rename = "card.show")]
     CardShow(CardShowArgs),
     #[serde(rename = "card.list")]
@@ -315,6 +317,12 @@ pub struct MemoryRememberArgs {
     /// naming convention.
     #[serde(default)]
     pub no_nudge: bool,
+    /// Suppress the state-shape warning emitted when the body's first
+    /// sentence reads as a state observation rather than a mechanism
+    /// clause. Per spec 2026-05-19-memory-gates-decisions ac-05 (D5b).
+    /// Defaults to false; mirrors `--no-nudge`.
+    #[serde(default)]
+    pub no_warn: bool,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
@@ -326,6 +334,29 @@ pub struct MemoryListArgs {}
 #[serde(deny_unknown_fields)]
 pub struct MemorySearchArgs {
     pub query: String,
+}
+
+/// Args for `memory.match` — surface memories relevant to a decision moment.
+/// Ranked output, distinct semantic from operator-keyword `memory.search`.
+/// Per spec 2026-05-19-memory-gates-decisions ac-01/ac-02 (D1).
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct MemoryMatchArgs {
+    /// Free text describing the decision context — typically a card slug,
+    /// a spec goal, or a short snippet of the proposed approach.
+    pub topic: String,
+    /// Optional label-overlap hint — typically the card slugs the decision
+    /// belongs to or skill/topic labels. Weighted higher than body overlap
+    /// in the ranker.
+    #[serde(default)]
+    pub labels: Vec<String>,
+    /// Cap on returned matches. Defaults to 10.
+    #[serde(default = "default_match_limit")]
+    pub limit: usize,
+}
+
+fn default_match_limit() -> usize {
+    10
 }
 
 /// Args for `card.show`.
@@ -601,7 +632,11 @@ pub struct SpecNoteArgs {
 }
 
 /// Typed verb response. One variant per verb, mirroring [`VerbRequest`].
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+///
+/// Note: `Eq` is intentionally omitted because `MemoryMatchResult`
+/// carries `f32` scores (PartialEq only). `PartialEq` is sufficient for
+/// every existing call site (test assertions, envelope round-trip).
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "verb", content = "result")]
 pub enum VerbResponse {
     #[serde(rename = "spec.list")]
@@ -636,6 +671,8 @@ pub enum VerbResponse {
     MemoryList(MemoryListResult),
     #[serde(rename = "memory.search")]
     MemorySearch(MemoryListResult),
+    #[serde(rename = "memory.match")]
+    MemoryMatch(MemoryMatchResult),
     #[serde(rename = "card.show")]
     CardShow(CardShowResult),
     #[serde(rename = "card.list")]
@@ -736,6 +773,12 @@ pub struct SpecCloseResult {
     pub forced_unchecked: Vec<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub deferrable_open: Vec<String>,
+    /// Memory keys whose reconciliation was bypassed via `--force` at the
+    /// close-time memory-match gate. Empty (and `skip_serializing_if`-
+    /// omitted) when no bypass occurred. Per spec
+    /// 2026-05-19-memory-gates-decisions ac-04 (D4).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub forced_unreconciled: Vec<String>,
     /// Topology drift entries for subsystems the closing spec text touched.
     /// Word-boundary match (regex `\b<regex::escape(subsystem)>\b`,
     /// case-insensitive) of subsystem names ≥ 5 characters against the
@@ -757,11 +800,35 @@ pub struct MemoryRememberResult {
     /// 2026-05-18-topology-substrate-wires ac-04.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub nudge: Option<String>,
+    /// Advisory warning populated when the stored memory's body leads
+    /// with a state observation rather than a mechanism clause and the
+    /// caller did not pass `--no-warn`. Non-blocking — the memory is
+    /// stored as written. Per spec 2026-05-19-memory-gates-decisions
+    /// ac-05 (D5b).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub shape_warning: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct MemoryListResult {
     pub memories: Vec<Memory>,
+}
+
+/// Result for `memory.match` — ranked matches above a relevance threshold.
+/// Per spec 2026-05-19-memory-gates-decisions ac-01/ac-02 (D1).
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct MemoryMatchResult {
+    pub matches: Vec<MemoryMatch>,
+}
+
+/// One ranked match returned by `memory.match`. The score is normalised
+/// (0.0..=1.0) and `reason` is a short phrase explaining the overlap
+/// (e.g. `"label overlap on 'drive'"`).
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct MemoryMatch {
+    pub memory: Memory,
+    pub score: f32,
+    pub reason: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -1269,6 +1336,9 @@ pub fn execute(layout: &OrbitLayout, request: &VerbRequest) -> Result<VerbRespon
         VerbRequest::MemorySearch(args) => {
             memory_search(layout, args).map(VerbResponse::MemorySearch)
         }
+        VerbRequest::MemoryMatch(args) => {
+            memory_match(layout, args).map(VerbResponse::MemoryMatch)
+        }
         VerbRequest::CardShow(args) => card_show(layout, args).map(VerbResponse::CardShow),
         VerbRequest::CardList(args) => card_list(layout, args).map(VerbResponse::CardList),
         VerbRequest::CardSearch(args) => card_search(layout, args).map(VerbResponse::CardSearch),
@@ -1477,6 +1547,7 @@ fn spec_create(layout: &OrbitLayout, args: &SpecCreateArgs) -> Result<SpecCreate
         status: SpecStatus::Open,
         labels: args.labels.clone(),
         acceptance_criteria: args.acceptance_criteria.clone(),
+        memories_considered: Vec::new(),
     };
     let yaml = serialise_yaml(&spec).map_err(|mut e| {
         e.verb = VERB.into();
@@ -1646,6 +1717,54 @@ fn spec_close(layout: &OrbitLayout, args: &SpecCloseArgs) -> Result<SpecCloseRes
         Vec::new()
     };
 
+    // Memory-reconciliation gate (spec 2026-05-19-memory-gates-decisions
+    // ac-04, D4). Match memories against `spec.goal + spec.cards` via the
+    // same primitive as `memory.match`, filter to score >= MEMORY_MATCH_THRESHOLD,
+    // and refuse closure when any matching memory key is absent from
+    // `spec.memories_considered`. `--force` bypasses; bypassed keys land
+    // in `forced_unreconciled` on the response.
+    let memory_matches = memory_match(
+        layout,
+        &MemoryMatchArgs {
+            topic: spec.goal.clone(),
+            labels: spec.cards.clone(),
+            limit: usize::MAX,
+        },
+    )
+    .map_err(|mut e| {
+        e.verb = VERB.into();
+        e
+    })?;
+    let reconciled_keys: BTreeSet<&str> = spec
+        .memories_considered
+        .iter()
+        .map(|r| r.key.as_str())
+        .collect();
+    let unreconciled: Vec<String> = memory_matches
+        .matches
+        .iter()
+        .filter(|m| m.score >= MEMORY_MATCH_THRESHOLD)
+        .filter(|m| !reconciled_keys.contains(m.memory.key.as_str()))
+        .map(|m| m.memory.key.clone())
+        .collect();
+    if !unreconciled.is_empty() && !args.force {
+        return Err(Error::conflict(
+            VERB,
+            format!(
+                "{} unreconciled memor{} matching spec '{}': {} — reconcile via spec.memories_considered or pass --force",
+                unreconciled.len(),
+                if unreconciled.len() == 1 { "y" } else { "ies" },
+                spec.id,
+                unreconciled.join(", "),
+            ),
+        ));
+    }
+    let forced_unreconciled: Vec<String> = if args.force && !unreconciled.is_empty() {
+        unreconciled
+    } else {
+        Vec::new()
+    };
+
     // Per ac-06: spec.close requires every child task to be in state `done`.
     // Read the task stream once; reduce per task; reject if any non-done.
     let task_events = read_task_events(layout, &spec.id).map_err(|mut e| {
@@ -1780,6 +1899,7 @@ fn spec_close(layout: &OrbitLayout, args: &SpecCloseArgs) -> Result<SpecCloseRes
         cards_updated,
         forced_unchecked,
         deferrable_open,
+        forced_unreconciled,
         topology_warnings,
     })
 }
@@ -2362,6 +2482,86 @@ fn stamp_or(verb: &str, supplied: &Option<String>) -> Result<String> {
 /// 2026-05-18-topology-substrate-wires ac-04.
 pub const TOPOLOGY_NUDGE: &str = "consider /orb:topology — labelled memories often correspond to subsystems that should be added or updated in the topology doc";
 
+/// Canonical state-shape warning text — emitted on the
+/// `MemoryRememberResult.shape_warning` field when the stored memory's
+/// body leads with a state observation rather than a mechanism clause
+/// and `--no-warn` is not set. Per spec
+/// 2026-05-19-memory-gates-decisions ac-05 (D5b).
+pub const MEMORY_SHAPE_WARNING: &str = "memory body leads with state ('X is …'); decision-moment surfacing works better when the body leads with mechanism ('use X for Y', 'prefer X when Y'). Consider rephrasing — the memory is stored as written.";
+
+/// Threshold below which a `memory.match` result is not considered
+/// "matching" for the close-time reconciliation gate. Tunable in one
+/// place; substrate-wide policy, not per-spec. Per spec
+/// 2026-05-19-memory-gates-decisions ac-04 (D4).
+pub const MEMORY_MATCH_THRESHOLD: f32 = 0.3;
+
+/// Detect a state-shape opening on the body's first sentence — leading
+/// state-verb patterns that decision-moment surfacing can't act on.
+/// Returns true when the body opens with a state observation
+/// ("X is …", "the problem is …", "Y proved difficult"), false
+/// otherwise. Case-insensitive on the leading token; only scans the
+/// first sentence so longer bodies with mechanism in the second clause
+/// avoid the warning when the first clause is already mechanism-shaped.
+///
+/// Conservative by design — false positives are the failure mode the
+/// D5b decision specifically rejected (vs D5a's strict block). The
+/// heuristic only fires on patterns that lead a sentence with a
+/// state-verb form. Per spec 2026-05-19-memory-gates-decisions ac-05
+/// (D5b).
+fn detect_state_shape(body: &str) -> bool {
+    // Take the first sentence — split on '.', '!', or '\n'.
+    let first = body
+        .split(|c: char| c == '.' || c == '!' || c == '\n')
+        .next()
+        .unwrap_or("")
+        .trim();
+    if first.is_empty() {
+        return false;
+    }
+    let lower = first.to_lowercase();
+    // Phrase-shape patterns. Each matches a leading clause that frames
+    // a state observation. The list is intentionally short — every
+    // entry is a documented anti-pattern from the spec's D5 discussion.
+    const PHRASE_STARTS: &[&str] = &[
+        "the problem is ",
+        "the issue is ",
+        "the trick is ",
+        "the catch is ",
+    ];
+    for p in PHRASE_STARTS {
+        if lower.starts_with(p) {
+            return true;
+        }
+    }
+    // "X proved <adjective>" / "X turned out <adjective>".
+    if lower.contains(" proved ") || lower.contains(" turned out ") {
+        return true;
+    }
+    // "X is hard / brittle / fragile / slow / difficult / tricky / painful / annoying"
+    // — state-verb + negative-quality adjective. Restricted to a small
+    // adjective set so legitimate mechanism phrasings like
+    // "FineType is uv-based" do NOT fire.
+    const NEGATIVE_QUALITY_ADJS: &[&str] = &[
+        " is hard",
+        " is brittle",
+        " is fragile",
+        " is slow",
+        " is difficult",
+        " is tricky",
+        " is painful",
+        " is annoying",
+        " is flaky",
+        " is broken",
+        " is messy",
+    ];
+    for a in NEGATIVE_QUALITY_ADJS {
+        if lower.contains(a) {
+            return true;
+        }
+    }
+    false
+}
+
 fn memory_remember(layout: &OrbitLayout, args: &MemoryRememberArgs) -> Result<MemoryRememberResult> {
     const VERB: &str = "memory.remember";
     validate_memory_key(VERB, &args.key)?;
@@ -2404,7 +2604,22 @@ fn memory_remember(layout: &OrbitLayout, args: &MemoryRememberArgs) -> Result<Me
         None
     };
 
-    Ok(MemoryRememberResult { memory, nudge })
+    // State-shape warning (spec 2026-05-19-memory-gates-decisions ac-05,
+    // D5b). Fires when the body's first sentence reads as a state
+    // observation rather than a mechanism clause AND the caller did not
+    // pass `--no-warn`. Non-blocking — the memory has already stored.
+    // Mirrors the topology-nudge pattern.
+    let shape_warning = if !args.no_warn && detect_state_shape(&args.body) {
+        Some(MEMORY_SHAPE_WARNING.to_string())
+    } else {
+        None
+    };
+
+    Ok(MemoryRememberResult {
+        memory,
+        nudge,
+        shape_warning,
+    })
 }
 
 fn memory_list(layout: &OrbitLayout, _args: &MemoryListArgs) -> Result<MemoryListResult> {
@@ -2429,6 +2644,118 @@ fn memory_search(layout: &OrbitLayout, args: &MemorySearchArgs) -> Result<Memory
         })
         .collect();
     Ok(MemoryListResult { memories: matched })
+}
+
+/// `memory.match` — rank memories by relevance to a decision-moment topic.
+///
+/// Distinct semantic from `memory.search` (operator-keyword substring): the
+/// caller passes a `topic` (free text — a card slug, spec goal, or
+/// approach snippet) and optional `labels`; the v1 ranker scores each
+/// memory by `token-overlap(body) + 2 * label-overlap(labels)`, normalised
+/// to 0.0..=1.0. Results are sorted by score descending and truncated to
+/// `limit` (default 10).
+///
+/// Per spec 2026-05-19-memory-gates-decisions ac-01/ac-02 (D1). Read by
+/// `spec.close` to compute the close-time reconciliation gate (D4).
+fn memory_match(layout: &OrbitLayout, args: &MemoryMatchArgs) -> Result<MemoryMatchResult> {
+    const VERB: &str = "memory.match";
+    if args.topic.is_empty() && args.labels.is_empty() {
+        return Err(Error::malformed(
+            VERB,
+            "at least one of topic or labels must be non-empty",
+        ));
+    }
+    let all = read_all_memories(layout, VERB)?;
+    let topic_tokens = tokenise(&args.topic);
+    let label_set: BTreeSet<String> = args
+        .labels
+        .iter()
+        .map(|l| l.to_lowercase())
+        .collect();
+
+    let mut scored: Vec<MemoryMatch> = Vec::new();
+    for m in all {
+        let body_tokens = tokenise(&m.body);
+        let body_overlap = if topic_tokens.is_empty() || body_tokens.is_empty() {
+            0
+        } else {
+            topic_tokens
+                .iter()
+                .filter(|t| body_tokens.contains(*t))
+                .count()
+        };
+        let mem_labels: BTreeSet<String> = m.labels.iter().map(|l| l.to_lowercase()).collect();
+        let label_overlap = label_set.intersection(&mem_labels).count();
+
+        // Normaliser caps the maximum possible signal at 1.0:
+        //   body component normalised by min(topic_tokens, body_tokens) — overlap
+        //     up to the shorter side counts as full body coverage.
+        //   label component normalised by min(label_set, mem_labels) — same
+        //     rationale.
+        // Score = 0.5 * body_norm + 1.0 * label_norm, clamped to [0, 1].
+        // Coefficients chosen so a perfect label match alone reaches the
+        // D4 threshold (0.3) and a perfect body match alone reaches half
+        // the label weighting — matching D1's "2x label vs body" ratio.
+        let body_norm_denom = topic_tokens.len().min(body_tokens.len()).max(1);
+        let body_norm = body_overlap as f32 / body_norm_denom as f32;
+        let label_norm_denom = label_set.len().min(mem_labels.len()).max(1);
+        let label_norm = if label_set.is_empty() || mem_labels.is_empty() {
+            0.0
+        } else {
+            label_overlap as f32 / label_norm_denom as f32
+        };
+        let score = (0.5 * body_norm + 1.0 * label_norm).min(1.0);
+
+        if score <= 0.0 {
+            continue;
+        }
+
+        let reason = if label_overlap > 0 && body_overlap > 0 {
+            format!(
+                "label overlap ({label_overlap}) + body token overlap ({body_overlap})"
+            )
+        } else if label_overlap > 0 {
+            format!("label overlap ({label_overlap})")
+        } else {
+            format!("body token overlap ({body_overlap})")
+        };
+
+        scored.push(MemoryMatch {
+            memory: m,
+            score,
+            reason,
+        });
+    }
+
+    // Sort score DESC, tie-break by key for determinism.
+    scored.sort_by(|a, b| {
+        b.score
+            .partial_cmp(&a.score)
+            .unwrap_or(std::cmp::Ordering::Equal)
+            .then_with(|| a.memory.key.cmp(&b.memory.key))
+    });
+    scored.truncate(args.limit);
+
+    Ok(MemoryMatchResult { matches: scored })
+}
+
+/// Simple word tokeniser for the v1 `memory.match` ranker. Lower-cases,
+/// splits on non-alphanumeric, drops single-character tokens and a small
+/// stop-list of common-but-uninformative words. Returns a deduplicated
+/// set so repeated tokens don't double-count.
+fn tokenise(text: &str) -> BTreeSet<String> {
+    const STOP: &[&str] = &[
+        "a", "an", "the", "and", "or", "but", "of", "for", "to", "in", "on", "at", "by",
+        "is", "are", "was", "were", "be", "been", "being", "as", "with", "from", "this",
+        "that", "these", "those", "it", "its", "if", "so", "we", "you", "i", "they", "he",
+        "she", "do", "does", "did", "not", "no", "yes", "than", "then", "via", "per",
+    ];
+    let stop: BTreeSet<&str> = STOP.iter().copied().collect();
+    text.to_lowercase()
+        .split(|c: char| !c.is_alphanumeric())
+        .filter(|t| t.len() > 1 && !stop.contains(t))
+        .map(|t| t.to_string())
+        .collect()
 }
 
 fn read_all_memories(layout: &OrbitLayout, verb: &'static str) -> Result<Vec<Memory>> {
@@ -4773,6 +5100,7 @@ mod tests {
             status,
             labels: vec![],
             acceptance_criteria: vec![],
+            memories_considered: vec![],
         };
         layout.ensure_spec_dir(id).unwrap();
         std::fs::write(layout.spec_file(id), serialise_yaml(&spec).unwrap()).unwrap();
@@ -5245,6 +5573,7 @@ mod tests {
                 verification: None,
                 ac_type: AcType::Code,
             }],
+            memories_considered: vec![],
         };
         layout.ensure_spec_dir("0001").unwrap();
         std::fs::write(
@@ -5320,6 +5649,7 @@ mod tests {
             status: SpecStatus::Open,
             labels: vec![],
             acceptance_criteria: vec![],
+            memories_considered: vec![],
         };
         layout.ensure_spec_dir("0001").unwrap();
         std::fs::write(
@@ -5391,6 +5721,7 @@ mod tests {
             status: SpecStatus::Open,
             labels: vec![],
             acceptance_criteria: vec![],
+            memories_considered: vec![],
         };
         layout.ensure_spec_dir("0001").unwrap();
         std::fs::write(
@@ -5446,6 +5777,7 @@ mod tests {
             status: SpecStatus::Open,
             labels: vec![],
             acceptance_criteria: vec![],
+            memories_considered: vec![],
         };
         layout.ensure_spec_dir("0001").unwrap();
         std::fs::write(
@@ -5805,6 +6137,7 @@ mod tests {
             status: SpecStatus::Open,
             labels: vec![],
             acceptance_criteria: vec![],
+            memories_considered: vec![],
         };
         layout.ensure_spec_dir("0001").unwrap();
         std::fs::write(
@@ -5963,6 +6296,7 @@ mod tests {
                 labels: vec!["methodology".into()],
                 timestamp: Some("2026-05-07T12:00:00Z".into()),
                 no_nudge: false,
+                no_warn: false,
             }),
         )
         .unwrap();
@@ -5985,6 +6319,7 @@ mod tests {
                 labels: vec![],
                 timestamp: Some("2026-05-07T12:00:00Z".into()),
                 no_nudge: false,
+                no_warn: false,
             }),
         )
         .unwrap();
@@ -5996,6 +6331,7 @@ mod tests {
                 labels: vec![],
                 timestamp: Some("2026-05-07T12:00:01Z".into()),
                 no_nudge: false,
+                no_warn: false,
             }),
         )
         .unwrap();
@@ -6041,6 +6377,463 @@ mod tests {
         };
         let keys: Vec<_> = r.memories.iter().map(|m| m.key.as_str()).collect();
         assert_eq!(keys, vec!["apple", "zebra"]);
+    }
+
+    // ============================================================================
+    // memory.match tests — spec 2026-05-19-memory-gates-decisions D1 (ac-01/ac-02)
+    // ============================================================================
+
+    #[test]
+    fn memory_match_ranks_by_token_and_label_overlap() {
+        let dir = tempdir().unwrap();
+        let layout = OrbitLayout::at(dir.path());
+        layout.ensure_dirs().unwrap();
+        // Three memories of varying overlap:
+        // - perfect label overlap → should score above threshold
+        // - body overlap only → should score lower
+        // - no overlap → score 0, dropped
+        memory_remember(
+            &layout,
+            &MemoryRememberArgs {
+                key: "label-match".into(),
+                body: "unrelated mechanism".into(),
+                labels: vec!["0037-memory-gates".into()],
+                timestamp: Some("2026-05-19T00:00:00Z".into()),
+                no_nudge: false,
+                no_warn: false,
+            },
+        )
+        .unwrap();
+        memory_remember(
+            &layout,
+            &MemoryRememberArgs {
+                key: "body-match".into(),
+                body: "decision-moment surfacing of memories".into(),
+                labels: vec!["other".into()],
+                timestamp: Some("2026-05-19T00:00:00Z".into()),
+                no_nudge: false,
+                no_warn: false,
+            },
+        )
+        .unwrap();
+        memory_remember(
+            &layout,
+            &MemoryRememberArgs {
+                key: "no-match".into(),
+                body: "totally unrelated content".into(),
+                labels: vec!["nope".into()],
+                timestamp: Some("2026-05-19T00:00:00Z".into()),
+                no_nudge: false,
+                no_warn: false,
+            },
+        )
+        .unwrap();
+
+        let resp = execute(
+            &layout,
+            &VerbRequest::MemoryMatch(MemoryMatchArgs {
+                topic: "decision-moment surfacing of memories at design time".into(),
+                labels: vec!["0037-memory-gates".into()],
+                limit: 10,
+            }),
+        )
+        .unwrap();
+        let VerbResponse::MemoryMatch(r) = resp else {
+            panic!()
+        };
+        // label-match outranks body-match (label weighting 2x); no-match dropped.
+        let keys: Vec<_> = r.matches.iter().map(|m| m.memory.key.as_str()).collect();
+        assert!(keys.contains(&"label-match"), "missing label-match: {keys:?}");
+        assert!(keys.contains(&"body-match"), "missing body-match: {keys:?}");
+        assert!(!keys.contains(&"no-match"), "no-match leaked: {keys:?}");
+        // First entry must be the label-match (higher score).
+        assert_eq!(r.matches[0].memory.key, "label-match");
+        // Label match alone reaches the D4 threshold (>= 0.3).
+        assert!(
+            r.matches[0].score >= MEMORY_MATCH_THRESHOLD,
+            "label match score {} below threshold {}",
+            r.matches[0].score,
+            MEMORY_MATCH_THRESHOLD,
+        );
+    }
+
+    #[test]
+    fn memory_match_rejects_empty_topic_and_labels() {
+        let dir = tempdir().unwrap();
+        let layout = OrbitLayout::at(dir.path());
+        let err = execute(
+            &layout,
+            &VerbRequest::MemoryMatch(MemoryMatchArgs {
+                topic: String::new(),
+                labels: vec![],
+                limit: 10,
+            }),
+        )
+        .unwrap_err();
+        assert_eq!(err.category, Category::Malformed);
+    }
+
+    #[test]
+    fn memory_match_respects_limit() {
+        let dir = tempdir().unwrap();
+        let layout = OrbitLayout::at(dir.path());
+        layout.ensure_dirs().unwrap();
+        for i in 0..5 {
+            memory_remember(
+                &layout,
+                &MemoryRememberArgs {
+                    key: format!("m{i}"),
+                    body: format!("body {i} decision"),
+                    labels: vec!["0037".into()],
+                    timestamp: Some("2026-05-19T00:00:00Z".into()),
+                    no_nudge: false,
+                    no_warn: false,
+                },
+            )
+            .unwrap();
+        }
+        let resp = execute(
+            &layout,
+            &VerbRequest::MemoryMatch(MemoryMatchArgs {
+                topic: "decision".into(),
+                labels: vec!["0037".into()],
+                limit: 2,
+            }),
+        )
+        .unwrap();
+        let VerbResponse::MemoryMatch(r) = resp else {
+            panic!()
+        };
+        assert_eq!(r.matches.len(), 2);
+    }
+
+    // ============================================================================
+    // memory.remember shape_warning tests — D5b (ac-05)
+    // ============================================================================
+
+    #[test]
+    fn memory_remember_warns_on_state_shape_body() {
+        let dir = tempdir().unwrap();
+        let layout = OrbitLayout::at(dir.path());
+        let r = memory_remember(
+            &layout,
+            &MemoryRememberArgs {
+                key: "state-shape".into(),
+                body: "the problem is recency bias".into(),
+                labels: vec![],
+                timestamp: Some("2026-05-19T00:00:00Z".into()),
+                no_nudge: false,
+                no_warn: false,
+            },
+        )
+        .unwrap();
+        assert!(r.shape_warning.is_some(), "expected state-shape warning");
+        // Memory was still written.
+        assert!(layout.memory_file("state-shape").exists());
+    }
+
+    #[test]
+    fn memory_remember_no_warning_on_mechanism_shape() {
+        let dir = tempdir().unwrap();
+        let layout = OrbitLayout::at(dir.path());
+        let r = memory_remember(
+            &layout,
+            &MemoryRememberArgs {
+                key: "mechanism".into(),
+                body: "use orbit memory match before /orb:design".into(),
+                labels: vec![],
+                timestamp: Some("2026-05-19T00:00:00Z".into()),
+                no_nudge: false,
+                no_warn: false,
+            },
+        )
+        .unwrap();
+        assert!(r.shape_warning.is_none(), "unexpected warning: {:?}", r.shape_warning);
+    }
+
+    #[test]
+    fn memory_remember_no_warn_flag_suppresses_warning() {
+        let dir = tempdir().unwrap();
+        let layout = OrbitLayout::at(dir.path());
+        let r = memory_remember(
+            &layout,
+            &MemoryRememberArgs {
+                key: "state-shape".into(),
+                body: "the problem is recency bias".into(),
+                labels: vec![],
+                timestamp: Some("2026-05-19T00:00:00Z".into()),
+                no_nudge: false,
+                no_warn: true,
+            },
+        )
+        .unwrap();
+        assert!(r.shape_warning.is_none());
+    }
+
+    #[test]
+    fn memory_remember_no_false_positive_on_is_classifier() {
+        // Per D5b rationale — "FineType is uv-based" must NOT fire the
+        // warning (legitimate mechanism phrasing despite the "is").
+        let dir = tempdir().unwrap();
+        let layout = OrbitLayout::at(dir.path());
+        let r = memory_remember(
+            &layout,
+            &MemoryRememberArgs {
+                key: "classifier".into(),
+                body: "FineType is uv-based with cargo-style lockfiles".into(),
+                labels: vec![],
+                timestamp: Some("2026-05-19T00:00:00Z".into()),
+                no_nudge: false,
+                no_warn: false,
+            },
+        )
+        .unwrap();
+        assert!(r.shape_warning.is_none(), "false positive: {:?}", r.shape_warning);
+    }
+
+    // ============================================================================
+    // spec.close memory-reconciliation gate tests — D4 (ac-04)
+    // ============================================================================
+
+    #[test]
+    fn spec_close_blocks_when_matching_memory_is_unreconciled() {
+        use crate::schema::{Card, CardMaturity};
+        let dir = tempdir().unwrap();
+        let layout = OrbitLayout::at(dir.path());
+        layout.ensure_dirs().unwrap();
+        // Plant a card and a spec.
+        let card = Card {
+            id: Some("0037-memory-gates".into()),
+            feature: "memory gates".into(),
+            as_a: None,
+            i_want: None,
+            so_that: None,
+            goal: "g".into(),
+            maturity: CardMaturity::Planned,
+            scenarios: vec![],
+            specs: vec![],
+            relations: vec![],
+            references: vec![],
+            notes: vec![],
+        };
+        std::fs::write(
+            layout.card_file("0037-memory-gates"),
+            serialise_yaml(&card).unwrap(),
+        )
+        .unwrap();
+        // Plant a memory that will match this spec via label overlap.
+        memory_remember(
+            &layout,
+            &MemoryRememberArgs {
+                key: "matching-memory".into(),
+                body: "use mechanism X for spec close".into(),
+                labels: vec!["0037-memory-gates".into()],
+                timestamp: Some("2026-05-19T00:00:00Z".into()),
+                no_nudge: false,
+                no_warn: false,
+            },
+        )
+        .unwrap();
+        // Spec with no memories_considered.
+        let spec = Spec {
+            id: "2026-05-19-test".into(),
+            goal: "wire memory gates into spec close".into(),
+            cards: vec!["0037-memory-gates".into()],
+            status: SpecStatus::Open,
+            labels: vec![],
+            acceptance_criteria: vec![],
+            memories_considered: vec![],
+        };
+        layout.ensure_spec_dir(&spec.id).unwrap();
+        std::fs::write(layout.spec_file(&spec.id), serialise_yaml(&spec).unwrap()).unwrap();
+
+        let err = spec_close(
+            &layout,
+            &SpecCloseArgs {
+                id: spec.id.clone(),
+                force: false,
+            },
+        )
+        .unwrap_err();
+        assert_eq!(err.category, Category::Conflict);
+        assert!(
+            err.message.contains("matching-memory"),
+            "expected unreconciled key in error: {}",
+            err.message
+        );
+    }
+
+    #[test]
+    fn spec_close_succeeds_when_matching_memory_is_reconciled() {
+        use crate::schema::{Card, CardMaturity, MemoryReconciliation, ReconciliationDisposition};
+        let dir = tempdir().unwrap();
+        let layout = OrbitLayout::at(dir.path());
+        layout.ensure_dirs().unwrap();
+        let card = Card {
+            id: Some("0037-memory-gates".into()),
+            feature: "memory gates".into(),
+            as_a: None,
+            i_want: None,
+            so_that: None,
+            goal: "g".into(),
+            maturity: CardMaturity::Planned,
+            scenarios: vec![],
+            specs: vec![],
+            relations: vec![],
+            references: vec![],
+            notes: vec![],
+        };
+        std::fs::write(
+            layout.card_file("0037-memory-gates"),
+            serialise_yaml(&card).unwrap(),
+        )
+        .unwrap();
+        memory_remember(
+            &layout,
+            &MemoryRememberArgs {
+                key: "matching-memory".into(),
+                body: "use mechanism X for spec close".into(),
+                labels: vec!["0037-memory-gates".into()],
+                timestamp: Some("2026-05-19T00:00:00Z".into()),
+                no_nudge: false,
+                no_warn: false,
+            },
+        )
+        .unwrap();
+        let spec = Spec {
+            id: "2026-05-19-test2".into(),
+            goal: "wire memory gates into spec close".into(),
+            cards: vec!["0037-memory-gates".into()],
+            status: SpecStatus::Open,
+            labels: vec![],
+            acceptance_criteria: vec![],
+            memories_considered: vec![MemoryReconciliation {
+                key: "matching-memory".into(),
+                disposition: ReconciliationDisposition::Adopted,
+                reason: "wired the close-time gate as described".into(),
+            }],
+        };
+        layout.ensure_spec_dir(&spec.id).unwrap();
+        std::fs::write(layout.spec_file(&spec.id), serialise_yaml(&spec).unwrap()).unwrap();
+
+        let result = spec_close(
+            &layout,
+            &SpecCloseArgs {
+                id: spec.id.clone(),
+                force: false,
+            },
+        )
+        .unwrap();
+        assert!(result.forced_unreconciled.is_empty());
+    }
+
+    #[test]
+    fn spec_close_force_bypasses_memory_gate_and_records_forced_unreconciled() {
+        use crate::schema::{Card, CardMaturity};
+        let dir = tempdir().unwrap();
+        let layout = OrbitLayout::at(dir.path());
+        layout.ensure_dirs().unwrap();
+        let card = Card {
+            id: Some("0037-memory-gates".into()),
+            feature: "memory gates".into(),
+            as_a: None,
+            i_want: None,
+            so_that: None,
+            goal: "g".into(),
+            maturity: CardMaturity::Planned,
+            scenarios: vec![],
+            specs: vec![],
+            relations: vec![],
+            references: vec![],
+            notes: vec![],
+        };
+        std::fs::write(
+            layout.card_file("0037-memory-gates"),
+            serialise_yaml(&card).unwrap(),
+        )
+        .unwrap();
+        memory_remember(
+            &layout,
+            &MemoryRememberArgs {
+                key: "matching-memory".into(),
+                body: "use mechanism X for spec close".into(),
+                labels: vec!["0037-memory-gates".into()],
+                timestamp: Some("2026-05-19T00:00:00Z".into()),
+                no_nudge: false,
+                no_warn: false,
+            },
+        )
+        .unwrap();
+        let spec = Spec {
+            id: "2026-05-19-test3".into(),
+            goal: "wire memory gates into spec close".into(),
+            cards: vec!["0037-memory-gates".into()],
+            status: SpecStatus::Open,
+            labels: vec![],
+            acceptance_criteria: vec![],
+            memories_considered: vec![],
+        };
+        layout.ensure_spec_dir(&spec.id).unwrap();
+        std::fs::write(layout.spec_file(&spec.id), serialise_yaml(&spec).unwrap()).unwrap();
+
+        let result = spec_close(
+            &layout,
+            &SpecCloseArgs {
+                id: spec.id.clone(),
+                force: true,
+            },
+        )
+        .unwrap();
+        assert_eq!(result.forced_unreconciled, vec!["matching-memory".to_string()]);
+    }
+
+    #[test]
+    fn spec_close_does_not_block_when_no_memories_match() {
+        use crate::schema::{Card, CardMaturity};
+        let dir = tempdir().unwrap();
+        let layout = OrbitLayout::at(dir.path());
+        layout.ensure_dirs().unwrap();
+        let card = Card {
+            id: Some("0037-memory-gates".into()),
+            feature: "memory gates".into(),
+            as_a: None,
+            i_want: None,
+            so_that: None,
+            goal: "g".into(),
+            maturity: CardMaturity::Planned,
+            scenarios: vec![],
+            specs: vec![],
+            relations: vec![],
+            references: vec![],
+            notes: vec![],
+        };
+        std::fs::write(
+            layout.card_file("0037-memory-gates"),
+            serialise_yaml(&card).unwrap(),
+        )
+        .unwrap();
+        // No memories at all → no match set, no block.
+        let spec = Spec {
+            id: "2026-05-19-test4".into(),
+            goal: "unrelated spec".into(),
+            cards: vec!["0037-memory-gates".into()],
+            status: SpecStatus::Open,
+            labels: vec![],
+            acceptance_criteria: vec![],
+            memories_considered: vec![],
+        };
+        layout.ensure_spec_dir(&spec.id).unwrap();
+        std::fs::write(layout.spec_file(&spec.id), serialise_yaml(&spec).unwrap()).unwrap();
+
+        let result = spec_close(
+            &layout,
+            &SpecCloseArgs {
+                id: spec.id.clone(),
+                force: false,
+            },
+        )
+        .unwrap();
+        assert!(result.forced_unreconciled.is_empty());
     }
 
     #[test]
@@ -6446,6 +7239,7 @@ mod tests {
             status: SpecStatus::Open,
             labels: vec![],
             acceptance_criteria: acs,
+            memories_considered: vec![],
         };
         layout.ensure_spec_dir(id).unwrap();
         std::fs::write(
@@ -7523,6 +8317,7 @@ mod tests {
             status: SpecStatus::Open,
             labels: vec!["foo".into(), "bar".into()],
             acceptance_criteria: vec![],
+            memories_considered: vec![],
         };
         layout.ensure_spec_dir("0010").unwrap();
         std::fs::write(layout.spec_file("0010"), serialise_yaml(&spec).unwrap()).unwrap();
@@ -7535,6 +8330,7 @@ mod tests {
                 labels: vec!["foo".into()],
                 timestamp: Some("2026-05-01T00:00:00Z".into()),
                 no_nudge: false,
+                no_warn: false,
             },
         )
         .unwrap();
@@ -7546,6 +8342,7 @@ mod tests {
                 labels: vec!["unrelated".into()],
                 timestamp: Some("2026-05-14T00:00:00Z".into()),
                 no_nudge: false,
+                no_warn: false,
             },
         )
         .unwrap();
@@ -7571,6 +8368,7 @@ mod tests {
             status: SpecStatus::Open,
             labels: vec!["xyz".into()],
             acceptance_criteria: vec![],
+            memories_considered: vec![],
         };
         layout.ensure_spec_dir("0011").unwrap();
         std::fs::write(layout.spec_file("0011"), serialise_yaml(&spec).unwrap()).unwrap();
@@ -7583,6 +8381,7 @@ mod tests {
                 labels: vec!["a".into()],
                 timestamp: Some("2026-05-01T00:00:00Z".into()),
                 no_nudge: false,
+                no_warn: false,
             },
         )
         .unwrap();
@@ -7594,6 +8393,7 @@ mod tests {
                 labels: vec!["b".into()],
                 timestamp: Some("2026-05-14T00:00:00Z".into()),
                 no_nudge: false,
+                no_warn: false,
             },
         )
         .unwrap();
@@ -7616,6 +8416,7 @@ mod tests {
             status: SpecStatus::Open,
             labels: vec![],
             acceptance_criteria: vec![],
+            memories_considered: vec![],
         };
         layout.ensure_spec_dir("0012").unwrap();
         std::fs::write(layout.spec_file("0012"), serialise_yaml(&spec).unwrap()).unwrap();
@@ -7628,6 +8429,7 @@ mod tests {
                 labels: vec!["foo".into()],
                 timestamp: Some("2026-05-01T00:00:00Z".into()),
                 no_nudge: false,
+                no_warn: false,
             },
         )
         .unwrap();
@@ -7639,6 +8441,7 @@ mod tests {
                 labels: vec!["bar".into()],
                 timestamp: Some("2026-05-14T00:00:00Z".into()),
                 no_nudge: false,
+                no_warn: false,
             },
         )
         .unwrap();
@@ -8064,6 +8867,7 @@ canonical_code:
             status: SpecStatus::Open,
             labels: vec![],
             acceptance_criteria: vec![],
+            memories_considered: vec![],
         };
         std::fs::write(layout.spec_file(id), serialise_yaml(&spec).unwrap()).unwrap();
         if let Some(body) = interview {
@@ -8203,6 +9007,7 @@ canonical_code:
                 labels: vec!["topology".into()],
                 timestamp: Some("2026-05-18T00:00:00Z".into()),
                 no_nudge: false,
+                no_warn: false,
             },
         )
         .unwrap();
@@ -8229,6 +9034,7 @@ canonical_code:
                 labels: vec!["unrelated".into()],
                 timestamp: Some("2026-05-18T00:00:00Z".into()),
                 no_nudge: false,
+                no_warn: false,
             },
         )
         .unwrap();
@@ -8251,6 +9057,7 @@ canonical_code:
                 labels: vec!["topology".into()],
                 timestamp: Some("2026-05-18T00:00:00Z".into()),
                 no_nudge: true,
+                no_warn: false,
             },
         )
         .unwrap();

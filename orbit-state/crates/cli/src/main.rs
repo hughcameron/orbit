@@ -30,7 +30,8 @@ use orbit_state_core::{
     CardSpecsArgs, CardSpecsResult, CardTreeArgs, CardTreeEdge, CardTreeResult, ChoiceListArgs,
     ChoiceListResult, GraphArgs, GraphFormat, GraphResult, OverviewArgs, OverviewResult,
     ChoiceSearchArgs, ChoiceShowArgs, ChoiceShowResult, MemoryListArgs, MemoryListResult,
-    MemoryRememberArgs, MemoryRememberResult, MemorySearchArgs, SessionDistillArgs,
+    MemoryMatchArgs, MemoryMatchResult, MemoryRememberArgs, MemoryRememberResult,
+    MemorySearchArgs, SessionDistillArgs,
     SessionDistillResult, SessionHandoverArgs, SessionHandoverResult, SessionPrimeArgs,
     SessionPrimeResult, SessionSetCardArgs, SessionSetCardResult, SessionStartArgs,
     SessionStartResult, SkillRecordInvocationArgs, SkillRecordInvocationResult,
@@ -250,11 +251,31 @@ enum MemoryAction {
         /// ac-04.
         #[arg(long = "no-nudge")]
         no_nudge: bool,
+        /// Suppress the state-shape warning when the body's first sentence
+        /// reads as a state observation. Per spec
+        /// 2026-05-19-memory-gates-decisions ac-05 (D5b).
+        #[arg(long = "no-warn")]
+        no_warn: bool,
     },
     /// List all memories.
     List,
     /// Search memories (substring, case-insensitive, body + labels).
     Search { query: String },
+    /// Surface memories relevant to a decision-moment topic. Returns
+    /// ranked matches (token + label overlap); distinct from the
+    /// operator-keyword `search`. Per spec 2026-05-19-memory-gates-decisions
+    /// ac-01/ac-02 (D1).
+    Match {
+        /// Topic — typically a card slug, spec goal, or approach snippet.
+        topic: String,
+        /// Optional label-overlap hints (repeatable). Weighted higher than
+        /// body overlap.
+        #[arg(long = "label")]
+        labels: Vec<String>,
+        /// Cap on returned matches. Defaults to 10.
+        #[arg(long, default_value_t = 10)]
+        limit: usize,
+    },
 }
 
 #[derive(Debug, Subcommand)]
@@ -993,16 +1014,27 @@ fn build_request(layout: &OrbitLayout, command: &Command) -> Result<VerbRequest,
                 labels,
                 timestamp,
                 no_nudge,
+                no_warn,
             } => VerbRequest::MemoryRemember(MemoryRememberArgs {
                 key: key.clone(),
                 body: body.clone(),
                 labels: labels.clone(),
                 timestamp: timestamp.clone(),
                 no_nudge: *no_nudge,
+                no_warn: *no_warn,
             }),
             MemoryAction::List => VerbRequest::MemoryList(MemoryListArgs::default()),
             MemoryAction::Search { query } => VerbRequest::MemorySearch(MemorySearchArgs {
                 query: query.clone(),
+            }),
+            MemoryAction::Match {
+                topic,
+                labels,
+                limit,
+            } => VerbRequest::MemoryMatch(MemoryMatchArgs {
+                topic: topic.clone(),
+                labels: labels.clone(),
+                limit: *limit,
             }),
         },
         Command::Card { action } => match action {
@@ -1151,6 +1183,7 @@ fn render_human(response: &VerbResponse) {
         VerbResponse::MemoryList(result) | VerbResponse::MemorySearch(result) => {
             render_memory_list(result)
         }
+        VerbResponse::MemoryMatch(result) => render_memory_match(result),
         VerbResponse::CardShow(result) => render_card_show(result),
         VerbResponse::CardList(result) | VerbResponse::CardSearch(result) => {
             render_card_list(result)
@@ -1278,6 +1311,12 @@ fn render_memory_remember(result: &MemoryRememberResult) {
     if let Some(nudge) = &result.nudge {
         eprintln!("{nudge}");
     }
+    // State-shape warning — same advisory-channel discipline as the
+    // topology nudge. Per spec 2026-05-19-memory-gates-decisions ac-05
+    // (D5b).
+    if let Some(warning) = &result.shape_warning {
+        eprintln!("{warning}");
+    }
 }
 
 fn render_memory_list(result: &MemoryListResult) {
@@ -1287,6 +1326,22 @@ fn render_memory_list(result: &MemoryListResult) {
     }
     for m in &result.memories {
         println!("{}\t{}", m.key, first_line(&m.body));
+    }
+}
+
+fn render_memory_match(result: &MemoryMatchResult) {
+    if result.matches.is_empty() {
+        println!("(no matching memories)");
+        return;
+    }
+    for m in &result.matches {
+        println!(
+            "{:.2}\t{}\t{}\t{}",
+            m.score,
+            m.memory.key,
+            m.reason,
+            first_line(&m.memory.body)
+        );
     }
 }
 

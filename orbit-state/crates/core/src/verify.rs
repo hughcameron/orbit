@@ -394,6 +394,7 @@ mystery_field: ohno
             status: crate::schema::SpecStatus::Open,
             labels: vec![],
             acceptance_criteria: vec![],
+            memories_considered: vec![],
         };
         write_atomic(
             layout.spec_file(id),
