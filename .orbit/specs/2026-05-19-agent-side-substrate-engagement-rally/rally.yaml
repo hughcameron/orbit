@@ -8,16 +8,16 @@ children:
 - card_path: .orbit/cards/0037-memory-gates-decisions.yaml
   spec_id: 2026-05-19-memory-gates-decisions
   branch: rally/memory-gates-decisions
-  card_phase: designed
+  card_phase: implementing
   dep_predecessors: []
-  worktree: null
+  worktree: /home/hugh/github/meridian-online/orbit-rally-memory-gates-decisions
   rally_id: 2026-05-19-agent-side-substrate-engagement-rally
 - card_path: .orbit/cards/0038-skills-infer-or-prompt-before-halt.yaml
   spec_id: 2026-05-19-skills-infer-or-prompt-before-halt
   branch: rally/skills-infer-or-prompt-before-halt
-  card_phase: designed
+  card_phase: implementing
   dep_predecessors: []
-  worktree: null
+  worktree: /home/hugh/github/meridian-online/orbit-rally-skills-infer-or-prompt-before-halt
   rally_id: 2026-05-19-agent-side-substrate-engagement-rally
 - card_path: .orbit/cards/0042-act-when-authorised.yaml
   spec_id: 2026-05-19-act-when-authorised
