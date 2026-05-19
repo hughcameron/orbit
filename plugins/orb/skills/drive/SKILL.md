@@ -158,6 +158,49 @@ The heartbeat self-terminates when `spec.status == closed`
 If `CronCreate` fails, log `heartbeat unavailable: <reason>` and
 continue — the heartbeat is observability, not a gate.
 
+## Halt-temptation guard
+
+Before invoking `AskUserQuestion` mid-autonomy, run the **three-question
+test** — the inverse of "consult the substrate first." Halt only when
+at least one of {recommendation, evidence, authorisation} is genuinely
+missing.
+
+1. **Recommendation** — do I have a single concrete action I am
+   prepared to take? (not a menu of options)
+2. **Evidence** — do I have evidence to act on it? (a memory key, an
+   AC text, a prior decision file, or substrate I can cite)
+3. **Authorisation** — does the contract authorise me? Check three
+   substrate sources, treat presence of any one as load-bearing:
+   - `drive.yaml.autonomy` (guided | full | supervised)
+   - memory `mid-session-autonomy-contract-default-to-action-halt`
+   - the spec's `halt-conditions` for the current stage
+
+Three yeses → act, do not ask. One or more no → escalate via the
+structural NO-GO path (single-strike park with `reason_label`), not
+via `AskUserQuestion`. Per spec 2026-05-19-act-when-authorised (ac-01,
+ac-05).
+
+**Pre-commit halts have stage scope, not surface scope.** A halt
+registered against a surface during `/orb:implement` does NOT
+auto-widen to cover the same surface during `/orb:review-spec` or
+`/orb:design`. The hook reads the current pipeline stage from
+`drive.yaml` and treats stage-cross widening as a violation of
+question 3 — conservative widening turns a stage gate into a surface
+gate. Per spec 2026-05-19-act-when-authorised (ac-04).
+
+**Mechanical reinforcement.** Under `ORBIT_NONINTERACTIVE=1` with a
+`drive.yaml` present, the PreToolUse hook at
+`plugins/orb/hooks/three-question-test.sh` fires before every
+`AskUserQuestion`, prints the three questions to stderr, and exits
+non-zero to suppress the halt. The hook is reinforcement, not
+substitution — the discipline lives in the skill prose.
+
+**The Decision Brief frame is for closing recommendations to the
+operator, not for in-flight mid-autonomy decisions.** A mid-autonomy
+"three options with a recommendation" is menu-presenting (STYLE.md
+anti-pattern #4) regardless of how reasoned the options are. The
+correct mid-autonomy form is the imperative single action.
+
 ## Stage 1: Review-Spec
 
 Review-spec runs as a **forked Agent** via the Agent tool — fresh
@@ -266,6 +309,16 @@ completed after 2 forked attempts at review-spec`.
   NO-GO constraint.
 
 ### 1.6 REQUEST_CHANGES budget & synthetic BLOCK
+
+**Severity is reviewer-language, not autonomy-language.** A finding's
+severity (LOW / MEDIUM / HIGH) informs the *priority* of fixes within
+a cycle — not *whether* to surface the verdict to the operator. Under
+`guided` or `full` autonomy, REQUEST_CHANGES is absorbed by the cycle
+budget regardless of severity; do not escalate a HIGH finding to
+AskUserQuestion under these autonomy levels just because it feels
+weighty. The cycle budget is the routing rule; severity is reading
+material the cycle uses to prioritise its response. Per spec
+2026-05-19-act-when-authorised (ac-02).
 
 Each stage (review-spec, review-pr) has an **independent budget of 3
 REQUEST_CHANGES cycles per top-level iteration**. The counters live in

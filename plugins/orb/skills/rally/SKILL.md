@@ -68,6 +68,18 @@ proceeds in three branches:
    - **Multiple matches** → halt and instruct the agent to pass the
      rally id explicitly, listing the candidates.
 
+## Halt-temptation guard
+
+Rally sub-agents run drive at full autonomy inside their worktrees;
+the rally lead runs in main and gates only at proposal, consolidated
+decisions, consolidated design review, and assurance. Both surfaces
+honour the three-question test before invoking `AskUserQuestion`:
+recommendation? evidence? authorisation? Three yeses → act, do not
+ask. See `plugins/orb/skills/drive/SKILL.md` §"Halt-temptation guard"
+for the substrate-typed phrasing and the PreToolUse hook that
+reinforces it under `ORBIT_NONINTERACTIVE=1`. Per spec
+2026-05-19-act-when-authorised.
+
 ## Pre-flight
 
 ### 1. Scan for an active rally

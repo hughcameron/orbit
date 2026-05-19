@@ -133,6 +133,17 @@ Before any code is written, the agent runs the following sequence:
 No checklist file is written. The spec's `acceptance_criteria` field is
 authoritative and remains so for the rest of the session.
 
+## Halt-temptation guard
+
+Before invoking `AskUserQuestion` mid-implementation, run the
+three-question test: recommendation? evidence? authorisation? Three
+yeses → act, do not ask. The detour-escalation path below is for
+*scope changes that cross the spec's boundary*, not for surfacing
+in-scope decisions you have the evidence to make. See
+`plugins/orb/skills/drive/SKILL.md` §"Halt-temptation guard" for the
+substrate-typed phrasing and the PreToolUse hook that reinforces it.
+Per spec 2026-05-19-act-when-authorised.
+
 ## Code investigation discipline
 
 Run `/orb:code-investigate` (broad mode) on the module the next AC touches before proposing any non-trivial change. The skill gathers a synthesised neighbourhood picture — directory shape, hot files, where complexity clusters, what sits adjacent to the change surface — cheap enough to default to. For specific structural questions that surface mid-implementation — *where is X*, *what calls Y*, *how many Z* — invoke narrow mode rather than approximating with grep. The agent owns the code; reach for evidence cheaply enough that you actually reach.
