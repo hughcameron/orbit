@@ -2,7 +2,7 @@ id: 2026-05-19-memory-gates-decisions
 goal: zero "memory existed and was ignored" incidents — every memory matching active work is reconciled at the decision moment, whether or not a spec exists
 cards:
 - 0037-memory-gates-decisions
-status: open
+status: closed
 labels: []
 acceptance_criteria:
 - id: ac-01
