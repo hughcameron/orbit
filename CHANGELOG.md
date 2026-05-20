@@ -2,6 +2,29 @@
 
 All notable changes to orbit are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.4.23] - 2026-05-20
+
+Ships the agent-side substrate-engagement rally end-to-end — three cards delivered together through `/orb:rally`'s proposal → queued design → consolidated decision gate → consolidated design review → stacked PR shape. Each card targets a distinct lifecycle moment where the agent must engage with persistent substrate: design-time memory matching (0037), skill-entry resolution (0038), and halt-temptation discipline mid-autonomy (0042).
+
+### Added
+
+- **`memory.match` verb** — ranks memories against a topic + optional labels using a token-overlap (body) + label-overlap signal, weighted 2× toward labels and normalised to `[0, 1]`. Returns `{memory, score, reason}` per match. Powers two new gates: `/orb:design` §2 calls `orbit memory match <card-slug>` at evidence-load time, and `spec.close` now blocks when matching memories aren't reconciled (threshold 0.3, `--force` bypass mirroring the existing AC pre-flight).
+- **`memories_considered` on `Spec`** — new `Vec<MemoryReconciliation>` field with `Adopted | PartiallyAdopted | NotApplicable` disposition + reason. Skip-on-default keeps existing specs byte-identical.
+- **`memory.remember` shape warning** — soft warning fired when a body leads with state-shape language ("X is hard") instead of mechanism ("use X when Y"). Never blocks; `--no-warn` flag suppresses. Mirrors the topology-label nudge precedent.
+- **`spec.resolve` verb** — unifies the infer → prompt → halt recovery for skills that take a spec-id argument. Returns `{outcome: resolved, id}` when bound-card has a single open spec, `{outcome: prompt, candidates: [...]}` for the multi-spec case, or `Error::unavailable` with two byte-identical halt templates (terminal vs recoverable) when both fallbacks fail.
+- **PreToolUse hook on `AskUserQuestion`** — `plugins/orb/hooks/three-question-test.sh` scope-gated to `ORBIT_NONINTERACTIVE=1` AND `drive.yaml` presence. Prints the three substrate-typed questions (recommendation? evidence? authorisation?) to stderr and exits non-zero to suppress the halt under autonomy. The agent does the stage-match; the hook prompts.
+
+### Changed
+
+- **Five skills (`/orb:implement`, `/orb:review-pr`, `/orb:review-spec`, `/orb:audit`, `/orb:drive`) now call `orbit spec resolve --skill <name>`** instead of carrying divergent input-contract branches. Single canonical recovery; uniform halt messages.
+- **`drive/SKILL.md` adds a §"Halt-temptation guard"** documenting the three-question test, the inverse failure mode (acting on substrate authorisation rather than halting), and the stage-scope rule for pre-commit halts. §1.6 prefaces the cycle-budget rule with the severity-is-reviewer-language clarification.
+- **`STYLE.md` adds a §"Closing recommendations vs in-flight decisions"** — the Decision Brief shape closes recommendations to the operator; the imperative single-action form is correct mid-autonomy. Card 0026 carries a matching scenario.
+- **`rally/SKILL.md` and `implement/SKILL.md` carry pointers** to the halt-temptation guard so rally sub-agents and implementing skills share the discipline.
+
+### Fixed
+
+- Three cards (0037 memory-gates-decisions, 0038 skills-infer-or-prompt-before-halt, 0042 act-when-authorised) bumped from maturity `planned` → `emerging` to reflect shipped specs.
+
 ## [0.4.22] - 2026-05-19
 
 Fixes the 0.4.21 cross-compile failure. The `audit.conformance` verb's `include_str!` of `plugins/orb/skills/setup/METHOD.md` reached outside `cross`'s docker mount during aarch64-linux builds. Vendored the canonical bytes into `orbit-state/crates/core/canonical/METHOD.md` and added a /orb:release pre-flight step to keep the vendored copy in sync with the plugin source. No behavioural changes vs the (un-released) 0.4.21 — same 8 ACs of spec `2026-05-19-workflow-conformance`.
