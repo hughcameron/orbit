@@ -266,6 +266,25 @@ fn audit_conformance_mcp_clean_envelope() {
 }
 
 #[test]
+fn audit_conformance_mcp_park_signal_envelope() {
+    // Spec 2026-05-20-conformance-park-signal ac-02: MCP conformance on
+    // the park-signal fixture produces an envelope byte-identical to the
+    // library reference — paired with the CLI parity test, this asserts
+    // CLI and MCP both honour the carve-out identically.
+    let dir = tempfile::tempdir().unwrap();
+    common::populate_conformance_park_signal_fixture(dir.path());
+
+    let inner = run_mcp_tools_call(
+        dir.path(),
+        json!({ "name": "audit.conformance", "arguments": {} }),
+    );
+    let envelope = inner_envelope_text(&inner);
+
+    let expected = common::expected_envelope_for_audit_conformance_park_signal_fixture(dir.path());
+    assert_eq!(envelope, expected, "MCP park-signal envelope diverged from library reference");
+}
+
+#[test]
 fn audit_drift_mcp_envelope_matches_canonical_envelope() {
     let dir = tempfile::tempdir().unwrap();
     common::populate_card_with_drift(dir.path());

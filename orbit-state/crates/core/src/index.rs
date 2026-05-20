@@ -556,6 +556,7 @@ mod tests {
             so_that: None,
             goal: "files-canonical substrate".into(),
             maturity: CardMaturity::Planned,
+            park: None,
             scenarios: vec![],
             specs: vec![],
             relations: vec![],

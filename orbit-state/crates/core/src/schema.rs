@@ -73,12 +73,31 @@ impl Card {
         "so_that",
         "goal",
         "maturity",
+        "park",
         "scenarios",
         "specs",
         "relations",
         "references",
         "notes",
     ];
+}
+
+impl ParkSignal {
+    pub const FIELDS: &'static [&'static str] = &["reason", "until"];
+}
+
+/// Reject empty strings at parse time. Used by `ParkSignal` so a card carrying
+/// `park: {reason: "", until: "..."}` fails the strict parse rather than
+/// silently emitting a meaningless hold signal.
+fn non_empty_string<'de, D>(deserializer: D) -> std::result::Result<String, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let s = String::deserialize(deserializer)?;
+    if s.is_empty() {
+        return Err(serde::de::Error::custom("must not be empty"));
+    }
+    Ok(s)
 }
 
 impl Choice {
@@ -473,6 +492,13 @@ pub struct Card {
     pub so_that: Option<String>,
     pub goal: String,
     pub maturity: CardMaturity,
+    /// Deliberate-hold signal. When present, conformance audit's card-state
+    /// finding family skips this card (per spec 2026-05-20-conformance-park-signal).
+    /// Removing the block returns the card to the audit's view. `reason:` and
+    /// `until:` are both free-form prose; v1 has no automated unpark on date
+    /// or spec-id resolution.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub park: Option<ParkSignal>,
     #[serde(default)]
     pub scenarios: Vec<Scenario>,
     /// Spec paths advanced by this card. Substrate appends here on `spec.close`.
@@ -492,6 +518,19 @@ pub enum CardMaturity {
     Planned,
     Emerging,
     Established,
+}
+
+/// A deliberate-hold signal on a Card. Both fields are free-form prose,
+/// non-empty at parse time. See `Card.park` for full semantics.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ParkSignal {
+    /// Free-form prose explaining why the card is held.
+    #[serde(deserialize_with = "non_empty_string")]
+    pub reason: String,
+    /// Free-form prose naming the unhold condition.
+    #[serde(deserialize_with = "non_empty_string")]
+    pub until: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -820,6 +859,10 @@ unknown_field: oops
             so_that: Some("s".into()),
             goal: "g".into(),
             maturity: CardMaturity::Planned,
+            park: Some(ParkSignal {
+                reason: "r".into(),
+                until: "u".into(),
+            }),
             scenarios: vec![Scenario {
                 name: "n".into(),
                 given: "g".into(),
@@ -841,6 +884,127 @@ unknown_field: oops
         let mut expected: Vec<String> = Card::FIELDS.iter().map(|s| s.to_string()).collect();
         expected.sort();
         assert_eq!(got, expected, "Card::FIELDS drifted from struct");
+    }
+
+    #[test]
+    fn park_signal_fields_matches_struct() {
+        // Mirrors the per-struct FIELDS test pattern. A fully-populated
+        // ParkSignal must serialise to exactly the keys named in
+        // ParkSignal::FIELDS.
+        let signal = ParkSignal {
+            reason: "r".into(),
+            until: "u".into(),
+        };
+        let value = serde_yaml::to_value(&signal).unwrap();
+        let got = top_level_keys(&value);
+        let mut expected: Vec<String> = ParkSignal::FIELDS.iter().map(|s| s.to_string()).collect();
+        expected.sort();
+        assert_eq!(got, expected, "ParkSignal::FIELDS drifted from struct");
+    }
+
+    #[test]
+    fn card_round_trips_without_park() {
+        // ac-01 (a): card with no `park:` field parses and round-trips
+        // byte-identical through the canonical writer. Existing cards on
+        // disk must not change shape after this spec lands.
+        let yaml = "feature: x\ngoal: y\nmaturity: planned\n";
+        let card: Card = serde_yaml::from_str(yaml).unwrap();
+        assert!(card.park.is_none());
+        let reserialised = crate::canonical::serialise_yaml(&card).unwrap();
+        let reparsed: Card = serde_yaml::from_str(&reserialised).unwrap();
+        let re_reserialised = crate::canonical::serialise_yaml(&reparsed).unwrap();
+        assert_eq!(reserialised, re_reserialised, "round-trip not byte-identical");
+    }
+
+    #[test]
+    fn card_round_trips_with_park() {
+        // ac-01 (b): card with `park: {reason, until}` parses and round-trips
+        // byte-identical.
+        let yaml = r#"feature: x
+goal: y
+maturity: planned
+park:
+  reason: awaiting third use-case
+  until: N=2 evidence
+"#;
+        let card: Card = serde_yaml::from_str(yaml).unwrap();
+        let park = card.park.as_ref().expect("park: block should parse");
+        assert_eq!(park.reason, "awaiting third use-case");
+        assert_eq!(park.until, "N=2 evidence");
+        let reserialised = crate::canonical::serialise_yaml(&card).unwrap();
+        let reparsed: Card = serde_yaml::from_str(&reserialised).unwrap();
+        let re_reserialised = crate::canonical::serialise_yaml(&reparsed).unwrap();
+        assert_eq!(reserialised, re_reserialised, "round-trip not byte-identical");
+    }
+
+    #[test]
+    fn card_rejects_park_with_empty_reason() {
+        // ac-01 (c): empty reason → parse error.
+        let yaml = r#"feature: x
+goal: y
+maturity: planned
+park:
+  reason: ''
+  until: y
+"#;
+        let err = serde_yaml::from_str::<Card>(yaml).unwrap_err();
+        assert!(
+            err.to_string().contains("must not be empty"),
+            "expected empty-string error, got: {err}",
+        );
+    }
+
+    #[test]
+    fn card_rejects_park_with_empty_until() {
+        // ac-01 (c-symmetric): empty until → parse error (symmetric coverage
+        // per the review-spec MINOR finding).
+        let yaml = r#"feature: x
+goal: y
+maturity: planned
+park:
+  reason: x
+  until: ''
+"#;
+        let err = serde_yaml::from_str::<Card>(yaml).unwrap_err();
+        assert!(
+            err.to_string().contains("must not be empty"),
+            "expected empty-string error, got: {err}",
+        );
+    }
+
+    #[test]
+    fn card_rejects_park_missing_until() {
+        // ac-01 (d): missing until → parse error.
+        let yaml = r#"feature: x
+goal: y
+maturity: planned
+park:
+  reason: x
+"#;
+        let err = serde_yaml::from_str::<Card>(yaml).unwrap_err();
+        assert!(
+            err.to_string().contains("until") || err.to_string().contains("missing"),
+            "expected missing-field error, got: {err}",
+        );
+    }
+
+    #[test]
+    fn card_rejects_park_with_unknown_subfield() {
+        // ac-01 (e): unknown subfield → parse error (deny_unknown_fields on
+        // ParkSignal).
+        let yaml = r#"feature: x
+goal: y
+maturity: planned
+park:
+  reason: x
+  until: y
+  extra: z
+"#;
+        let err = serde_yaml::from_str::<Card>(yaml).unwrap_err();
+        assert!(
+            err.to_string().contains("unknown"),
+            "expected unknown-field error, got: {err}",
+        );
     }
 
     #[test]

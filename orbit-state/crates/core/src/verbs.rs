@@ -3799,7 +3799,10 @@ fn card_state_findings(layout: &OrbitLayout) -> Result<Vec<ConformanceFinding>> 
         // Match the deserialised maturity. Card maturity is an enum;
         // serde rename_all = snake_case → "planned" in the on-disk yaml.
         let is_planned = matches!(card.maturity, crate::schema::CardMaturity::Planned);
-        if !is_planned || !card.specs.is_empty() {
+        if !is_planned || !card.specs.is_empty() || card.park.is_some() {
+            // Parked cards skip the ready_for_design finding silently —
+            // per spec 2026-05-20-conformance-park-signal. The deliberate-hold
+            // signal carries its own reason/until; no envelope trace.
             continue;
         }
         // Card.id is Option<String> for backwards-compat — fall back to
@@ -5657,6 +5660,7 @@ mod tests {
             so_that: None,
             goal: "g".into(),
             maturity: crate::schema::CardMaturity::Planned,
+            park: None,
             scenarios: vec![],
             specs: vec![],
             relations: vec![],
@@ -6203,6 +6207,7 @@ mod tests {
             so_that: None,
             goal: "g".into(),
             maturity: CardMaturity::Planned,
+            park: None,
             scenarios: vec![],
             specs: vec![],
             relations: vec![],
@@ -6428,6 +6433,7 @@ mod tests {
             so_that: None,
             goal: "g".into(),
             maturity: CardMaturity::Planned,
+            park: None,
             scenarios: vec![],
             specs: vec![".orbit/specs/0001/spec.yaml".into()],
             relations: vec![],
@@ -7336,6 +7342,7 @@ mod tests {
             so_that: None,
             goal: "g".into(),
             maturity: CardMaturity::Planned,
+            park: None,
             scenarios: vec![],
             specs: vec![],
             relations: vec![],
@@ -7403,6 +7410,7 @@ mod tests {
             so_that: None,
             goal: "g".into(),
             maturity: CardMaturity::Planned,
+            park: None,
             scenarios: vec![],
             specs: vec![],
             relations: vec![],
@@ -7467,6 +7475,7 @@ mod tests {
             so_that: None,
             goal: "g".into(),
             maturity: CardMaturity::Planned,
+            park: None,
             scenarios: vec![],
             specs: vec![],
             relations: vec![],
@@ -7527,6 +7536,7 @@ mod tests {
             so_that: None,
             goal: "g".into(),
             maturity: CardMaturity::Planned,
+            park: None,
             scenarios: vec![],
             specs: vec![],
             relations: vec![],
@@ -7651,6 +7661,7 @@ mod tests {
             so_that: None,
             goal: "g".into(),
             maturity: CardMaturity::Established,
+            park: None,
             scenarios: vec![],
             specs: vec![],
             relations: vec![],
@@ -9830,6 +9841,7 @@ canonical_code:
             so_that: Some("because".into()),
             goal: "goal".into(),
             maturity,
+            park: None,
             scenarios: vec![Scenario {
                 name: "s1".into(),
                 given: "g".into(),
@@ -9966,6 +9978,116 @@ unknown: surprise
     fn conformance_card_state_skips_emerging_maturity() {
         let (_dir, layout) = fresh_conformance_layout();
         write_card_v2(&layout, "0099-emerging", crate::schema::CardMaturity::Emerging, vec![]);
+        let result =
+            audit_conformance_at(&layout, &AuditConformanceArgs::default(), date(2026, 5, 19))
+                .unwrap();
+        assert!(result.findings.iter().all(|f| f.subsystem != "cards"));
+    }
+
+    fn write_parked_card(
+        layout: &OrbitLayout,
+        slug: &str,
+        maturity: crate::schema::CardMaturity,
+        specs: Vec<String>,
+    ) {
+        use crate::schema::{Card, ParkSignal, Scenario};
+        let card = Card {
+            id: Some(slug.to_string()),
+            feature: "feature".into(),
+            as_a: Some("agent".into()),
+            i_want: Some("want".into()),
+            so_that: Some("because".into()),
+            goal: "goal".into(),
+            maturity,
+            park: Some(ParkSignal {
+                reason: "awaiting third use-case forcing".into(),
+                until: "N=2 evidence".into(),
+            }),
+            scenarios: vec![Scenario {
+                name: "s1".into(),
+                given: "g".into(),
+                when: "w".into(),
+                then: "t".into(),
+                gate: true,
+            }],
+            specs,
+            relations: vec![],
+            references: vec![],
+            notes: vec![],
+        };
+        std::fs::create_dir_all(layout.cards_dir()).unwrap();
+        std::fs::write(layout.card_file(slug), serialise_yaml(&card).unwrap()).unwrap();
+    }
+
+    #[test]
+    fn conformance_card_state_skips_parked_card() {
+        // Spec 2026-05-20-conformance-park-signal ac-02 (b): a card at
+        // maturity:planned with empty specs but a park: block produces NO
+        // ready_for_design finding — the deliberate-hold carve-out.
+        let (_dir, layout) = fresh_conformance_layout();
+        write_parked_card(&layout, "0099-parked", crate::schema::CardMaturity::Planned, vec![]);
+        let result =
+            audit_conformance_at(&layout, &AuditConformanceArgs::default(), date(2026, 5, 19))
+                .unwrap();
+        assert!(
+            result.findings.iter().all(|f| f.subsystem != "cards"),
+            "parked card should produce no card-state findings, got {:?}",
+            result.findings,
+        );
+    }
+
+    #[test]
+    fn conformance_card_state_park_only_affects_card_state_family() {
+        // Spec 2026-05-20-conformance-park-signal ac-02: parked card alongside
+        // a non-parked card — only the non-parked one fires. Other finding
+        // families (memo staleness) continue to fire on the same fixture.
+        let (_dir, layout) = fresh_conformance_layout();
+        write_card_v2(&layout, "0098-planned", crate::schema::CardMaturity::Planned, vec![]);
+        write_parked_card(&layout, "0099-parked", crate::schema::CardMaturity::Planned, vec![]);
+        std::fs::create_dir_all(layout.memos_dir()).unwrap();
+        std::fs::write(
+            layout.memos_dir().join("2026-05-11-old.md"),
+            "stale memo body\n",
+        )
+        .unwrap();
+
+        let result =
+            audit_conformance_at(&layout, &AuditConformanceArgs::default(), date(2026, 5, 19))
+                .unwrap();
+        let card_findings: Vec<_> =
+            result.findings.iter().filter(|f| f.subsystem == "cards").collect();
+        assert_eq!(card_findings.len(), 1, "exactly one card finding expected");
+        assert_eq!(card_findings[0].subject, "0098-planned");
+
+        let memo_findings: Vec<_> =
+            result.findings.iter().filter(|f| f.subsystem == "memos").collect();
+        assert_eq!(memo_findings.len(), 1, "memo staleness still fires");
+    }
+
+    #[test]
+    fn conformance_card_state_park_irrelevant_when_emerging() {
+        // ac-02 (c): a parked card at maturity:emerging produces no finding
+        // either way — the maturity check is upstream of the park check, so
+        // the carve-out is a no-op here.
+        let (_dir, layout) = fresh_conformance_layout();
+        write_parked_card(&layout, "0099-parked-emerging", crate::schema::CardMaturity::Emerging, vec![]);
+        let result =
+            audit_conformance_at(&layout, &AuditConformanceArgs::default(), date(2026, 5, 19))
+                .unwrap();
+        assert!(result.findings.iter().all(|f| f.subsystem != "cards"));
+    }
+
+    #[test]
+    fn conformance_card_state_park_irrelevant_with_specs() {
+        // ac-02 (d): a parked card with non-empty specs produces no finding
+        // — the specs check is upstream of the park check.
+        let (_dir, layout) = fresh_conformance_layout();
+        write_parked_card(
+            &layout,
+            "0099-parked-with-specs",
+            crate::schema::CardMaturity::Planned,
+            vec![".orbit/specs/foo/spec.yaml".into()],
+        );
         let result =
             audit_conformance_at(&layout, &AuditConformanceArgs::default(), date(2026, 5, 19))
                 .unwrap();

@@ -555,6 +555,37 @@ fn audit_conformance_cli_clean_envelope() {
 }
 
 #[test]
+fn audit_conformance_cli_park_signal_envelope() {
+    // Spec 2026-05-20-conformance-park-signal ac-02: CLI conformance on a
+    // fixture with one parked card and one non-park planned-empty card
+    // produces an envelope with exactly one finding (the non-park card).
+    let dir = tempfile::tempdir().unwrap();
+    common::populate_conformance_park_signal_fixture(dir.path());
+
+    let cli_bin = env!("CARGO_BIN_EXE_orbit");
+    let output = Command::new(cli_bin)
+        .args([
+            "--root", dir.path().to_str().unwrap(),
+            "--json", "audit", "conformance",
+        ])
+        .stdin(Stdio::null())
+        .output()
+        .expect("run orbit cli");
+
+    assert!(
+        output.status.success(),
+        "CLI exited non-zero: stdout={} stderr={}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr),
+    );
+
+    let stdout = String::from_utf8(output.stdout).expect("stdout is utf-8");
+    let actual = stdout.trim_end_matches('\n');
+    let expected = common::expected_envelope_for_audit_conformance_park_signal_fixture(dir.path());
+    assert_eq!(actual, expected, "CLI park-signal envelope diverged from library reference");
+}
+
+#[test]
 fn audit_drift_cli_json_matches_canonical_envelope() {
     let dir = tempfile::tempdir().unwrap();
     common::populate_card_with_drift(dir.path());

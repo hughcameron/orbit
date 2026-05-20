@@ -111,6 +111,30 @@ Cards describe capabilities, not work items. When a capability evolves, update t
 
 The relationship between cards and work is mediated by specs: a spec references a card and prescribes how to implement or extend the capability. Multiple specs may reference the same card over time as the capability matures.
 
+### Parking a card
+
+Some cards sit at `maturity: planned` with empty `specs:` not because they're undesigned, but because you've deliberately decided to hold them — waiting on a second use-case to confirm the pattern, on a related cluster to crystallise, or on a calendar date. The conformance audit can't tell the difference between *undesigned* and *deliberately held*, so by default it nags about both.
+
+To declare a card parked, add a `park:` block:
+
+```yaml
+maturity: planned
+park:
+  reason: awaiting third use-case forcing
+  until: N=2 evidence
+```
+
+Both subfields are free-form prose:
+
+- **`reason:`** — why the card is held. One short sentence. Examples: `"awaiting third use-case forcing"`, `"blocked on upstream choice 0021"`, `"observation window after substrate-engagement rally closes"`.
+- **`until:`** — the unhold condition. Free-form too. Examples: `"N=2 evidence"`, `"cluster synthesis on cards 0037 + 0038 + 0042"`, `"2026-08-01"`, `"hydrofoil consumer hits the pattern"`.
+
+When the card is parked, conformance's card-state finding family skips it silently — no `ready_for_design` finding, no envelope trace. The carve-out applies only to that family; aggregated drift, topology drift, memo staleness, and plugin-canonical-file findings continue to fire normally if the card or its surroundings warrant them.
+
+**To unpark**, remove the `park:` block from the card YAML. The card returns to the audit's view on the next conformance run.
+
+**v1 limitation.** `until:` is free-form text only — there is no automated unpark. The audit will not fire when a date passes or when a referenced spec closes. Treat parking as a quarterly-or-so review discipline: scan parked cards, decide whether the hold still applies, and remove the block when it doesn't. Structured triggers may land in a future spec; today, the human is the parser.
+
 ### What Gets Closed
 
 **Specs** get completed — `progress.md` marks all ACs done, `/orb:review-pr` verifies the work, and the PR merges. That's the closure unit. The card persists because the capability persists.

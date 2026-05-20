@@ -258,6 +258,71 @@ pub fn populate_conformance_clean_fixture(root: &Path) {
     std::fs::write(orbit_dir.join("STYLE.md"), style).unwrap();
 }
 
+/// Populate `<root>/.orbit/` with the canonical METHOD.md + STYLE.md,
+/// one parked card, and one planned-empty non-park card. Used by the
+/// park-signal parity test (spec 2026-05-20-conformance-park-signal ac-02):
+/// the parked card should produce no card-state finding, only the
+/// non-park card fires.
+pub fn populate_conformance_park_signal_fixture(root: &Path) {
+    populate_conformance_clean_fixture(root);
+    let cards_dir = root.join(".orbit/cards");
+    std::fs::create_dir_all(&cards_dir).unwrap();
+    // Parked card — produces no finding under ac-02 carve-out.
+    let parked = "id: 0099-parked\n\
+feature: parked feature\n\
+goal: parked goal\n\
+maturity: planned\n\
+park:\n  \
+  reason: awaiting third use-case forcing\n  \
+  until: N=2 evidence\n\
+scenarios: []\n\
+specs: []\n\
+relations: []\n\
+references: []\n\
+notes: []\n";
+    std::fs::write(cards_dir.join("0099-parked.yaml"), parked).unwrap();
+    // Non-parked planned-empty card — fires the ready_for_design finding.
+    let active = "id: 0098-planned\n\
+feature: active feature\n\
+goal: active goal\n\
+maturity: planned\n\
+scenarios: []\n\
+specs: []\n\
+relations: []\n\
+references: []\n\
+notes: []\n";
+    std::fs::write(cards_dir.join("0098-planned.yaml"), active).unwrap();
+}
+
+/// Expected canonical envelope for `audit conformance` against the
+/// park-signal fixture: exactly one card-state finding for the
+/// non-parked card, zero envelope trace for the parked card.
+///
+/// Derived via `execute(...)` against the live fixture so the expected
+/// reference tracks the library's serialisation contract — CLI / MCP
+/// parity is "both surfaces produce what core would produce."
+pub fn expected_envelope_for_audit_conformance_park_signal_fixture(root: &Path) -> String {
+    use orbit_state_core::{execute, AuditConformanceArgs, VerbRequest, VerbResponse};
+    use orbit_state_core::layout::OrbitLayout;
+    let layout = OrbitLayout::at_orbit_dir(&root.join(".orbit"));
+    let request = VerbRequest::AuditConformance(AuditConformanceArgs::default());
+    let response = execute(&layout, &request).expect("audit conformance must succeed on fixture");
+    match response {
+        VerbResponse::AuditConformance(ref r) => {
+            assert_eq!(
+                r.findings.len(),
+                1,
+                "park-signal fixture: expected exactly 1 finding (the non-park card), got {}",
+                r.findings.len(),
+            );
+            assert_eq!(r.findings[0].subject, "0098-planned");
+            assert_eq!(r.findings[0].state, "ready_for_design");
+        }
+        _ => panic!("unexpected response shape"),
+    }
+    orbit_state_core::envelope_ok_string(&response).expect("infallible")
+}
+
 /// Expected canonical envelope for `audit conformance` against the
 /// conformance-clean fixture (per `populate_conformance_clean_fixture`):
 /// empty findings, drift clean, topology unconfigured, pin unpinned.
