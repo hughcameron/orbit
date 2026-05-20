@@ -25,7 +25,7 @@ acceptance_criteria:
 - id: ac-04
   description: /orb:setup writes STYLE.md to .orbit/STYLE.md in target projects following the same seed semantics as METHOD.md per plugins/orb/skills/setup/SKILL.md §6b — greenfield write when absent; brownfield byte-compare against canonical and prompt the operator before overwrite when present and divergent. No additional "STYLE.md is a behavioural surface" announcement is added; STYLE.md seeds with the same operator UX as METHOD.md. Implementation extends §6b's skill prose to cover STYLE.md as a parallel canonical-file entry — no new Rust verb is introduced.
   gate: true
-  checked: false
+  checked: true
   verification: 'Fixture test on the /orb:setup skill prose: (a) greenfield (no .orbit/STYLE.md) — setup writes canonical bytes verbatim. (b) Brownfield byte-equal — setup detects equality and proceeds without prompt. (c) Brownfield drift — setup prompts before overwrite, matching METHOD.md §6b. (d) Grep plugins/orb/skills/setup/SKILL.md for the STYLE.md entry alongside METHOD.md in the §6b copy step.'
 - id: ac-05
   description: orbit audit conformance's plugin-canonical-file finding family extends to byte-compare .orbit/STYLE.md against the include_str! canonical (parallel to the METHOD.md byte-compare already shipped). New drift entries surface alongside METHOD.md drift. Suppressed by pin_behind / pin_ahead per existing single-finding-dominance semantics.
@@ -70,7 +70,7 @@ acceptance_criteria:
 - id: ac-12
   description: /orb:setup ensures CLAUDE.md @-imports STYLE.md, parallel to the §6c step that ensures `@.orbit/METHOD.md` is present. When CLAUDE.md exists and does not contain `@.orbit/STYLE.md`, /orb:setup appends the import in a load-bearing position; when CLAUDE.md is absent, /orb:setup creates it with the import (matching the METHOD.md flow). Re-runs are idempotent — the import is added once. Without this step, the seeded STYLE.md sits on disk but does not load into agent sessions, and the spec's goal of "prose discipline reaches every consumer project" fails silently.
   gate: true
-  checked: false
+  checked: true
   verification: 'Grep plugins/orb/skills/setup/SKILL.md for the new STYLE.md @-import step in or near §6c. Fixture test: (a) CLAUDE.md missing `@.orbit/STYLE.md` import → /orb:setup appends it. (b) CLAUDE.md with the import already present → /orb:setup leaves it alone (idempotent). (c) CLAUDE.md absent → /orb:setup creates it with the import.'
   ac_type: doc
 memories_considered:

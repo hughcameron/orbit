@@ -1,17 +1,23 @@
 #!/usr/bin/env bash
 # test-setup-method.sh — exercise plugins/orb/scripts/setup-method.sh end-to-end.
 #
-# Three scenarios per spec 2026-05-09-orbit-method-md ac-07:
+# Scenarios per spec 2026-05-09-orbit-method-md ac-07 (extended for STYLE.md
+# per spec 2026-05-20-style-md-plugin-shipping ac-04 + ac-12):
 #   (1) fresh project (non-interactive)
 #       t1: .orbit/METHOD.md byte-equal canonical on first run
 #       t2: CLAUDE.md contains exactly one @.orbit/METHOD.md line
 #       t3: re-run is idempotent — no duplicates, no METHOD.md drift, no prompt
+#       t4: .orbit/STYLE.md byte-equal canonical on first run
+#       t5: CLAUDE.md contains exactly one @.orbit/STYLE.md line
+#       t6: re-run is idempotent for STYLE.md (no duplicates, no drift)
 #   (2) drift-prompt firing (assertion-only)
 #       t1: modifying .orbit/METHOD.md then re-running fires the drift prompt
+#       t2: modifying .orbit/STYLE.md then re-running fires the STYLE.md drift prompt
 #   (3) legacy migration (scripted answers)
-#       t1: --answer-legacy y removes legacy blocks, creates METHOD.md, adds @-import
-#       t2: --answer-legacy n leaves blocks intact, no METHOD.md, no @-import,
-#           recovery message on stderr
+#       t1: --answer-legacy y removes legacy blocks, creates METHOD.md + STYLE.md,
+#           adds both @-imports
+#       t2: --answer-legacy n leaves blocks intact, no METHOD.md, no STYLE.md,
+#           no @-imports, recovery message on stderr
 
 set -euo pipefail
 
@@ -19,6 +25,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../../../.." && pwd)"
 SETUP="$REPO_ROOT/plugins/orb/scripts/setup-method.sh"
 CANONICAL="$REPO_ROOT/plugins/orb/skills/setup/METHOD.md"
+CANONICAL_STYLE="$REPO_ROOT/plugins/orb/skills/setup/STYLE.md"
 
 if [[ ! -x "$SETUP" ]]; then
   echo "FAIL: setup-method.sh not found or not executable at $SETUP" >&2
@@ -26,6 +33,10 @@ if [[ ! -x "$SETUP" ]]; then
 fi
 if [[ ! -f "$CANONICAL" ]]; then
   echo "FAIL: canonical METHOD.md not found at $CANONICAL" >&2
+  exit 1
+fi
+if [[ ! -f "$CANONICAL_STYLE" ]]; then
+  echo "FAIL: canonical STYLE.md not found at $CANONICAL_STYLE" >&2
   exit 1
 fi
 
@@ -68,6 +79,32 @@ else
   exit 1
 fi
 
+# t4
+if cmp -s "$CANONICAL_STYLE" "$TMP1/.orbit/STYLE.md"; then
+  echo "  PASS t4: .orbit/STYLE.md byte-equal canonical"
+else
+  echo "  FAIL t4: .orbit/STYLE.md does not match canonical" >&2
+  exit 1
+fi
+
+# t5
+style_import_count=$(grep -Fxc '@.orbit/STYLE.md' "$TMP1/CLAUDE.md" || true)
+if [[ "$style_import_count" == "1" ]]; then
+  echo "  PASS t5: exactly one @.orbit/STYLE.md import line"
+else
+  echo "  FAIL t5: expected 1 STYLE.md @-import line, got $style_import_count" >&2
+  exit 1
+fi
+
+# t6 — re-run idempotent for STYLE.md
+style_import_count_after=$(grep -Fxc '@.orbit/STYLE.md' "$TMP1/CLAUDE.md" || true)
+if [[ "$style_import_count_after" == "1" ]] && cmp -s "$CANONICAL_STYLE" "$TMP1/.orbit/STYLE.md"; then
+  echo "  PASS t6: re-run idempotent for STYLE.md (no duplicate import, no drift)"
+else
+  echo "  FAIL t6: re-run produced STYLE.md drift (imports=$style_import_count_after)" >&2
+  exit 1
+fi
+
 # ----------------------------------------------------------------------
 # Scenario 2: drift-prompt firing (assertion-only, no interaction)
 # ----------------------------------------------------------------------
@@ -81,22 +118,44 @@ touch "$TMP2/CLAUDE.md"
 # Modify the project's METHOD.md so re-run detects drift.
 echo "<!-- locally edited -->" >> "$TMP2/.orbit/METHOD.md"
 
-# Drive the script with --answer-drift n to pick up the prompt path without
-# blocking on stdin. Capture stdout to confirm the drift line appears.
-out=$("$SETUP" --project-root "$TMP2" --canonical "$CANONICAL" --answer-drift n 2>&1)
-if echo "$out" | grep -q "differs from the canonical"; then
+# Drive the script with --answer-method-drift n to pick up the prompt path
+# without blocking on stdin. Also decline the STYLE.md prompt (just in case
+# the seed wrote different bytes), so neither file gets overwritten.
+out=$("$SETUP" --project-root "$TMP2" --canonical "$CANONICAL" \
+  --answer-method-drift n --answer-style-drift n 2>&1)
+if echo "$out" | grep -q "METHOD.md differs from the canonical"; then
   echo "  PASS t1: drift prompt fires when METHOD.md modified"
 else
-  echo "  FAIL t1: drift prompt did NOT fire (expected 'differs from the canonical')" >&2
+  echo "  FAIL t1: METHOD.md drift prompt did NOT fire" >&2
   echo "$out" >&2
   exit 1
 fi
 
-# Confirm decline kept the local edit.
+# Confirm decline kept the local edit on METHOD.md.
 if grep -q "locally edited" "$TMP2/.orbit/METHOD.md"; then
-  echo "  PASS t1.aux: decline kept local edits"
+  echo "  PASS t1.aux: decline kept local METHOD.md edits"
 else
   echo "  FAIL t1.aux: decline silently overwrote local METHOD.md" >&2
+  exit 1
+fi
+
+# Now modify STYLE.md and re-run to verify the STYLE.md drift prompt fires.
+echo "<!-- locally edited -->" >> "$TMP2/.orbit/STYLE.md"
+out=$("$SETUP" --project-root "$TMP2" --canonical "$CANONICAL" \
+  --answer-method-drift n --answer-style-drift n 2>&1)
+if echo "$out" | grep -q "STYLE.md differs from the canonical"; then
+  echo "  PASS t2: drift prompt fires when STYLE.md modified"
+else
+  echo "  FAIL t2: STYLE.md drift prompt did NOT fire" >&2
+  echo "$out" >&2
+  exit 1
+fi
+
+# Confirm decline kept the local edit on STYLE.md.
+if grep -q "locally edited" "$TMP2/.orbit/STYLE.md"; then
+  echo "  PASS t2.aux: decline kept local STYLE.md edits"
+else
+  echo "  FAIL t2.aux: decline silently overwrote local STYLE.md" >&2
   exit 1
 fi
 
@@ -156,12 +215,29 @@ else
   exit 1
 fi
 
-# t1: @-import added
+# t1: METHOD.md @-import added
 import_count=$(grep -Fxc '@.orbit/METHOD.md' "$TMP3a/CLAUDE.md" || true)
 if [[ "$import_count" == "1" ]]; then
-  echo "  PASS t1.import: @.orbit/METHOD.md present"
+  echo "  PASS t1.method-import: @.orbit/METHOD.md present"
 else
-  echo "  FAIL t1.import: expected 1 @-import line, got $import_count" >&2
+  echo "  FAIL t1.method-import: expected 1 @-import line, got $import_count" >&2
+  exit 1
+fi
+
+# t1: STYLE.md created
+if cmp -s "$CANONICAL_STYLE" "$TMP3a/.orbit/STYLE.md"; then
+  echo "  PASS t1.style: .orbit/STYLE.md created byte-equal canonical"
+else
+  echo "  FAIL t1.style: .orbit/STYLE.md missing or does not match canonical" >&2
+  exit 1
+fi
+
+# t1: STYLE.md @-import added
+style_import_count=$(grep -Fxc '@.orbit/STYLE.md' "$TMP3a/CLAUDE.md" || true)
+if [[ "$style_import_count" == "1" ]]; then
+  echo "  PASS t1.style-import: @.orbit/STYLE.md present"
+else
+  echo "  FAIL t1.style-import: expected 1 STYLE.md @-import line, got $style_import_count" >&2
   exit 1
 fi
 
@@ -220,9 +296,19 @@ if [[ -f "$TMP3b/.orbit/METHOD.md" ]]; then
   exit 1
 fi
 
-# t2: no @-import added
+# t2: no STYLE.md created
+if [[ -f "$TMP3b/.orbit/STYLE.md" ]]; then
+  echo "  FAIL t2: .orbit/STYLE.md was created despite refuse" >&2
+  exit 1
+fi
+
+# t2: no @-imports added
 if grep -Fxq '@.orbit/METHOD.md' "$TMP3b/CLAUDE.md"; then
   echo "  FAIL t2: @.orbit/METHOD.md was added despite refuse" >&2
+  exit 1
+fi
+if grep -Fxq '@.orbit/STYLE.md' "$TMP3b/CLAUDE.md"; then
+  echo "  FAIL t2: @.orbit/STYLE.md was added despite refuse" >&2
   exit 1
 fi
 

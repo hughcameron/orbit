@@ -146,9 +146,9 @@ The orbit/ layout is already in place. The filesystem needs no changes:
 
 **Still run §6's CLAUDE.md check** — an author on a newer plugin version may have an older snippet that lacks the vocabulary glossary. §6 detects this and offers a targeted migration. If no migration is needed (or the author declines), tell the author setup is already complete and offer `/orb:card`.
 
-### 6. METHOD.md: Copy and Import
+### 6. Canonical files (METHOD.md + STYLE.md): Copy and Import
 
-The canonical orbit method overview lives at `plugins/orb/skills/setup/METHOD.md` (in the plugin source). Setup copies it into the project and ensures CLAUDE.md @-imports it. METHOD.md is the single source of truth for vocabulary, pipeline, substrate rules, four pillars, and the BLUF prose contract — never inline that content into CLAUDE.md.
+The canonical orbit substrate files live in the plugin source: `plugins/orb/skills/setup/METHOD.md` (workflow overview — vocabulary, pipeline, substrate rules, four pillars) and `plugins/orb/skills/setup/STYLE.md` (agent prose discipline — the contract loaded into every author-facing response). Setup copies both into the project and ensures CLAUDE.md @-imports them. Never inline either file's content into CLAUDE.md.
 
 The operations in 6a/6b/6c below are also implemented as a single shell script for one-step execution and testing:
 
@@ -156,9 +156,9 @@ The operations in 6a/6b/6c below are also implemented as a single shell script f
 plugins/orb/scripts/setup-method.sh --project-root <project>
 ```
 
-The script performs the same steps in the same order with the same atomic semantics. Use it directly for non-interactive runs (the script supports `--answer-legacy y|n` and `--answer-drift y|n` for scripted contexts).
+The script performs the same steps in the same order with the same atomic semantics. Use it directly for non-interactive runs (the script supports `--answer-legacy y|n`, `--answer-method-drift y|n`, and `--answer-style-drift y|n` for scripted contexts; `--answer-drift` is preserved as an alias for `--answer-method-drift`).
 
-Run the steps below **in order**. Legacy detection runs before any file is written so a refused migration leaves no orphan METHOD.md.
+Run the steps below **in order**. Legacy detection runs before any file is written so a refused migration leaves no orphan canonical files.
 
 **6a. Legacy-CLAUDE.md detection (atomic).** Scan `CLAUDE.md` for any of these legacy markers anywhere in the file:
 
@@ -170,12 +170,12 @@ If any are present, prompt:
 
 ```
 orbit: CLAUDE.md contains legacy workflow blocks (## Workflow (orbit) / ## Orbit vocabulary / ## Current Sprint).
-Migration removes them and adds @.orbit/METHOD.md as the single source of truth.
+Migration removes them and adds @.orbit/METHOD.md + @.orbit/STYLE.md as the single sources of truth.
 Migrate now? (y/N)
 ```
 
 - **`y`:** continue to 6b. The legacy blocks will be removed in 6c's transaction.
-- **anything else (atomic refuse):** REFUSE the entire setup operation. Do NOT copy METHOD.md, do NOT add any @-import. Print:
+- **anything else (atomic refuse):** REFUSE the entire setup operation. Do NOT copy METHOD.md or STYLE.md, do NOT add any @-imports. Print:
   ```
   orbit: setup aborted. Re-run /orb:setup once you have removed the legacy blocks, or accept the migration prompt.
   ```
@@ -183,23 +183,29 @@ Migrate now? (y/N)
 
 If no legacy markers are present, fall through to 6b.
 
-**6b. Copy METHOD.md.** Copy `plugins/orb/skills/setup/METHOD.md` (from the plugin) to `.orbit/METHOD.md` in the project.
+**6b. Copy canonical files.** Copy `plugins/orb/skills/setup/METHOD.md` to `.orbit/METHOD.md` and `plugins/orb/skills/setup/STYLE.md` to `.orbit/STYLE.md` in the project. The two files follow the same seed semantics — handled independently.
 
-If `.orbit/METHOD.md` already exists, compare it to the canonical via **byte-for-byte equality of the entire file including the "How to update" line** (no whitespace tolerance, no hash-only comparison). If they match, no-op. If they differ, prompt:
+For each canonical file, if the target already exists, compare it to the canonical via **byte-for-byte equality of the entire file** (no whitespace tolerance, no hash-only comparison). If they match, no-op. If they differ, prompt:
 
 ```
-orbit: .orbit/METHOD.md differs from the canonical (the plugin has updated, or the file has been edited locally).
+orbit: <target path> differs from the canonical (the plugin has updated, or the file has been edited locally).
 Overwrite with canonical? (y/N)
 ```
 
 - **`y`:** overwrite.
 - **anything else:** keep the local copy (the prompt is informational; setup does not refuse on decline).
 
-**6c. Ensure CLAUDE.md @-import.** If CLAUDE.md does not contain the line `@.orbit/METHOD.md` anywhere, append it on its own line at end-of-file with a single blank line above. Match the existing `@.orbit/STYLE.md` shape — **no marker heading**.
+The prompt fires per-file — operators can accept the canonical METHOD.md while keeping a customised STYLE.md, or vice versa.
 
-If 6a fired the migration prompt and the author accepted, this step also removes the legacy blocks (`## Workflow (orbit)`, `## Orbit vocabulary`, `## Current Sprint` and their bodies) in the same transaction as adding the @-import. Either both edits land or neither does.
+**6c. Ensure CLAUDE.md @-imports.** If CLAUDE.md does not contain the line `@.orbit/METHOD.md` anywhere, append it on its own line at end-of-file with a single blank line above. Same for `@.orbit/STYLE.md`: append `@.orbit/STYLE.md` on its own line if absent. No marker heading on either.
 
-If `@.orbit/METHOD.md` is already present, no-op (idempotent).
+Without these imports, the seeded `.orbit/METHOD.md` and `.orbit/STYLE.md` sit on disk but do not load into Claude Code sessions — the agent reads them only through the @-import. This is the load-bearing wire.
+
+If 6a fired the migration prompt and the author accepted, this step also removes the legacy blocks (`## Workflow (orbit)`, `## Orbit vocabulary`, `## Current Sprint` and their bodies) in the same transaction as adding both @-imports. Either all edits land or none do.
+
+If `@.orbit/METHOD.md` and `@.orbit/STYLE.md` are already present, no-op (idempotent per-file).
+
+**Personalising prose discipline.** Operators who want to tailor agent voice for their project should not edit `.orbit/STYLE.md` directly (which causes conformance drift). Instead, add a `## Persona` section to the project's CLAUDE.md describing the agent's stance and disposition (project goals, default lean, when to halt, research posture). STYLE.md stays canonical across projects; persona is the per-project surface. See the orbit repo's own CLAUDE.md for the pattern.
 
 **6d. Topology capability scaffolding.** Scaffold the `.orbit/topology/` substrate folder and write the self-describing seed entries. The byte-compare-and-prompt voice of §6b applies — the prompt fires when the substrate is absent or empty; idempotent on a populated repo. Per choice 0025 (`topology-substrate-folder`).
 
@@ -237,7 +243,7 @@ orbit audit conformance --json
 
 The verb returns a **structured findings envelope** ({severity, subsystem, subject, state, evidence, remediation} per finding) covering three v1 finding families plus aggregated `audit.drift` + `audit.topology` results:
 
-- **plugin-canonical-file drift** — `.orbit/METHOD.md` byte-compared against the canonical bytes embedded in the orbit-state binary; firing remediation = `orbit setup`.
+- **plugin-canonical-file drift** — `.orbit/METHOD.md` and `.orbit/STYLE.md` byte-compared against the canonical bytes embedded in the orbit-state binary; firing remediation = `orbit setup`.
 - **card-state** — cards at `maturity: planned` with empty specs (ready for design); firing remediation = `/orb:design <id>`.
 - **memo staleness** — memos undistilled > 7 days; firing remediation = `/orb:distill <memo-path>`.
 - **plugin-version pin** — per-repo pin in `.orbit/config.yaml` (`plugin_version: "0.4.20"`); `pin_behind` / `pin_ahead` each fire a single dominant finding and suppress per-file findings.
