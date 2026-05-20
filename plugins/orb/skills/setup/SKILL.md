@@ -148,7 +148,7 @@ The orbit/ layout is already in place. The filesystem needs no changes:
 
 ### 6. Canonical files (METHOD.md + STYLE.md): Copy and Import
 
-The canonical orbit substrate files live in the plugin source: `plugins/orb/skills/setup/METHOD.md` (workflow overview — vocabulary, pipeline, substrate rules, four pillars) and `plugins/orb/skills/setup/STYLE.md` (agent prose discipline — the contract loaded into every author-facing response). Setup copies both into the project and ensures CLAUDE.md @-imports them. Never inline either file's content into CLAUDE.md.
+The canonical orbit substrate files live in the plugin source: `plugins/orb/skills/setup/METHOD.md` (workflow overview — vocabulary, pipeline, substrate rules, four pillars) and `plugins/orb/skills/setup/STYLE.md` (agent prose discipline — the contract loaded into every author-facing response). Card 0026 (`.orbit/cards/0026-agent-prose-discipline.yaml`) owns the prose discipline; STYLE.md is its canonical surface. Setup copies both into the project and ensures CLAUDE.md @-imports them. Never inline either file's content into CLAUDE.md.
 
 The operations in 6a/6b/6c below are also implemented as a single shell script for one-step execution and testing:
 
