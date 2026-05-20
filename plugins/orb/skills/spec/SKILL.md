@@ -90,13 +90,32 @@ metadata:
   interview_ref: ".orbit/specs/YYYY-MM-DD-<topic>/interview.md"  # or design-note.md for closed-space inputs
 ```
 
-### 4. Save the Spec
+### 4. Record memories considered
+
+Lift the design-time memory reconciliations into the spec's `memories_considered` field. The design session ran `orbit memory match <card-slug>` and captured a disposition for each matching memory under **Implementation Notes**. Each entry becomes:
+
+```yaml
+memories_considered:
+  - key: drive-autonomy-default-to-action
+    disposition: adopted                # adopted | partially-adopted | not-applicable
+    reason: "wired the close-time gate as the memory recommends"
+  - key: prime-relevance-overlap-heuristic
+    disposition: partially-adopted
+    reason: "reused the label-overlap idea; rebuilt the ranker for token + label weighting"
+  - key: state-shape-vs-mechanism
+    disposition: not-applicable
+    reason: "this spec touches enforcement, not memory authorship"
+```
+
+Per spec 2026-05-19-memory-gates-decisions ac-03 (D3a): `memories_considered` is a top-level `Spec` field — uniform across the spec, not per-AC. `spec.close` reads this field at close time and refuses closure for any matching memory whose key is absent. If the design session found no matching memories, omit the field; it is `skip_serializing_if = "Vec::is_empty"` so absent specs stay byte-identical on disk.
+
+### 5. Save the Spec
 
 Save to: `.orbit/specs/YYYY-MM-DD-<topic-slug>/spec.yaml`
 
 If the interview file exists in a spec directory, save alongside it.
 
-### 5. Update the Card's Specs Array
+### 6. Update the Card's Specs Array
 
 The spec references a card (from the interview's or design note's `Card:` line). After saving `spec.yaml`, append its path to the card's `specs` array so the work trail stays complete.
 

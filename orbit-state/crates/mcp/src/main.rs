@@ -313,10 +313,12 @@ fn tool_descriptors() -> Vec<Value> {
                 "type": "object",
                 "required": ["key", "body"],
                 "properties": {
-                    "key":    { "type": "string" },
-                    "body":   { "type": "string" },
-                    "labels": { "type": "array", "items": { "type": "string" } },
-                    "timestamp": { "type": "string" }
+                    "key":       { "type": "string" },
+                    "body":      { "type": "string" },
+                    "labels":    { "type": "array", "items": { "type": "string" } },
+                    "timestamp": { "type": "string" },
+                    "no_nudge":  { "type": "boolean" },
+                    "no_warn":   { "type": "boolean" }
                 },
                 "additionalProperties": false
             }
@@ -333,6 +335,20 @@ fn tool_descriptors() -> Vec<Value> {
                 "type": "object",
                 "required": ["query"],
                 "properties": { "query": { "type": "string" } },
+                "additionalProperties": false
+            }
+        }),
+        json!({
+            "name": "memory.match",
+            "description": "Surface memories relevant to a decision-moment topic. Returns ranked matches (token + label overlap); distinct from the operator-keyword memory.search.",
+            "inputSchema": {
+                "type": "object",
+                "required": ["topic"],
+                "properties": {
+                    "topic":  { "type": "string" },
+                    "labels": { "type": "array", "items": { "type": "string" } },
+                    "limit":  { "type": "integer", "minimum": 1 }
+                },
                 "additionalProperties": false
             }
         }),

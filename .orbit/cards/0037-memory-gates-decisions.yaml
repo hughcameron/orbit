@@ -36,7 +36,8 @@ scenarios:
   when: the agent is mid-design and momentum favours a new workaround
   then: the instruction loses to recency bias and sunk-cost momentum — enforcement must combine a callable surface (inline memory match) with structural gates (design-time surfacing, spec.close block), not behavioural reminders alone
   gate: false
-specs: []
+specs:
+- .orbit/specs/2026-05-19-memory-gates-decisions/spec.yaml
 relations:
 - card: 0023-memory-loop
   type: depends-on

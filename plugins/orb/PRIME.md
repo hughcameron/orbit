@@ -23,8 +23,11 @@ ACs live on the spec, not the task. Use `orbit spec show <spec-id>` to read them
 
 ```bash
 orbit memory remember <key> "<body>"   # Persists across sessions (key is a short stable id)
-orbit memory search <keyword>           # Search prior decisions
+orbit memory search <keyword>          # Operator-keyword substring search
+orbit memory match <topic> --label <slug>  # Decision-moment ranked matching — surface memories relevant to the current work
 ```
+
+`memory match` is the decision-moment surface. Lead memory bodies with mechanism ("use X for Y") not state ("Y is hard") — the warning fires at `memory remember` time when the body opens with a state observation. Memories matching active work (above threshold 0.3) must be reconciled in a spec's `memories_considered` field; `spec.close` refuses closure on unreconciled matches unless `--force` is passed.
 
 ## Session Close
 

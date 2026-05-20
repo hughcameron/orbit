@@ -80,6 +80,7 @@ pub fn expected_envelope_for_spec_show_0001() -> String {
             status: SpecStatus::Open,
             labels: vec![],
             acceptance_criteria: vec![],
+            memories_considered: vec![],
         },
     });
     orbit_state_core::envelope_ok_string(&response).expect("infallible")
@@ -450,10 +451,12 @@ pub fn expected_envelope_for_spec_close_force() -> String {
                     ac_type: AcType::Observation,
                 },
             ],
+            memories_considered: vec![],
         },
         cards_updated: vec!["0020-orbit-state".into()],
         forced_unchecked: vec!["ac-02".into()],
         deferrable_open: vec!["ac-03".into()],
+        forced_unreconciled: vec![],
         topology_warnings: vec![],
     });
     envelope_ok_string(&response).expect("infallible")
@@ -563,10 +566,12 @@ pub fn expected_envelope_for_spec_close_only_deferrable() -> String {
                     ac_type: AcType::Observation,
                 },
             ],
+            memories_considered: vec![],
         },
         cards_updated: vec!["0020-orbit-state".into()],
         forced_unchecked: vec![],
         deferrable_open: vec!["ac-02".into()],
+        forced_unreconciled: vec![],
         topology_warnings: vec![],
     });
     envelope_ok_string(&response).expect("infallible")
