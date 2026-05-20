@@ -2,6 +2,20 @@
 
 All notable changes to orbit are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.4.26] - 2026-05-20
+
+Adds the `park:` block to the Card schema so cards deliberately held — waiting on a second use-case, a cluster synthesis, or an upstream decision — can opt out of the conformance audit's `ready_for_design` finding without losing the rationale. `audit.conformance` now silently skips parked cards in the card-state family while continuing to fire on genuinely-undesigned ones. Six cards in this repo dogfooded the mechanism in the same release, cutting the local card-state finding count from 9 to 3.
+
+### Added
+
+- **`park:` field on the Card schema** — new optional block with `reason:` (free-form prose, non-empty at parse time) and `until:` (free-form prose, non-empty). When present, conformance's card-state finding family skips the card silently; other finding families (memo staleness, plugin-canonical drift, aggregated drift / topology) continue to fire normally. `Card::FIELDS` extended; `orbit verify` recognises the new field. Per spec 2026-05-20-conformance-park-signal.
+- **`/orb:card` SKILL.md gains a "Parking a card" section** — when to use the field, shape of `reason:` / `until:`, scope of the carve-out, how to unpark (remove the block), and the v1 limitation (free-form `until:` only — no automated unpark on date or spec-id resolution).
+- **`/orb:setup` SKILL.md §6e gains the parked-card carve-out paragraph** so agents reading conformance findings discover the exclusion from the audit prose itself, cross-linked to `/orb:card`'s authoring side.
+
+### Changed
+
+- **Six cards parked in-repo using the new field**: 0010 / 0011 / 0012 / 0015 (external-execution cluster — awaiting upstream investment decision), 0029-fan-out (awaiting third use-case forcing), 0041-reference-integrity (N=1 hold awaiting second project). Local conformance card-state findings shrink 9 → 3 — only the genuinely-undesigned 0013 / 0014 / 0019 remain in the `ready_for_design` queue.
+
 ## [0.4.25] - 2026-05-20
 
 Clarifies the METHOD.md substrate-rules bullet that previously read as an outright ban on `TaskCreate`. New shape separates `orbit task` (cross-session persistence) from `TaskCreate` (in-session working structure), and drops the superseded `TodoWrite` from the prohibition list.
