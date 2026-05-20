@@ -2,6 +2,14 @@
 
 All notable changes to orbit are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.4.25] - 2026-05-20
+
+Clarifies the METHOD.md substrate-rules bullet that previously read as an outright ban on `TaskCreate`. New shape separates `orbit task` (cross-session persistence) from `TaskCreate` (in-session working structure), and drops the superseded `TodoWrite` from the prohibition list.
+
+### Changed
+
+- **METHOD.md substrate-rules bullet** — rewritten across all three plugin-canonical copies (plugin source, Rust-vendored canonical, project dogfood). `TaskCreate` is now explicitly permitted for in-session task structure; `orbit task` named as the cross-session persistence boundary (must outlast the session, sync via git, or attach to a spec). `TodoWrite` removed entirely — superseded by `TaskCreate`, not a substantive failure mode. Resolves agent friction observed in recent sessions where the harness's `TaskCreate` nudges were refused per the literal rule reading.
+
 ## [0.4.24] - 2026-05-20
 
 Ships STYLE.md as a plugin-canonical file with the same lifecycle as METHOD.md (plugin source → Rust-vendored canonical → `include_str!` → `/orb:setup` writes seed → conformance audit byte-compares). The reworked prose discipline reaches every consumer project on next `/orb:setup`. Drops the BLUF / Decision Brief framing from METHOD.md and the plugin SKILL.md cascade — STYLE.md is now the single canonical source for agent prose discipline. Renames card 0026 (`executive-communication` → `agent-prose-discipline`) and METHOD.md pillar #1 (`Executive-level interaction` → `Author-level interaction`) to retire the "executive" framing.
