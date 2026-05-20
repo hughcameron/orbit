@@ -52,7 +52,7 @@ acceptance_criteria:
 - id: ac-09
   description: 'Plugin SKILL.md cascade. Inventory step: grep `plugins/orb/skills/**/SKILL.md` for "BLUF", "Decision Brief", "0026-executive-communication". Update each hit: replace card slug references with `0026-agent-prose-discipline`, replace "BLUF / Decision Brief contract" framing with a pointer to `.orbit/STYLE.md` and the new framing (prose discipline). Fix adjacent TL;DR-skeleton language and Decision-Brief-shape references in the same pass. Named files in scope: design, review-spec, review-pr, setup SKILL.md. Implementing agent runs the grep and updates anything else surfaced.'
   gate: true
-  checked: false
+  checked: true
   verification: Grep plugins/orb/skills/**/SKILL.md for "BLUF", "Decision Brief", "0026-executive-communication" — zero hits remain. Grep for "0026-agent-prose-discipline" — at least the four named SKILL.md files cite it. Adjacent prose drift fixes recorded as a one-line note per file edited so the cascade scope is auditable post-hoc.
   ac_type: doc
 - id: ac-10

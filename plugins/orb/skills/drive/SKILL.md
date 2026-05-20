@@ -197,11 +197,12 @@ spec 2026-05-19-act-when-authorised (ac-04).
 non-zero to suppress the halt. The hook is reinforcement, not
 substitution — the discipline lives in the skill prose.
 
-**The Decision Brief frame is for closing recommendations to the
-operator, not for in-flight mid-autonomy decisions.** A mid-autonomy
-"three options with a recommendation" is menu-presenting (STYLE.md
-anti-pattern #4) regardless of how reasoned the options are. The
-correct mid-autonomy form is the imperative single action.
+**The prose discipline in `.orbit/STYLE.md` is for closing
+recommendations to the operator, not for in-flight mid-autonomy
+decisions.** A mid-autonomy "three options with a recommendation" is
+menu-presenting (one of the STYLE.md anti-patterns) regardless of how
+reasoned the options are. The correct mid-autonomy form is the
+imperative single action.
 
 ## Stage 1: Review-Spec
 
