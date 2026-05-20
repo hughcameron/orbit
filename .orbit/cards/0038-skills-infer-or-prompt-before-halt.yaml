@@ -26,7 +26,8 @@ scenarios:
   when: the capability is shipped
   then: each affected skill follows the same infer → prompt → halt sequence — implementation lives wherever enforcement is strongest (likely a shared CLI resolver, possibly with thin per-skill wrappers), not where prose interpretation is required
   gate: false
-specs: []
+specs:
+- .orbit/specs/2026-05-19-skills-infer-or-prompt-before-halt/spec.yaml
 relations:
 - card: 0036-session-handover
   type: depends-on

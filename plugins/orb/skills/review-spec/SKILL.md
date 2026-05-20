@@ -32,7 +32,18 @@ A reviewer who watched you build something has confirmation bias. A fresh agent 
 ### 1. Gather the Spec
 
 - If a spec-id is provided via $ARGUMENTS: use it.
-- If not: report `no spec-id provided — review-spec requires a spec-id under the orbit-state substrate` and stop. There is no auto-discovery branch — the caller knows which spec to review.
+- If not: call `orbit --json spec resolve --skill review-spec` and apply
+  the three-step recovery from spec
+  `2026-05-19-skills-infer-or-prompt-before-halt`:
+  - **`outcome=resolved`** → use `data.result.id`; surface
+    `data.result.source` (`bound_card` / `single_open`) in the
+    review's preamble.
+  - **`outcome=prompt`** → present `data.result.candidates[]` as a
+    single AskUserQuestion (one round trip). Each candidate carries
+    `id` + `goal_first_line`.
+  - **Verb exits non-zero with `spec.resolve: unavailable: ...`** →
+    surface the message verbatim. The verb owns the two canonical
+    halt templates; do not paraphrase.
 - Run `orbit --json spec show <spec-id>` to read the spec's `goal`, `cards` (linked capability cards), `labels`, and `acceptance_criteria`.
 - Run `plugins/orb/scripts/orbit-acceptance.sh acs <spec-id>` to enumerate the AC list. The parser emits one tab-separated tuple per AC: `<ac-id>\t<status>\t<description>\t<is_gate>` where `<status>` is `[ ]` or `[x]` and `<is_gate>` is `1` if the AC's `gate` field is true, `0` otherwise.
 - The spec's `goal` and parsed AC list together are the authoritative source for this review. Design intent lives in the goal; supporting context (constraint history, prior decisions, related cards) is reachable via the linked card files (`orbit card show <id>`) and prior memories (`orbit memory search <keyword>`).

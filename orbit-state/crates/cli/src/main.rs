@@ -36,7 +36,8 @@ use orbit_state_core::{
     SessionPrimeResult, SessionSetCardArgs, SessionSetCardResult, SessionStartArgs,
     SessionStartResult, SkillRecordInvocationArgs, SkillRecordInvocationResult,
     SkillRecurrenceArgs, SkillRecurrenceResult, SpecCloseArgs, SpecCloseResult, SpecCreateArgs,
-    SpecCreateResult, SpecListArgs, SpecListResult, SpecNoteArgs, SpecNoteResult, SpecShowArgs,
+    SpecCreateResult, SpecListArgs, SpecListResult, SpecNoteArgs, SpecNoteResult,
+    SpecResolveArgs, SpecResolveResult, SpecShowArgs,
     SpecShowResult, SpecUpdateArgs, SpecUpdateResult, TaskClaimArgs, TaskDoneArgs,
     TaskEventResult, TaskListArgs, TaskListResult, TaskOpenArgs, TaskOpenResult, TaskReadyArgs,
     TaskShowArgs, TaskShowResult, TaskUpdateArgs, VerbRequest, VerbResponse,
@@ -417,6 +418,26 @@ enum SpecAction {
     Show {
         /// Spec identifier (e.g. `2026-05-07-orbit-state-v0.1` or `0001`).
         id: String,
+    },
+    /// Resolve the spec a skill should act on when no explicit id was
+    /// passed. Implements the three-step recovery (infer → prompt →
+    /// halt) per spec
+    /// `2026-05-19-skills-infer-or-prompt-before-halt`. Returns
+    /// `outcome=resolved` (with `id` + `source`), `outcome=prompt`
+    /// (with `candidates[]`), or exits non-zero with the canonical D5
+    /// halt message under `spec.resolve: unavailable: ...`.
+    Resolve {
+        /// Calling skill name (e.g. `implement`, `review-pr`). Surfaces
+        /// in the halt-message template so the user sees which skill
+        /// triggered the halt.
+        #[arg(long)]
+        skill: Option<String>,
+        /// Override the card binding. When set, the resolver scopes
+        /// inference to this card slug instead of reading
+        /// `.orbit/.session-card`. Slug, padded NNNN, or bare unpadded
+        /// number all work (same shape as `card.show`).
+        #[arg(long)]
+        card: Option<String>,
     },
     /// Append a timestamped note to a spec.
     Note {
@@ -854,6 +875,12 @@ fn build_request(layout: &OrbitLayout, command: &Command) -> Result<VerbRequest,
                 status: status.clone(),
             }),
             SpecAction::Show { id } => VerbRequest::SpecShow(SpecShowArgs { id: id.clone() }),
+            SpecAction::Resolve { skill, card } => {
+                VerbRequest::SpecResolve(SpecResolveArgs {
+                    skill: skill.clone(),
+                    card: card.clone(),
+                })
+            }
             SpecAction::Note {
                 id,
                 body,
@@ -1167,6 +1194,7 @@ fn render_human(response: &VerbResponse) {
     match response {
         VerbResponse::SpecList(result) => render_spec_list(result),
         VerbResponse::SpecShow(result) => render_spec_show(result),
+        VerbResponse::SpecResolve(result) => render_spec_resolve(result),
         VerbResponse::SpecNote(result) => render_spec_note(result),
         VerbResponse::SpecCreate(result) => render_spec_create(result),
         VerbResponse::SpecUpdate(result) => render_spec_update(result),
@@ -1731,6 +1759,21 @@ fn render_spec_show(result: &SpecShowResult) {
             let check = if ac.checked { "x" } else { " " };
             let gate = if ac.gate { " [gate]" } else { "" };
             println!("  [{check}] {}{gate}: {}", ac.id, ac.description);
+        }
+    }
+}
+
+fn render_spec_resolve(result: &SpecResolveResult) {
+    match result {
+        SpecResolveResult::Resolved { id, source } => {
+            println!("resolved: {id}");
+            println!("source:   {source}");
+        }
+        SpecResolveResult::Prompt { candidates, source } => {
+            println!("prompt:   {} open spec(s) — source: {source}", candidates.len());
+            for c in candidates {
+                println!("  {}\t{}", c.id, c.goal_first_line);
+            }
         }
     }
 }

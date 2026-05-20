@@ -55,25 +55,35 @@ automatically (see "Input contract" below).
 ## Input contract
 
 The skill operates on exactly one open spec per session. Resolution
-proceeds in three branches:
+follows the canonical three-step recovery (infer → prompt → halt) from
+spec `2026-05-19-skills-infer-or-prompt-before-halt`, owned by the
+substrate verb `orbit spec resolve`:
 
 1. **Argument provided** — `/orb:implement <spec-id>`. Use it directly.
    The skill calls `orbit spec show <spec-id>` to validate; if the spec
    does not exist, the call returns `spec.show: not-found: ...` and the
    skill surfaces that error.
 
-2. **No argument** — query for open specs:
+2. **No argument** — call the resolver:
 
    ```bash
-   orbit --json spec list --status open
+   orbit --json spec resolve --skill implement
    ```
 
-   - **Single match** → use it.
-   - **Zero matches** → halt and instruct the agent: "No open spec.
-     Create one with `/orb:spec` or pick an existing spec with `orbit
-     spec list`."
-   - **Multiple matches** → halt and instruct the agent to pass the
-     spec ID explicitly, listing the candidates.
+   - **`outcome=resolved`** → use `data.result.id`. Before doing other
+     work, surface the resolved id and `data.result.source`
+     (`bound_card` / `single_open`) in the response preamble so the
+     reader sees which spec was picked and why.
+   - **`outcome=prompt`** → present `data.result.candidates[]` as a
+     **single** AskUserQuestion choice (one round trip, not a
+     multi-step research expedition). Each candidate carries `id` and
+     `goal_first_line` — use both in the choice label. Use the
+     selected id; if the author cancels, halt with the verb's halt
+     message.
+   - **Verb exits non-zero with `spec.resolve: unavailable: ...`** →
+     surface the message verbatim. The two canonical halt templates
+     (terminal and recoverable) are owned by the verb; do not
+     paraphrase, wrap, or expand.
 
 This skill does not attempt to manage concurrent in-progress specs —
 multi-claim is out of scope. If the agent is juggling multiple specs,

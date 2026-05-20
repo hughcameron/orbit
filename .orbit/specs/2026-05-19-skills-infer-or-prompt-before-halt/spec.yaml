@@ -2,22 +2,22 @@ id: 2026-05-19-skills-infer-or-prompt-before-halt
 goal: every /orb:* skill with a required contextual argument follows the same three-step recovery (infer → prompt → halt) — zero silent halts on recoverable missing-arg cases
 cards:
 - 0038-skills-infer-or-prompt-before-halt
-status: open
+status: closed
 labels: []
 acceptance_criteria:
 - id: ac-01
   description: Skill uses the bound spec when no argument is supplied — it uses the bound spec automatically, surfacing which spec it picked before doing other work
   gate: true
-  checked: false
+  checked: true
 - id: ac-02
   description: Skill prompts with a menu when nothing is bound — the skill lists the open specs as a single choice (one AskUserQuestion), uses the selected spec, and proceeds — without a multi-step research expedition
   gate: true
-  checked: false
+  checked: true
 - id: ac-03
   description: Skill halts only when both fallbacks fail — it halts with a clear "no spec to act on" message — not a silent stop the user can mistake for a broken skill
   gate: true
-  checked: false
+  checked: true
 - id: ac-04
   description: The recovery behaviour is uniform across all affected skills — each affected skill follows the same infer → prompt → halt sequence — implementation lives wherever enforcement is strongest (likely a shared CLI resolver, possibly with thin per-skill wrappers), not where prose interpretation is required
   gate: false
-  checked: false
+  checked: true

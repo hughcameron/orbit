@@ -40,18 +40,32 @@ in three branches:
    the agent to re-invoke with a card path. Otherwise, resume from the
    stage named in the sidecar's `stage` field.
 
-3. **No argument** — query for open specs that have a drive sidecar:
+3. **No argument** — call the canonical resolver and filter for specs
+   that have a drive sidecar:
 
    ```bash
-   orbit --json spec list --status open \
-     | jq -r '.data.result.specs[].id' \
-     | while read -r sid; do [[ -f ".orbit/specs/$sid/drive.yaml" ]] && echo "$sid"; done
+   orbit --json spec resolve --skill drive
    ```
 
-   - **Single match** → resume it.
-   - **Zero matches** → halt with usage.
-   - **Multiple matches** → halt and instruct the agent to pass the
-     spec id explicitly, listing the candidates.
+   Apply the three-step recovery from spec
+   `2026-05-19-skills-infer-or-prompt-before-halt`, with the
+   drive-specific filter layered on the result:
+
+   - **`outcome=resolved`** → check whether
+     `.orbit/specs/<id>/drive.yaml` exists. If yes, resume that drive.
+     If no, halt and instruct the agent to re-invoke with a card path
+     (the resolver returned an open spec without a drive — that's a
+     promote candidate, not a resume target).
+   - **`outcome=prompt`** → narrow `data.result.candidates[]` to those
+     whose `<id>/drive.yaml` exists, then:
+     - **Zero** → halt and instruct the agent to re-invoke with a card
+       path.
+     - **Single** → resume it.
+     - **Multiple** → present the narrowed list as a single
+       AskUserQuestion (each candidate's `id` + `goal_first_line`).
+   - **Verb exits non-zero with `spec.resolve: unavailable: ...`** →
+     surface the message verbatim. (Drive's "halt with usage" prose is
+     subsumed by the verb's canonical halt templates.)
 
 ## Pre-flight (card path branch only)
 
