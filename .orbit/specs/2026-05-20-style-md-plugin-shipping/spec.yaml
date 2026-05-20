@@ -40,13 +40,13 @@ acceptance_criteria:
 - id: ac-07
   description: 'METHOD.md "Prose contract — BLUF / Decision Brief" section dropped from all three copies: plugins/orb/skills/setup/METHOD.md, orbit-state/crates/core/canonical/METHOD.md, and the local .orbit/METHOD.md. Replacement is either a one-line pointer ("Agent-to-author prose follows the discipline in `.orbit/STYLE.md`.") or nothing — implementing agent''s choice. STYLE.md is now the single canonical source for prose discipline.'
   gate: true
-  checked: false
+  checked: true
   verification: Grep all three METHOD.md copies — no occurrence of "BLUF" or "Decision Brief" remains. No "TL;DR — one sentence" skeleton remains. If a pointer line is added, it is byte-identical across all three copies (sync-check enforces this on the plugin-canonical and Rust-vendored copies; local .orbit/METHOD.md follows on next /orb:setup).
   ac_type: doc
 - id: ac-08
   description: 'METHOD.md pillar #1 ("Executive-level interaction") renamed in all three METHOD.md copies. Replacement retires the "executive" framing while preserving the load-bearing observation (author has clear vision but no time to digest each artefact; agents pay the compression cost). Candidate names from interview.md: "Author-level interaction", "Decisive interaction", "Compression contract" — implementing agent picks one. All three METHOD.md copies use the same name.'
   gate: true
-  checked: false
+  checked: true
   verification: 'Grep all three METHOD.md copies — no occurrence of "Executive-level interaction" remains. All three copies use the same replacement pillar name (byte-identical pillar #1 line).'
   ac_type: doc
 - id: ac-09

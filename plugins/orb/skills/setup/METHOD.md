@@ -81,23 +81,13 @@ Discriminate before defaulting to a card. Choosing the wrong artefact is the mos
 
 Every card, skill, and design choice exists to move at least one of these. When work doesn't move a pillar, question whether it belongs.
 
-1. **Executive-level interaction** — the author has clear vision but no time to digest each artefact. Output is concise and actionable; agents pay the compression cost so the author doesn't.
+1. **Author-level interaction** — the author has clear vision but no time to digest each artefact. Output is concise and actionable; agents pay the compression cost so the author doesn't.
 2. **Agent self-learning** — agents save their own memory and grow their skillset across sessions. Discovered facts and recurring procedures accrete into the substrate.
 3. **Agent state-persistence** — durable state keeps agents on track through context loss, session death, and fan-out. The author won't read most of it; its job is to serve the agent.
 4. **Long-running R&D** — agents do a full session's work before checking in. Start/stop kills progress; the author wants depth between check-ins.
 
 These are the load-bearing why-test. Cards that claim a pillar should defend it with a measurable mechanism.
 
-## Prose contract — BLUF / Decision Brief
+## Prose contract
 
-Substantive responses to the author follow the BLUF / Decision Brief shape:
-
-1. **TL;DR** — one sentence opening, stating the answer or recommendation decisively.
-2. **Recommendation** — imperative voice ("Run X on Y"), single concrete action.
-3. **Why** — at most three bullets. Three is the ceiling, not the target.
-4. **Detail** — listed under "Available on request" as a one-line index, not dumped in the body.
-5. **Confidence** — one line (high / medium / low + key assumption) when the recommendation depends on uncertain inputs.
-
-Anti-patterns to cut: lede-burying, hedge-stacking, pre-emptive detail dump, menu-presenting, undefined jargon, apologetic preambles, restating the question.
-
-Tone: British English. Concise, direct, warm but not chatty. Address the reader as a peer who reads fast and decides faster.
+Agent-to-author prose follows the discipline in `.orbit/STYLE.md`.
