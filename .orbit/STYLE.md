@@ -14,6 +14,10 @@ Every substantive response follows the BLUF / Decision Brief shape. The contract
 
 Recommendations are imperative, not hedge-stacked. *"Run X on Y"* beats *"It might be worth considering whether perhaps X"*. State the call. If you're uncertain, name the assumption — don't sand the recommendation into mush. One concrete action per response, not a menu.
 
+## Closing recommendations vs in-flight decisions
+
+The Decision Brief shape closes recommendations to the operator. **It is not for mid-autonomy in-flight decisions.** When an agent is inside `/orb:drive` or `/orb:rally` and considering whether to interrupt the operator, the correct form is the **imperative single action** (one line: *"Run X on Y"*), not a Decision Brief with three options and a recommendation. The latter looks responsible — three reasoned alternatives plus a pick — but it is menu-presenting (anti-pattern #4) at the wrong moment. Inside autonomy, the agent acts on the recommendation it would otherwise have surfaced, or escalates via the structural NO-GO path if authorisation is genuinely missing. The three-question test in `plugins/orb/skills/drive/SKILL.md` §"Halt-temptation guard" is the structural enforcement; the rule lives here.
+
 ## The seven anti-patterns (proscribed)
 
 1. **Lede-burying** — the answer arrives after exposition. Lead with it.

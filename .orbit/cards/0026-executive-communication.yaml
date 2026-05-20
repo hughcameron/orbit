@@ -41,6 +41,11 @@ scenarios:
   when: it is rendered
   then: British English, concise, direct, warm but not chatty — the register is consistent across all of Hugh's agents
   gate: false
+- name: Decision Brief is for closing recommendations, not in-flight decisions
+  given: an agent inside /orb:drive or /orb:rally considering whether to invoke AskUserQuestion mid-autonomy
+  when: it would otherwise present "three options with a recommendation"
+  then: the agent recognises this is the closing-frame at an in-flight moment; the correct mid-autonomy form is the imperative single action, and missing authorisation routes through the structural NO-GO path rather than an interactive prompt — the three-question test in /orb:drive §Halt-temptation guard is the structural enforcement (per spec 2026-05-19-act-when-authorised, card 0042)
+  gate: false
 - name: Variants by response type
   given: a response that is a factual question, status update, decision required, or research output
   when: the shape is selected
