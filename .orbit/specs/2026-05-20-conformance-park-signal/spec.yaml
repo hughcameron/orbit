@@ -2,7 +2,7 @@ id: 2026-05-20-conformance-park-signal
 goal: 'Conformance audit honours an explicit park: block on the Card schema — parked cards (with free-form reason: and until: subfields) are excluded from the ready_for_design card-state finding, while non-park cards continue to fire the existing rule. Mechanism is the explicit-schema-field path per the design session (chosen over a parked maturity value and over a notes-prefix convention). Scope is shape 2 only (deliberate-hold cards); shape 1 (stale field from spec.close not bumping maturity or populating specs[]) is deferred to its own spec. Envelope visibility for parked cards is silent in v1 — no per-card findings, no aggregated count slot — matching the "stop nagging" intent literally. Intent contract in interview.md.'
 cards:
 - 0039-workflow-conformance
-status: open
+status: closed
 labels: []
 acceptance_criteria:
 - id: ac-01
