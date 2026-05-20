@@ -2,7 +2,7 @@ id: 2026-05-20-style-md-plugin-shipping
 goal: 'Ship STYLE.md via the same plugin-canonical pattern METHOD.md uses today (plugin source → Rust-vendored canonical → include_str! → /orb:setup writes seed → conformance audit byte-compares) so the reworked prose discipline reaches every consumer project. Drop METHOD.md''s now-contradictory BLUF / Decision Brief prose section across all three copies. Rename METHOD.md pillar #1 ("Executive-level interaction") to retire the same framing. Update plugin SKILL.md citations of card 0026 + BLUF / Decision Brief in one coherent pass. Full intent contract and decision rationale in interview.md.'
 cards:
 - 0026-agent-prose-discipline
-status: open
+status: closed
 labels: []
 acceptance_criteria:
 - id: ac-01
