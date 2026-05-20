@@ -2,6 +2,24 @@
 
 All notable changes to orbit are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.4.24] - 2026-05-20
+
+Ships STYLE.md as a plugin-canonical file with the same lifecycle as METHOD.md (plugin source → Rust-vendored canonical → `include_str!` → `/orb:setup` writes seed → conformance audit byte-compares). The reworked prose discipline reaches every consumer project on next `/orb:setup`. Drops the BLUF / Decision Brief framing from METHOD.md and the plugin SKILL.md cascade — STYLE.md is now the single canonical source for agent prose discipline. Renames card 0026 (`executive-communication` → `agent-prose-discipline`) and METHOD.md pillar #1 (`Executive-level interaction` → `Author-level interaction`) to retire the "executive" framing.
+
+### Added
+
+- **STYLE.md plugin-canonical pipeline** — `plugins/orb/skills/setup/STYLE.md` (canonical source) vendored to `orbit-state/crates/core/canonical/STYLE.md` (cross-compile docker mount); embedded via `include_str!` in `verbs.rs`'s `CANONICAL_FILES` const alongside METHOD.md. Conformance audit auto-extends (single loop drives both byte-compares); `pin_behind` / `pin_ahead` suppress per-file findings for both. Three new tests: `conformance_byte_drift_fires_when_style_md_differs`, `conformance_missing_fires_when_style_md_absent`, `conformance_vendored_style_md_matches_plugin`.
+- **`/orb:setup` §6 covers STYLE.md** — §6b copies both METHOD.md and STYLE.md with per-file byte-compare-and-prompt-on-drift; §6c appends both `@.orbit/METHOD.md` and `@.orbit/STYLE.md` to CLAUDE.md (idempotent). `setup-method.sh` refactored to function-based per-file copy/import; new `--canonical-style` and `--answer-style-drift` flags (with `--canonical` and `--answer-drift` preserved as aliases). Test script extended: scenario 1 gains t4/t5/t6 (STYLE.md fresh-project), scenario 2 gains t2 (STYLE.md drift), scenario 3a verifies STYLE.md migration; 18/18 assertions pass.
+- **`/orb:release` syncs STYLE.md too** — §5 pre-flight sync step now `cp`s both canonical files to their vendored copies. Sync-check unit tests catch divergence at build time.
+
+### Changed
+
+- **STYLE.md reworked** — from BLUF / Decision Brief skeleton (5-section template with TL;DR / Recommendation / Why / Detail / Confidence labels) to plain prose discipline. Substance rules retained (lead with the answer, imperative voice, no menus, the seven anti-patterns); format prescription dropped. Project-specific stance (persona) now lives in each project's CLAUDE.md as a Persona section.
+- **METHOD.md prose contract section dropped** — "## Prose contract — BLUF / Decision Brief" (BLUF skeleton, anti-patterns, tone) replaced with a one-line pointer to `.orbit/STYLE.md` across all three copies (plugin canonical, Rust-vendored, local). STYLE.md is the single source for prose discipline; METHOD.md carries the workflow overview only.
+- **METHOD.md pillar #1 renamed** — `Executive-level interaction` → `Author-level interaction`. Same body, retired "executive" framing.
+- **Card 0026 renamed** — `executive-communication` → `agent-prose-discipline`. Filename, internal `id`, reference notes all updated; scenarios reworked to match the new prose contract.
+- **Plugin SKILL.md cascade** — `design`, `review-spec`, `review-pr`, `setup` citations of *"BLUF / Decision Brief — see card 0026 (`.orbit/cards/0026-executive-communication.yaml`)"* replaced with *"Agent prose follows the discipline in `.orbit/STYLE.md` (see also card 0026 — `.orbit/cards/0026-agent-prose-discipline.yaml`)"*. `drive`'s halt-temptation guard prose updated likewise (drops the "Decision Brief frame" and "anti-pattern #4" specific references while preserving the semantic).
+
 ## [0.4.23] - 2026-05-20
 
 Ships the agent-side substrate-engagement rally end-to-end — three cards delivered together through `/orb:rally`'s proposal → queued design → consolidated decision gate → consolidated design review → stacked PR shape. Each card targets a distinct lifecycle moment where the agent must engage with persistent substrate: design-time memory matching (0037), skill-entry resolution (0038), and halt-temptation discipline mid-autonomy (0042).
