@@ -5637,6 +5637,7 @@ mod tests {
             status,
             labels: vec![],
             acceptance_criteria: vec![],
+            memories_considered: vec![],
         };
         layout.ensure_spec_dir(id).unwrap();
         std::fs::write(layout.spec_file(id), serialise_yaml(&spec).unwrap()).unwrap();
