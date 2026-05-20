@@ -48,6 +48,7 @@ scenarios:
   gate: false
 specs:
 - .orbit/specs/2026-05-19-workflow-conformance/spec.yaml
+- .orbit/specs/2026-05-20-conformance-park-signal/spec.yaml
 relations:
 - card: 0017-setup-is-bead-aware
   type: depends-on

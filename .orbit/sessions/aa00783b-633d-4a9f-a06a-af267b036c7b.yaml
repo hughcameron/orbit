@@ -1,0 +1,15 @@
+id: aa00783b-633d-4a9f-a06a-af267b036c7b
+started_at: 2026-05-20T06:25:52.4402304Z
+ended_at: 2026-05-20T06:25:52.4402304Z
+distillate: |-
+  The reconcile-only-on-brownfield restriction is the interesting signal here — idempotent setup *can* detect drift (321 entries) but won't offer the fix. That's a workflow gap worth capturing.
+
+  Recommended move: `/orb:memo` here in orbit, titled something like `reconcile-from-idempotent-setup`, capturing:
+  - Idempotent setup surfaces drift findings but routes the agent to a manual `orbit canonicalise --reconcile` handle
+  - Brownfield migration offers reconcile inline; idempotent doesn't
+  - Question: should §6 of setup offer `--reconcile --dry-run` when conformance audit reports drift, regardless of greenfield/brownfield/idempotent branch?
+
+  The Finetype-side cleanup (17 stale memos, the one design-ready card, the drift reconcile) is downstream work for that project's next session — not something to fix from here.
+
+  Want me to draft the memo?
+labels: []

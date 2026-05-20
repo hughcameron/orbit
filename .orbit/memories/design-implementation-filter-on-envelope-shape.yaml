@@ -1,0 +1,5 @@
+key: design-implementation-filter-on-envelope-shape
+body: 'In /orb:design, questions about audit envelope shape (severity enum values, summary-slot vs findings, JSON structure of output) are implementation-shaped, not intent-shaped — even when dressed as ''visibility'' or ''what should the agent see''. They require schema knowledge (existing severity values, envelope keys) and don''t surface user-facing UX trade-offs. Why: in the park-signal design session (2026-05-20), Q1-Q3 settled intent cleanly (scope, mechanism, expressiveness); Q4 asked about envelope visibility — silent vs count vs low-severity finding — and the author called it out as implementation-drift. How to apply: once intent is settled (the user-facing shape on disk is fixed), route remaining decisions about output structure / severity / envelope keys to Implementation Notes with a recommendation rather than asking. The implementation-question filter''s ''schema knowledge'' signal includes the output envelope schema, not just the on-disk substrate schema.'
+timestamp: 2026-05-20T11:38:39.173227284Z
+labels:
+- feedback

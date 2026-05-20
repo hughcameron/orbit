@@ -1,0 +1,14 @@
+id: df79ef5b-310b-49eb-a45c-0cf1aa47bd26
+started_at: 2026-05-20T08:01:05.652578343Z
+ended_at: 2026-05-20T08:01:05.652578343Z
+distillate: |-
+  Highest leverage: **build the `/prioritise` skill** (memo `2026-05-19-prioritise-skill`). The meta-irony is the point — you're asking the question that skill is designed to answer mechanically. It compresses `orbit audit conformance --json` + `orbit session prime` + recent memories into a ranked decision brief at every session start. Pillar 1 leverage that compounds across every future session.
+
+  Runner-ups, ranked:
+
+  1. **Park signal for conformance** (`2026-05-19-conformance-park-signal-gap`). The audit reports 9 cards `ready_for_design`; the memo's triage says only 3 are genuinely undesigned (0013, 0014, 0019), 4 are parked awaiting evidence/synthesis, 2 have stale fields. Until conformance distinguishes them, the operator re-triages by hand every pass — and `/prioritise` would inherit that noise.
+  2. **Reconcile-from-idempotent-setup** (`2026-05-20-reconcile-from-idempotent-setup`). Observed downstream: 321 drift entries in Finetype after idempotent setup refused to offer reconcile. Narrow fix to `/orb:setup` §6, immediate UX win for any aged project.
+  3. **Finish the open BM25 spec** (`2026-05-20-memory-match-bm25`). Already in flight, single-card drive available, closes a measurable improvement to memory match (pillar 2).
+
+  The natural order: ship park-signal first so the conformance envelope is clean, then build `/prioritise` on top of it. Want me to draft the park-signal card, or jump straight to `/prioritise`?
+labels: []

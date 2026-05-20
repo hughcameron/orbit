@@ -1,0 +1,32 @@
+id: 966cd362-c1b3-4082-8a69-0aacf30dff97
+started_at: 2026-05-20T04:51:25.931001412Z
+ended_at: 2026-05-20T04:51:25.931001412Z
+distillate: |-
+  **Outstanding work — three buckets.**
+
+  **1. Open spec (1):**
+  - `2026-05-20-memory-match-bm25` — migrate `orbit memory match` ranker to FTS5/BM25, keep label-overlap as a parallel signal. Tied to card 0037.
+
+  **2. Planned cards with no design pass (9, all medium-severity findings):**
+  - `0010-objective-functions` — measurable project objectives + guardrails
+  - `0011-cron-driven-execution` — scheduled agent runs between sessions
+  - `0012-daily-planning-protocol` — structured daily human-agent sync
+  - `0013-playbook-fast-path` — known-investigation fast path
+  - `0014-default-merge-after-review` — auto-merge after review-pr approval
+  - `0015-research-mode-iteration-loop`
+  - `0019-tabletop` — front-load thinking before specs
+  - `0029-fan-out` — fan-out as first-class substrate concept
+  - `0041-reference-integrity` — substrate plumbing audit
+
+  Each card has scenarios but `specs_count: 0`. Conformance recommends `/orb:design <NNNN>` per card.
+
+  **3. Memo backlog (10), oldest 4 days stale (>7d threshold not crossed yet but close):**
+  - 4× 2026-05-16: `agents-search-and-code-mastery`, `richer-reconcile-rules`, `style-md-less-executive-more-practical`, `verify-swallows-future-version`
+  - 2× 2026-05-17: `codebase-mastery-audit`, `read-the-cited-source`
+  - 2× 2026-05-19: `conformance-park-signal-gap`, `prioritise-skill`
+  - 2× 2026-05-20: `taskcreate-coexists-with-orbit-task`, `topology-seed-pointers-in-downstream`
+
+  **Pin status:** v0.4.24 unpinned in `.orbit/config.yaml` (not blocking, just unset).
+
+  **Recommended next move:** `/orb:distill` across the memo backlog oldest-first — it may collapse some planned cards or surface inputs for the bm25 spec, so do it before designing any of the nine planned cards.
+labels: []
