@@ -1,0 +1,59 @@
+id: 0026-agent-prose-discipline
+feature: Agent prose discipline — directive, plain, lead-with-the-answer
+as_a: orbit author receiving agent output
+i_want: every substantive agent response to lead with the answer, pick one action in imperative voice, stay short, and avoid the listed anti-patterns
+so_that: I can act on the response in seconds rather than minutes — agents pay the compression cost so I do not have to
+goal: agent-to-author prose is directive, plain, anti-pattern-free, warm-but-not-chatty — the author acts on output rather than parsing it
+maturity: emerging
+scenarios:
+- name: Responses lead with the answer
+  given: an agent producing a substantive response
+  when: it is rendered
+  then: the opening states the answer or recommendation directly — no preamble, no restating the question, no apologetic sandbox
+  gate: true
+- name: Recommendations are imperative, not hedge-stacked
+  given: a recommendation in an agent response
+  when: it is written
+  then: it uses imperative voice ("Run X on Y") not hedged voice ("It might be worth considering whether perhaps X")
+  gate: true
+- name: Reasoning stays short
+  given: an agent producing reasoning in a response
+  when: it is rendered
+  then: at most three points — three is the ceiling, not the target, and one often beats three
+  gate: false
+- name: Detail flagged, not dumped
+  given: an agent has analysed multiple alternatives or has supporting data
+  when: rendering the response
+  then: the body carries only what is needed for action; supporting detail is flagged available on request rather than dumped inline
+  gate: false
+- name: Seven anti-patterns explicitly proscribed
+  given: an agent drafting a response
+  when: it considers the language
+  then: lede-burying, hedge-stacking, pre-emptive detail dump, menu-presenting, undefined jargon, apologetic preambles, restating the question — all rejected
+  gate: true
+- name: Tone contract enforced
+  given: any agent response
+  when: it is rendered
+  then: British English, direct, warm but not chatty — the register is consistent across all of the author's agents
+  gate: false
+- name: In autonomy, the agent acts rather than performs a brief
+  given: an agent inside /orb:drive or /orb:rally considering whether to invoke AskUserQuestion mid-autonomy
+  when: it would otherwise present "three options with a recommendation"
+  then: the agent recognises this as menu-presenting at the wrong moment; the correct mid-autonomy form is the imperative single action, taken, or a structural NO-GO if authorisation is genuinely missing — the three-question test in /orb:drive Halt-temptation guard is the structural enforcement (per spec 2026-05-19-act-when-authorised, card 0042)
+  gate: false
+- name: Contract is wired into the framework
+  given: this card declares what every author-facing response should look like
+  when: enforcement is examined
+  then: at least one named wire is live — CLAUDE.md preamble cites this card for response shape, .orbit/STYLE.md carries the canonical contract loaded into every session, /orb:design and /orb:review-* SKILL.md cite this card for response shape — without these wires the card is aspirational and agents follow it only by happenstance
+  gate: true
+specs:
+- .orbit/specs/2026-05-08-executive-communication-wires/spec.yaml
+- .orbit/specs/2026-05-20-style-md-plugin-shipping/spec.yaml
+relations:
+- card: 0018-two-artefact-contract
+  type: feeds
+  reason: the author-facing surface (cards + decisions + dashboard) is rendered in this prose discipline; without it, the surface stays bloat-prone
+references:
+- 'historical: 2026-05-06 distillation memo (executive-communication-framework) — deleted after promotion per orbit convention; original distillation captured the full BLUF / Decision Brief framework, anti-patterns, and tone contract. Card renamed 2026-05-20 from executive-communication to agent-prose-discipline per memo 2026-05-16-style-md-less-executive-more-practical.md; STYLE.md reworked from BLUF skeleton to plain prose discipline with substance rules retained and format prescription dropped; persona content (program-owner-and-enabler stance) extracted to project CLAUDE.md as the proper home for project-specific stance'
+- 'ops decision 0029 (recommendation discipline): the precursor — this card subsumes and generalises it'
+notes: []

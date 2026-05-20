@@ -11,6 +11,12 @@ METHOD.md substrate rules currently say:
 
 An agent in a recent session read this literally and announced *"Per project rules, task tracking lives in orbit-state, not TaskCreate — ignoring that reminder"* when the Claude Code harness suggested `TaskCreate`. The agent obeyed the rule by refusing the tool.
 
+A later session (2026-05-20, orbit-internal) repeated the pattern in a more pronounced form:
+
+> *"Ignoring the TaskCreate reminder per project rules — using orbit substrate. Let me execute: first check orbit verbs, then apply edits, then persist."*
+
+Same shape: agent reads the rule literally, announces the refusal, then narrates the alternative plan. The harness keeps nudging; the rule keeps shutting it down. Two instances now — same friction from both sides.
+
 That isn't the intent. Hugh's framing: *"Task creation is really valuable and we don't want to compete with it — we just want to keep track of them."*
 
 ## The actual distinction

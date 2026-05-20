@@ -3697,27 +3697,29 @@ fn audit_topology(
 /// finding under ac-03. Fixed at v1; no `.orbit/config.yaml` override.
 const MEMO_STALENESS_THRESHOLD_DAYS: i64 = 7;
 
-/// v1 plugin-canonical-file inventory — `(operator_relative_path,
+/// Plugin-canonical-file inventory — `(operator_relative_path,
 /// canonical_bytes)` pairs. The bytes are pulled at compile time via
 /// `include_str!`, which means they always match the orbit-state
 /// binary's `CARGO_PKG_VERSION` (lockstep release contract). The
 /// inventory is the set of files `/orb:setup` copies verbatim from the
-/// plugin into the operator's `.orbit/`. As of orbit 0.4.20, only
-/// METHOD.md qualifies. When future plugin releases add canonical
-/// files, extend this const; no spec change required.
+/// plugin into the operator's `.orbit/`. METHOD.md (the workflow
+/// overview) and STYLE.md (the agent prose discipline) both qualify.
+/// When future plugin releases add canonical files, extend this const;
+/// no spec change required.
 // The canonical bytes are vendored into the crate at
-// `crates/core/canonical/METHOD.md` so `include_str!` works under
-// cross-compilation (cross's docker mount is limited to the workspace
-// dir and can't reach `../plugins/`). The vendored copy is kept in
-// sync with `plugins/orb/skills/setup/METHOD.md` as a /orb:release
-// pre-flight step — drift between the two is a release-discipline
-// concern, surfaced by `cargo test conformance_vendored_method_md_matches_plugin`
-// when both files are readable (local) and by /orb:release's pre-flight
-// when only one is (CI).
-const CANONICAL_FILES: &[(&str, &str)] = &[(
-    ".orbit/METHOD.md",
-    include_str!("../canonical/METHOD.md"),
-)];
+// `crates/core/canonical/{METHOD,STYLE}.md` so `include_str!` works
+// under cross-compilation (cross's docker mount is limited to the
+// workspace dir and can't reach `../plugins/`). The vendored copies are
+// kept in sync with `plugins/orb/skills/setup/{METHOD,STYLE}.md` as a
+// /orb:release pre-flight step — drift between the two is a
+// release-discipline concern, surfaced by `cargo test
+// conformance_vendored_{method,style}_md_matches_plugin` when both files
+// are readable (local) and by /orb:release's pre-flight when only one
+// is (CI).
+const CANONICAL_FILES: &[(&str, &str)] = &[
+    (".orbit/METHOD.md", include_str!("../canonical/METHOD.md")),
+    (".orbit/STYLE.md", include_str!("../canonical/STYLE.md")),
+];
 
 /// Public verb entry — calls into the testable helper with today's
 /// local date. The helper takes `today` as a parameter so unit tests
@@ -9886,10 +9888,24 @@ unknown: surprise
         std::fs::write(layout.root.join("METHOD.md"), canonical).unwrap();
     }
 
+    fn write_canonical_style_md(layout: &OrbitLayout) {
+        let canonical = CANONICAL_FILES
+            .iter()
+            .find(|(p, _)| *p == ".orbit/STYLE.md")
+            .map(|(_, c)| *c)
+            .unwrap();
+        std::fs::write(layout.root.join("STYLE.md"), canonical).unwrap();
+    }
+
+    fn write_canonical_files(layout: &OrbitLayout) {
+        write_canonical_method_md(layout);
+        write_canonical_style_md(layout);
+    }
+
     #[test]
     fn conformance_clean_repo_zero_findings() {
         let (_dir, layout) = fresh_conformance_layout();
-        write_canonical_method_md(&layout);
+        write_canonical_files(&layout);
         let result =
             audit_conformance_at(&layout, &AuditConformanceArgs::default(), date(2026, 5, 19))
                 .unwrap();
@@ -9902,7 +9918,7 @@ unknown: surprise
     #[test]
     fn conformance_idempotent_two_invocations_byte_equal() {
         let (_dir, layout) = fresh_conformance_layout();
-        write_canonical_method_md(&layout);
+        write_canonical_files(&layout);
         let r1 =
             audit_conformance_at(&layout, &AuditConformanceArgs::default(), date(2026, 5, 19))
                 .unwrap();
@@ -10024,6 +10040,7 @@ unknown: surprise
     #[test]
     fn conformance_byte_drift_fires_when_method_md_differs() {
         let (_dir, layout) = fresh_conformance_layout();
+        write_canonical_style_md(&layout);
         std::fs::write(layout.root.join("METHOD.md"), "hand-edited\n").unwrap();
         let result =
             audit_conformance_at(&layout, &AuditConformanceArgs::default(), date(2026, 5, 19))
@@ -10037,14 +10054,25 @@ unknown: surprise
     }
 
     #[test]
-    fn conformance_byte_drift_silent_when_method_md_matches_canonical() {
+    fn conformance_byte_drift_fires_when_style_md_differs() {
         let (_dir, layout) = fresh_conformance_layout();
-        let canonical = CANONICAL_FILES
-            .iter()
-            .find(|(p, _)| *p == ".orbit/METHOD.md")
-            .map(|(_, c)| *c)
-            .unwrap();
-        std::fs::write(layout.root.join("METHOD.md"), canonical).unwrap();
+        write_canonical_method_md(&layout);
+        std::fs::write(layout.root.join("STYLE.md"), "hand-edited\n").unwrap();
+        let result =
+            audit_conformance_at(&layout, &AuditConformanceArgs::default(), date(2026, 5, 19))
+                .unwrap();
+        let setup_findings: Vec<_> =
+            result.findings.iter().filter(|f| f.subsystem == "setup").collect();
+        assert_eq!(setup_findings.len(), 1);
+        assert_eq!(setup_findings[0].state, "byte_drift");
+        assert_eq!(setup_findings[0].subject, ".orbit/STYLE.md");
+        assert_eq!(setup_findings[0].remediation.verb, "orbit setup");
+    }
+
+    #[test]
+    fn conformance_byte_drift_silent_when_canonical_files_match() {
+        let (_dir, layout) = fresh_conformance_layout();
+        write_canonical_files(&layout);
         let result =
             audit_conformance_at(&layout, &AuditConformanceArgs::default(), date(2026, 5, 19))
                 .unwrap();
@@ -10054,6 +10082,7 @@ unknown: surprise
     #[test]
     fn conformance_missing_fires_when_method_md_absent() {
         let (_dir, layout) = fresh_conformance_layout();
+        write_canonical_style_md(&layout);
         let result =
             audit_conformance_at(&layout, &AuditConformanceArgs::default(), date(2026, 5, 19))
                 .unwrap();
@@ -10062,6 +10091,20 @@ unknown: surprise
         assert_eq!(setup_findings.len(), 1);
         assert_eq!(setup_findings[0].state, "missing");
         assert_eq!(setup_findings[0].subject, ".orbit/METHOD.md");
+    }
+
+    #[test]
+    fn conformance_missing_fires_when_style_md_absent() {
+        let (_dir, layout) = fresh_conformance_layout();
+        write_canonical_method_md(&layout);
+        let result =
+            audit_conformance_at(&layout, &AuditConformanceArgs::default(), date(2026, 5, 19))
+                .unwrap();
+        let setup_findings: Vec<_> =
+            result.findings.iter().filter(|f| f.subsystem == "setup").collect();
+        assert_eq!(setup_findings.len(), 1);
+        assert_eq!(setup_findings[0].state, "missing");
+        assert_eq!(setup_findings[0].subject, ".orbit/STYLE.md");
     }
 
     fn write_config_with_pin(layout: &OrbitLayout, pinned: &str) {
@@ -10092,10 +10135,11 @@ unknown: surprise
     }
 
     #[test]
-    fn conformance_pin_behind_fires_and_suppresses_byte_drift() {
+    fn conformance_pin_behind_fires_and_suppresses_per_file() {
         let (_dir, layout) = fresh_conformance_layout();
         write_config_with_pin(&layout, "0.0.1");
-        // Add a byte-drift fixture that WOULD fire under matches/unpinned.
+        // Add a byte-drift fixture that WOULD fire under matches/unpinned
+        // (and STYLE.md absent, which would fire a "missing" finding).
         std::fs::write(layout.root.join("METHOD.md"), "hand-edited\n").unwrap();
         let result =
             audit_conformance_at(&layout, &AuditConformanceArgs::default(), date(2026, 5, 19))
@@ -10106,16 +10150,16 @@ unknown: surprise
         assert_eq!(pin_findings.len(), 1);
         assert_eq!(pin_findings[0].severity, "medium");
         assert_eq!(pin_findings[0].remediation.verb, "orbit setup --bump-pin");
-        // ac-04 byte-drift findings are SUPPRESSED under pin_behind.
+        // ac-04 byte-drift AND missing findings are SUPPRESSED under pin_behind.
         assert!(
-            result.findings.iter().all(|f| f.state != "byte_drift"),
-            "expected byte_drift suppression, got {:?}",
+            result.findings.iter().all(|f| f.state != "byte_drift" && f.state != "missing"),
+            "expected per-file suppression, got {:?}",
             result.findings
         );
     }
 
     #[test]
-    fn conformance_pin_ahead_fires_and_suppresses_byte_drift() {
+    fn conformance_pin_ahead_fires_and_suppresses_per_file() {
         let (_dir, layout) = fresh_conformance_layout();
         write_config_with_pin(&layout, "99.99.99");
         std::fs::write(layout.root.join("METHOD.md"), "hand-edited\n").unwrap();
@@ -10127,10 +10171,10 @@ unknown: surprise
             result.findings.iter().filter(|f| f.state == "pin_ahead").collect();
         assert_eq!(pin_findings.len(), 1);
         assert_eq!(pin_findings[0].severity, "high");
-        // ac-05 single-finding dominance: pin_ahead also suppresses byte_drift.
+        // ac-05 single-finding dominance: pin_ahead also suppresses byte_drift and missing.
         assert!(
-            result.findings.iter().all(|f| f.state != "byte_drift"),
-            "expected byte_drift suppression, got {:?}",
+            result.findings.iter().all(|f| f.state != "byte_drift" && f.state != "missing"),
+            "expected per-file suppression, got {:?}",
             result.findings
         );
     }
@@ -10138,7 +10182,7 @@ unknown: surprise
     #[test]
     fn conformance_aggregated_drift_and_topology_present() {
         let (_dir, layout) = fresh_conformance_layout();
-        write_canonical_method_md(&layout);
+        write_canonical_files(&layout);
         let result =
             audit_conformance_at(&layout, &AuditConformanceArgs::default(), date(2026, 5, 19))
                 .unwrap();
@@ -10232,9 +10276,35 @@ mystery_field: surprise
     }
 
     #[test]
+    fn conformance_vendored_style_md_matches_plugin() {
+        // Parallel to `conformance_vendored_method_md_matches_plugin`.
+        // The vendored `crates/core/canonical/STYLE.md` must match
+        // `plugins/orb/skills/setup/STYLE.md` — kept in sync as a
+        // /orb:release pre-flight step.
+        let manifest_dir = env!("CARGO_MANIFEST_DIR");
+        let plugin_path = std::path::PathBuf::from(manifest_dir)
+            .join("../../../plugins/orb/skills/setup/STYLE.md");
+        let plugin_bytes = match std::fs::read_to_string(&plugin_path) {
+            Ok(b) => b,
+            Err(_) => {
+                eprintln!(
+                    "skipping vendored-STYLE.md sync check: plugin path unreadable at {}",
+                    plugin_path.display()
+                );
+                return;
+            }
+        };
+        let vendored = include_str!("../canonical/STYLE.md");
+        assert_eq!(
+            vendored, plugin_bytes,
+            "vendored STYLE.md is out of sync with plugins/orb/skills/setup/STYLE.md — run `cp plugins/orb/skills/setup/STYLE.md orbit-state/crates/core/canonical/STYLE.md` before release",
+        );
+    }
+
+    #[test]
     fn audit_conformance_dispatched_through_execute() {
         let (_dir, layout) = fresh_conformance_layout();
-        write_canonical_method_md(&layout);
+        write_canonical_files(&layout);
         let request = VerbRequest::AuditConformance(AuditConformanceArgs::default());
         let response = execute(&layout, &request).unwrap();
         match response {

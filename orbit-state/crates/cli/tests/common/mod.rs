@@ -245,14 +245,17 @@ pub fn expected_envelope_for_audit_drift_one_unknown() -> String {
     orbit_state_core::envelope_ok_string(&response).expect("infallible")
 }
 
-/// Populate `<root>/.orbit/` with only the canonical METHOD.md so
-/// `audit conformance` returns zero findings (parity baseline for
-/// the new verb). Per spec 2026-05-19-workflow-conformance ac-01.
+/// Populate `<root>/.orbit/` with the canonical METHOD.md and STYLE.md
+/// so `audit conformance` returns zero findings (parity baseline for
+/// the new verb). Per spec 2026-05-19-workflow-conformance ac-01,
+/// extended for STYLE.md per spec 2026-05-20-style-md-plugin-shipping.
 pub fn populate_conformance_clean_fixture(root: &Path) {
     let orbit_dir = root.join(".orbit");
     std::fs::create_dir_all(&orbit_dir).unwrap();
-    let canonical = include_str!("../../../../../plugins/orb/skills/setup/METHOD.md");
-    std::fs::write(orbit_dir.join("METHOD.md"), canonical).unwrap();
+    let method = include_str!("../../../../../plugins/orb/skills/setup/METHOD.md");
+    std::fs::write(orbit_dir.join("METHOD.md"), method).unwrap();
+    let style = include_str!("../../../../../plugins/orb/skills/setup/STYLE.md");
+    std::fs::write(orbit_dir.join("STYLE.md"), style).unwrap();
 }
 
 /// Expected canonical envelope for `audit conformance` against the

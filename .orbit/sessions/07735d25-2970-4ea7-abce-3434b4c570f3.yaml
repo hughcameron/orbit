@@ -1,0 +1,23 @@
+id: 07735d25-2970-4ea7-abce-3434b4c570f3
+started_at: 2026-05-20T01:08:24.63863923Z
+ended_at: 2026-05-20T01:08:24.63863923Z
+distillate: |-
+  **TL;DR** — Highest-yield session play is the **STYLE.md rework + plugin-shipping spec**, with a 30-minute warmup pass on the 10-memo backlog before promoting.
+
+  **Recommendation:** Run `/orb:distill` across the memo backlog (oldest first — 2026-05-16 quartet is now 4 days stale), then `/orb:design` the STYLE.md spec that covers both content rework and the plugin-shipping gap as one bundle.
+
+  **Why:**
+  - Hugh's own carry-forward signal at session-close put STYLE.md spec at #1; the 2026-05-16 memo gives the voice direction, and the plugin-shipping gap was a HIGH finding from last session's review that never landed — natural to bundle.
+  - Memo backlog has crossed the 7-day staleness band on four files; clearing it first ensures the design pass for STYLE.md doesn't rediscover input already captured (e.g., `2026-05-17-read-the-cited-source` and `2026-05-19-prioritise-skill` may inform tone direction or surface adjacent cards).
+  - Conformance is otherwise clean — 9 findings, all genuine `planned+empty` cards correctly recommending `/orb:design`; no spec-close-maturity-stale noise to clear this session.
+
+  **Available on request:**
+  - Memo backlog summary by likely-yield (substantive design inputs vs. fast-deletes vs. cross-spec triggers).
+  - Alternative headline: build the `/prioritise` skill from `2026-05-19-prioritise-skill.md` — meta-win (automates what we just did by hand), but smaller scope than STYLE.md.
+  - Tail items from carry-forward: `--bump-pin` follow-on, v0.4.21 failed-CI tag decision, rtk hook posture on `/orb:memo` — all <30-min decisions that can ride end-of-session.
+  - 2026-06-15 topology observation audit — calendared; not actionable today.
+
+  **Confidence:** High on STYLE.md as the headline (Hugh's own priority signal at session-close, paired memo + review finding give clear scope). Medium on memo-first ordering — assumes the 2026-05-16 STYLE.md memo is the canonical voice direction; if Hugh's view has evolved, design starts cold.
+
+  Confirm STYLE.md headline, redirect to `/prioritise` skill, or surface a different priority?
+labels: []

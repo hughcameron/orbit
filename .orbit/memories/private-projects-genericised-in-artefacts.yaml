@@ -1,0 +1,4 @@
+key: private-projects-genericised-in-artefacts
+body: 'When orbit substrate lands in a public repo (cards, memories, memos, choice notes, spec docs, anything committed) — reference private downstream projects by generic descriptors (''a downstream project'', ''an external consumer repo'', ''a sibling repo''), never by name. meridian-online/orbit is PUBLIC; named references leak the existence and identity of private projects. Hugh confirmed the rule explicitly on 2026-05-20 after one private project was surfaced by name in conversation. Historical session/task logs are lower-priority for retrofit (rewriting history is fraught, agents don''t read them as live state), but all new substrate entries follow the rule. Generic terms already in use across the corpus: ''a downstream project'', ''an external consumer repo'', ''a sibling repo''.'
+timestamp: 2026-05-20T02:20:40.739648734Z
+labels: []

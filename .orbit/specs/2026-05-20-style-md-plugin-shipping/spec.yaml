@@ -1,0 +1,85 @@
+id: 2026-05-20-style-md-plugin-shipping
+goal: 'Ship STYLE.md via the same plugin-canonical pattern METHOD.md uses today (plugin source → Rust-vendored canonical → include_str! → /orb:setup writes seed → conformance audit byte-compares) so the reworked prose discipline reaches every consumer project. Drop METHOD.md''s now-contradictory BLUF / Decision Brief prose section across all three copies. Rename METHOD.md pillar #1 ("Executive-level interaction") to retire the same framing. Update plugin SKILL.md citations of card 0026 + BLUF / Decision Brief in one coherent pass. Full intent contract and decision rationale in interview.md.'
+cards:
+- 0026-agent-prose-discipline
+status: open
+labels: []
+acceptance_criteria:
+- id: ac-01
+  description: Plugin-canonical STYLE.md exists at plugins/orb/skills/setup/STYLE.md carrying the new program-owner-and-enabler prose discipline content (drafted in .orbit/STYLE.md earlier this session — copy that content verbatim). This is the source of canonical bytes; /orb:setup reads from here when writing the seed.
+  gate: true
+  checked: true
+  verification: Assert plugins/orb/skills/setup/STYLE.md exists and is byte-identical with the current .orbit/STYLE.md (diff exits 0). Grep for the new opening sentence ("The author reads fast and decides faster — write so they can act, not parse."). No "BLUF" or "Decision Brief" or "TL;DR — one sentence opening" phrases remain in the file.
+  ac_type: doc
+- id: ac-02
+  description: 'STYLE.md vendored at orbit-state/crates/core/canonical/STYLE.md, byte-identical with plugins/orb/skills/setup/STYLE.md. Vendoring under canonical/ ensures include_str! resolves under cross-compilation docker mount (precedent: METHOD.md 0.4.21 → 0.4.22 fix). The sync-check unit test (ac-06) enforces this invariant at build time.'
+  gate: true
+  checked: true
+  verification: Assert orbit-state/crates/core/canonical/STYLE.md exists and is byte-identical with plugins/orb/skills/setup/STYLE.md (diff exits 0).
+  ac_type: doc
+- id: ac-03
+  description: orbit-state/crates/core/src/verbs.rs gains an include_str! const exposing the canonical STYLE.md bytes (parallel to the METHOD.md const at verbs.rs:3719). Add the .orbit/STYLE.md path to the CANONICAL_FILES const used by conformance audit (per 2026-05-19-workflow-conformance ac-04, the inventory enumerates from a single const). The /orb:setup seed-writing path and the conformance byte-compare both reference the new const.
+  gate: true
+  checked: true
+  verification: Grep orbit-state/crates/core/src/verbs.rs for `include_str!("../canonical/STYLE.md")`. Grep CANONICAL_FILES const for the .orbit/STYLE.md entry alongside the existing .orbit/METHOD.md entry. cargo build passes.
+- id: ac-04
+  description: /orb:setup writes STYLE.md to .orbit/STYLE.md in target projects following the same seed semantics as METHOD.md per plugins/orb/skills/setup/SKILL.md §6b — greenfield write when absent; brownfield byte-compare against canonical and prompt the operator before overwrite when present and divergent. No additional "STYLE.md is a behavioural surface" announcement is added; STYLE.md seeds with the same operator UX as METHOD.md. Implementation extends §6b's skill prose to cover STYLE.md as a parallel canonical-file entry — no new Rust verb is introduced.
+  gate: true
+  checked: false
+  verification: 'Fixture test on the /orb:setup skill prose: (a) greenfield (no .orbit/STYLE.md) — setup writes canonical bytes verbatim. (b) Brownfield byte-equal — setup detects equality and proceeds without prompt. (c) Brownfield drift — setup prompts before overwrite, matching METHOD.md §6b. (d) Grep plugins/orb/skills/setup/SKILL.md for the STYLE.md entry alongside METHOD.md in the §6b copy step.'
+- id: ac-05
+  description: orbit audit conformance's plugin-canonical-file finding family extends to byte-compare .orbit/STYLE.md against the include_str! canonical (parallel to the METHOD.md byte-compare already shipped). New drift entries surface alongside METHOD.md drift. Suppressed by pin_behind / pin_ahead per existing single-finding-dominance semantics.
+  gate: false
+  checked: true
+  verification: 'Unit test matrix: (a) .orbit/STYLE.md byte-equal to canonical → no finding; (b) byte-different → finding with state byte_drift, remediation.verb = "orbit setup"; (c) file absent → finding with state missing. Behaviour matrix on pin_behind / pin_ahead: pin issue suppresses STYLE.md byte_drift findings (single-finding dominance). CLI + MCP parity test on the conformance verb covers a STYLE.md byte-different fixture.'
+- id: ac-06
+  description: Sync-check unit test asserts byte-equality between plugins/orb/skills/setup/STYLE.md and orbit-state/crates/core/canonical/STYLE.md (parallel to the METHOD.md sync-check shipped in 2026-05-19-workflow-conformance). Test fails loudly if the two diverge — catches missed sync steps in the release flow.
+  gate: false
+  checked: true
+  verification: New test in orbit-state/crates/core/ asserts byte-equality between the two files. cargo test passes. Manually corrupt one file → test fails with a clear diff message.
+- id: ac-07
+  description: 'METHOD.md "Prose contract — BLUF / Decision Brief" section dropped from all three copies: plugins/orb/skills/setup/METHOD.md, orbit-state/crates/core/canonical/METHOD.md, and the local .orbit/METHOD.md. Replacement is either a one-line pointer ("Agent-to-author prose follows the discipline in `.orbit/STYLE.md`.") or nothing — implementing agent''s choice. STYLE.md is now the single canonical source for prose discipline.'
+  gate: true
+  checked: false
+  verification: Grep all three METHOD.md copies — no occurrence of "BLUF" or "Decision Brief" remains. No "TL;DR — one sentence" skeleton remains. If a pointer line is added, it is byte-identical across all three copies (sync-check enforces this on the plugin-canonical and Rust-vendored copies; local .orbit/METHOD.md follows on next /orb:setup).
+  ac_type: doc
+- id: ac-08
+  description: 'METHOD.md pillar #1 ("Executive-level interaction") renamed in all three METHOD.md copies. Replacement retires the "executive" framing while preserving the load-bearing observation (author has clear vision but no time to digest each artefact; agents pay the compression cost). Candidate names from interview.md: "Author-level interaction", "Decisive interaction", "Compression contract" — implementing agent picks one. All three METHOD.md copies use the same name.'
+  gate: true
+  checked: false
+  verification: 'Grep all three METHOD.md copies — no occurrence of "Executive-level interaction" remains. All three copies use the same replacement pillar name (byte-identical pillar #1 line).'
+  ac_type: doc
+- id: ac-09
+  description: 'Plugin SKILL.md cascade. Inventory step: grep `plugins/orb/skills/**/SKILL.md` for "BLUF", "Decision Brief", "0026-executive-communication". Update each hit: replace card slug references with `0026-agent-prose-discipline`, replace "BLUF / Decision Brief contract" framing with a pointer to `.orbit/STYLE.md` and the new framing (prose discipline). Fix adjacent TL;DR-skeleton language and Decision-Brief-shape references in the same pass. Named files in scope: design, review-spec, review-pr, setup SKILL.md. Implementing agent runs the grep and updates anything else surfaced.'
+  gate: true
+  checked: false
+  verification: Grep plugins/orb/skills/**/SKILL.md for "BLUF", "Decision Brief", "0026-executive-communication" — zero hits remain. Grep for "0026-agent-prose-discipline" — at least the four named SKILL.md files cite it. Adjacent prose drift fixes recorded as a one-line note per file edited so the cascade scope is auditable post-hoc.
+  ac_type: doc
+- id: ac-10
+  description: /orb:release SKILL.md §1.5 pre-flight sync step extended to also sync plugins/orb/skills/setup/STYLE.md → orbit-state/crates/core/canonical/STYLE.md (parallel to the METHOD.md sync step). The step is "before release, ensure plugin canonical and Rust-vendored canonical are byte-identical for both METHOD.md AND STYLE.md."
+  gate: false
+  checked: false
+  verification: Grep plugins/orb/skills/release/SKILL.md §1.5 (or wherever the METHOD.md sync step lives) for the new STYLE.md sync step. The sync-check test (ac-06) backs this up at build time — if a future release-flow run skips the sync, the test fails before the release tags.
+  ac_type: doc
+- id: ac-11
+  description: Post-ship spot-check observation — after the plugin release containing this spec lands, /orb:setup against a fresh consumer project writes .orbit/STYLE.md with the canonical bytes. Spot-check captured as a memo at .orbit/memos/<date>-style-md-shipped-downstream.md referencing the release tag. Consumer project referenced by generic descriptor only (per memory `private-projects-genericised-in-artefacts`).
+  gate: false
+  checked: false
+  verification: Memo exists at .orbit/memos/<date>-style-md-shipped-downstream.md. Memo body references the release tag and confirms .orbit/STYLE.md was written on a fresh /orb:setup. Consumer project referenced by generic descriptor ("a downstream consumer repo"), not by name.
+  ac_type: observation
+- id: ac-12
+  description: /orb:setup ensures CLAUDE.md @-imports STYLE.md, parallel to the §6c step that ensures `@.orbit/METHOD.md` is present. When CLAUDE.md exists and does not contain `@.orbit/STYLE.md`, /orb:setup appends the import in a load-bearing position; when CLAUDE.md is absent, /orb:setup creates it with the import (matching the METHOD.md flow). Re-runs are idempotent — the import is added once. Without this step, the seeded STYLE.md sits on disk but does not load into agent sessions, and the spec's goal of "prose discipline reaches every consumer project" fails silently.
+  gate: true
+  checked: false
+  verification: 'Grep plugins/orb/skills/setup/SKILL.md for the new STYLE.md @-import step in or near §6c. Fixture test: (a) CLAUDE.md missing `@.orbit/STYLE.md` import → /orb:setup appends it. (b) CLAUDE.md with the import already present → /orb:setup leaves it alone (idempotent). (c) CLAUDE.md absent → /orb:setup creates it with the import.'
+  ac_type: doc
+memories_considered:
+- key: private-projects-genericised-in-artefacts
+  disposition: adopted
+  reason: spec prose, commit messages, PR body, and the ac-11 post-ship memo all reference downstream consumer projects by generic descriptors (never by name); orbit repo is public
+- key: claude-code-at-import-fork-behaviour
+  disposition: adopted
+  reason: ac-11 explicitly captured as observation post-release; cannot self-verify @ import propagation within the implementing session
+- key: session-close-2026-05-19-workflow-conformance-shipped
+  disposition: adopted
+  reason: STYLE.md vendoring lives under orbit-state/crates/core/canonical/ (not under plugins/) so include_str! resolves under cross's docker mount — precedent from the METHOD.md 0.4.21 → 0.4.22 fix
