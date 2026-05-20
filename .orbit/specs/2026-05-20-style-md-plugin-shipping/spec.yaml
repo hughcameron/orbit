@@ -58,7 +58,7 @@ acceptance_criteria:
 - id: ac-10
   description: /orb:release SKILL.md §1.5 pre-flight sync step extended to also sync plugins/orb/skills/setup/STYLE.md → orbit-state/crates/core/canonical/STYLE.md (parallel to the METHOD.md sync step). The step is "before release, ensure plugin canonical and Rust-vendored canonical are byte-identical for both METHOD.md AND STYLE.md."
   gate: false
-  checked: false
+  checked: true
   verification: Grep plugins/orb/skills/release/SKILL.md §1.5 (or wherever the METHOD.md sync step lives) for the new STYLE.md sync step. The sync-check test (ac-06) backs this up at build time — if a future release-flow run skips the sync, the test fails before the release tags.
   ac_type: doc
 - id: ac-11
