@@ -4,7 +4,7 @@ as_a: agent in mid-session autonomy under /orb:drive or /orb:rally
 i_want: a discipline that prevents halting when I already have a recommendation, the evidence to act on it, and contract authorisation to proceed
 so_that: halt-temptation does not masquerade as discipline, escalation cycles do not burn on questions the substrate has already answered, and the autonomy contract delivers the friction reduction it was designed for
 goal: agents in mid-session autonomy halt only when at least one of {recommendation, evidence, authorisation} is genuinely missing; the three-question test fires at every halt-temptation moment as the inverse of "consult the substrate first"
-maturity: planned
+maturity: emerging
 scenarios:
 - name: Three-question test at halt-temptation
   given: an agent about to invoke AskUserQuestion or surface a Decision Brief mid-autonomy

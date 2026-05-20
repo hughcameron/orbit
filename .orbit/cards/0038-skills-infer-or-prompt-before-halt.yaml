@@ -4,7 +4,7 @@ as_a: agent (or Hugh) invoking a /orb:* skill that requires a contextual argumen
 i_want: the skill to try to figure out what I meant — by checking what's already bound, then offering a menu of open work — before halting
 so_that: a recoverable missing argument never looks like a silent failure, and one round-trip resolves what would otherwise force me to re-read docs and re-invoke
 goal: every /orb:* skill with a required contextual argument follows the same three-step recovery (infer → prompt → halt) — zero silent halts on recoverable missing-arg cases
-maturity: planned
+maturity: emerging
 scenarios:
 - name: Skill uses the bound spec when no argument is supplied
   given: a /orb:* skill that requires a spec-id is invoked with no argument, and .orbit/.session-card contains a bound spec

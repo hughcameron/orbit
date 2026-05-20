@@ -4,7 +4,7 @@ as_a: agent committing to an approach in a project where prior sessions have rec
 i_want: matching memories to surface at the moment the decision is made — whether that moment is inside /orb:design, inside /orb:spec, or mid-conversation when I am about to propose a non-trivial implementation
 so_that: the answer a past agent already recorded is not silently overridden by my momentum on a workaround for the same problem
 goal: zero "memory existed and was ignored" incidents — every memory matching active work is reconciled at the decision moment, whether or not a spec exists
-maturity: planned
+maturity: emerging
 scenarios:
 - name: Matching memories surface at design time
   given: a memory exists whose topic matches the work being scoped, and the agent enters /orb:design
