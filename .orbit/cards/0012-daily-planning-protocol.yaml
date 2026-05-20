@@ -5,6 +5,9 @@ i_want: a daily planning session with defined inputs, outputs, and expected dura
 so_that: vision, prioritisation, and unblocking happen efficiently and set the ceiling on the next day's autonomous work
 goal: two hours of daily planning yields twenty-two hours of autonomous execution
 maturity: planned
+park:
+  reason: external-execution cluster — awaiting upstream investment decision on the cron-driven execution stack before per-card design proceeds
+  until: investment decision lands or a second project surfaces the same need
 scenarios:
 - name: Planning session has defined inputs
   given: shift reports have accumulated since the last planning session

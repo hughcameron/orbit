@@ -5,6 +5,9 @@ i_want: every active project to have a measurable, agent-checkable objective pai
 so_that: agents self-assess whether work is on-track and stop when the objective can't predict the impact of a choice
 goal: agents have a measurable north star per project, checked every session, with guardrails against gaming
 maturity: planned
+park:
+  reason: external-execution cluster — awaiting upstream investment decision on the cron-driven execution stack before per-card design proceeds
+  until: investment decision lands or a second project surfaces the same need
 scenarios:
 - name: Objective defined per project
   given: a project is active

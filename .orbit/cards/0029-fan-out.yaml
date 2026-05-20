@@ -5,6 +5,9 @@ i_want: fan-out treated as a substrate primitive that any skill or drive can inv
 so_that: long-running R&D (pillar 4) is delivered by depth × breadth × durable state, not by a single agent running longer; rally becomes one consumer of the primitive, not the only path to parallelism
 goal: drives, research-mode skills, and rally all consume the same fan-out primitive; specs declare fan-out potential at design time; default is sequential and fan-out is opt-in justified by named criteria
 maturity: planned
+park:
+  reason: pattern works organically across rally and drives today — awaiting a third use-case to force the fan-out-as-substrate-primitive design
+  until: third use-case surfaces fan-out outside rally/drive
 scenarios:
 - name: Fan-out is a substrate concept, not a rally feature
   given: any skill or drive that can benefit from parallelism

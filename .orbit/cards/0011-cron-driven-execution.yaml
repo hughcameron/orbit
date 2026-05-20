@@ -5,6 +5,9 @@ i_want: agents to run on cadences between my daily planning sessions, checking s
 so_that: project progress continues when I am not at the keyboard
 goal: work pushes forward between human sessions with structured evidence of what happened
 maturity: planned
+park:
+  reason: external-execution cluster — awaiting upstream investment decision on the cron-driven execution stack before per-card design proceeds
+  until: investment decision lands or a second project surfaces the same need
 scenarios:
 - name: Agent runs on a cadence
   given: a project has an objective function and ready work

@@ -5,6 +5,9 @@ i_want: a lightweight loop for hypothesis-test research work — hypothesis, par
 so_that: experimental iterations in safe environments don't pay engineering-pipeline overhead, and orbit's full ceremony stays reserved for changes with architectural consequences
 goal: research projects iterate at the speed of measurement, not at the speed of orbit's engineering pipeline
 maturity: planned
+park:
+  reason: external-execution cluster — awaiting upstream investment decision on the cron-driven execution stack before per-card design proceeds
+  until: investment decision lands or a second project surfaces the same need
 scenarios:
 - name: Iteration record is the artefact, not a spec
   given: a research iteration is run (hypothesis to result)

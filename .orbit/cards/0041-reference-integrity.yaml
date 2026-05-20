@@ -5,6 +5,9 @@ i_want: a verb that walks every path-shaped reference inside live substrate arte
 so_that: broken plumbing between current artefacts is surfaced before it rots silently — distinct from the accretion-detection that lean-pass does
 goal: every references[] entry, every .md/.yaml body's path-shaped string, every code comment with a .orbit/... literal resolves on disk; broken refs land in the same advisory channel as lean-pass findings
 maturity: planned
+park:
+  reason: N=1 evidence — origin substrate is the hydrofoil cutover; design waits until a second project surfaces broken-refs of the same shape
+  until: second project surfaces N=2 evidence of broken-refs
 scenarios:
 - name: Lives in the gap between lean-pass and codebase-mastery
   given: a substrate where artefacts are wanted, current, and on-mission but cross-references between them have rotted
