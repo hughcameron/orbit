@@ -1,0 +1,52 @@
+id: 0043-session-start-priority-synthesis
+feature: Session-start priority synthesis
+as_a: author starting a new session (or resuming work after a gap)
+i_want: a skill that re-derives a ranked list of priorities live from substrate signals — workflow conformance, session-prime envelope, recent memories — and presents them as a Decision Brief
+so_that: I see what to do next without reconstructing context from a frozen handover or running the synthesis verbs by hand
+goal: at session start, one command yields a ranked plan I can act on; the agent pays the compression cost so I don't have to
+maturity: emerging
+scenarios:
+- name: One command produces a ranked Decision Brief
+  given: an orbit project at session start (or any time the author wants to re-plan)
+  when: the author invokes /prioritise
+  then: the agent returns a top-N ranked list, each item carrying what + why + estimated effort + next-action verb
+  gate: true
+- name: Substrate is re-derived live, not read from a frozen handover
+  given: time has passed since the last session close (memos have accumulated, cards have aged, conformance findings have changed)
+  when: /prioritise runs
+  then: it reads `orbit audit conformance --json`, `orbit session prime`, and recent memories — not the handover's frozen synthesis
+  gate: true
+- name: Output is read-only — the author picks, the author runs
+  given: a Decision Brief has been produced
+  when: the author reviews it
+  then: the skill does not auto-execute any remediation verb; the author selects one and runs it themselves
+  gate: true
+- name: Each priority carries a next-action verb
+  given: a finding from `orbit audit conformance` carries a `remediation.verb` field
+  when: that finding appears in the brief
+  then: the remediation.verb is surfaced verbatim as the next-action so the author runs it without translation
+  gate: true
+- name: Differentiated from adjacent skills
+  given: /orb:overview already produces a status snapshot and /orb:handover (card 0036) writes the outgoing prompt
+  when: /prioritise runs
+  then: it produces a ranked ACTION plan (not a status snapshot) re-derived LIVE (not frozen at handover write-time)
+  gate: false
+- name: Pillar 1 mechanism — author pays no compression cost
+  given: the data substrate (conformance findings, session prime, memories) is already present
+  when: the author needs to decide what to do next
+  then: the agent performs the ranking and compression; the author sees a brief, not raw substrate
+  gate: false
+specs: []
+relations:
+- card: 0036-session-handover
+  type: feeds
+  reason: handover writes the close-time synthesis; /prioritise re-derives the equivalent synthesis at session start — together they bracket cross-session continuity
+- card: 0039-workflow-conformance
+  type: depends-on
+  reason: consumes `orbit audit conformance --json` findings (with remediation.verb) as the primary structural backlog signal
+- card: 0028-four-pillars
+  type: feeds
+  reason: instantiates pillar 1 (author-level interaction) — agent pays the compression cost so the author doesn't
+references:
+- .orbit/memos/2026-05-19-prioritise-skill.md
+notes: []

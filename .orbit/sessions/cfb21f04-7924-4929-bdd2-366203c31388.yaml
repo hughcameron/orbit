@@ -1,0 +1,15 @@
+id: cfb21f04-7924-4929-bdd2-366203c31388
+started_at: 2026-05-20T20:03:11.678232038Z
+ended_at: 2026-05-20T20:03:11.678232038Z
+distillate: |-
+  Session primed. Park-signal shipped yesterday (6 deferred cards now correctly parked), so the conformance envelope is clean — only 3 genuinely undesigned cards remain (0013, 0014, 0019), and 1 open spec (BM25, no ACs yet).
+
+  **Recommendation: build the `/prioritise` skill** — the memo `2026-05-19-prioritise-skill` is the next move teed up by the previous handover, and park-signal was the prerequisite that just landed. It's a Pillar 1 (author-level interaction) skill that compresses `orbit audit conformance --json` + `orbit session prime` + recent memories into a ranked decision brief at every session start. The meta-irony stands: you're asking exactly the question that skill is designed to answer mechanically, and the data substrate it relies on is now clean enough to read.
+
+  Runner-ups, ranked:
+
+  1. **Design pass on cards 0013 / 0014 / 0019** — three undesigned cards. Each is `/orb:design <N>` and would clear the medium-severity conformance findings. Tactical, not compounding.
+  2. **Finish BM25 spec** — has no ACs yet. Needs a design pass before drive, and it's labelled `deferred` deliberately.
+
+  Want me to start the `/prioritise` skill via `/orb:card` (memo → card → design → spec → implement), or jump straight to `/orb:design` from the memo?
+labels: []

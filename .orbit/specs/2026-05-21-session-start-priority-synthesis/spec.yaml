@@ -1,0 +1,43 @@
+id: 2026-05-21-session-start-priority-synthesis
+goal: at session start, one command yields a ranked plan I can act on; the agent pays the compression cost so I don't have to
+cards:
+- 0043-session-start-priority-synthesis
+status: open
+labels: []
+acceptance_criteria:
+- id: ac-01
+  description: One command produces a ranked Decision Brief — the agent returns the top 5 priorities (with any overflow surfaced as a count, not enumerated), each item carrying what + why + estimated effort (S = <=15min, M = one session, L = multi-session) + next-action verb
+  gate: true
+  checked: true
+- id: ac-02
+  description: Substrate is re-derived live, not read from a frozen handover — it reads `orbit audit conformance --json`, `orbit session prime`, and recent memories — not the handover's frozen synthesis. Invocation is supported at session start and mid-session; output reflects substrate state at the moment of invocation
+  gate: true
+  checked: true
+- id: ac-03
+  description: Output is read-only — the skill does not auto-execute any remediation verb; the author selects one and runs it themselves. Enforcement is via SKILL.md prose contract (matching existing read-only skills like `orbit overview`), not a hook or tool-permission gate
+  gate: true
+  checked: true
+- id: ac-04
+  description: Each priority carries a next-action verb — when a finding has `remediation.verb` populated, that verb is surfaced verbatim; when absent (forward-compatible severity-only or info-only findings), the brief surfaces the finding's `evidence` verbatim and marks the item as needing manual action
+  gate: true
+  checked: true
+- id: ac-05
+  description: Differentiated from adjacent surfaces — produces a ranked ACTION plan, distinct from `orbit overview` (the existing status-snapshot verb — cards-by-maturity, orphans, most-connected card — not a ranked action plan)
+  gate: false
+  checked: true
+- id: ac-06
+  description: Brief output is bounded — total brief length is at most 20 lines or ~500 tokens, with raw substrate references (file paths, conformance ids, memo keys) the author can open on demand; the agent compresses, the author doesn't re-parse
+  gate: false
+  checked: true
+- id: ac-07
+  description: The skill is invoked as `/orb:prioritise` (matching the `/orb:<name>` convention used by all existing orb skills) and lives at `plugins/orb/skills/prioritise/SKILL.md`. The skill is user-invocable
+  gate: true
+  checked: true
+- id: ac-08
+  description: 'Priorities are ranked deterministically: (1) conformance severity HIGH > MEDIUM > LOW; (2) within severity, memo staleness in days descending; (3) within staleness, open-spec age descending; ties broken by id ascending — two consecutive invocations on identical substrate produce byte-identical ordering'
+  gate: true
+  checked: true
+- id: ac-09
+  description: When conformance is clean (zero findings) and recent memos/specs are exhausted, the brief surfaces planned-empty cards (`maturity:planned` + `specs:[]`) as runner-ups, or declares "no priorities" explicitly — never returns an empty brief without an explanation
+  gate: false
+  checked: true
