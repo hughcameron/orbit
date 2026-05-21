@@ -2,6 +2,20 @@
 
 All notable changes to orbit are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.4.27] - 2026-05-21
+
+Ships `/orb:prioritise` — a session-start priority synthesis skill that re-derives a ranked Decision Brief live from workflow conformance, the session-prime envelope, and recent memories. Read-only by prose contract; deterministic 4-tier ranking (severity → memo staleness → open-spec age → id) gives byte-identical ordering on identical substrate. The agent pays the compression cost so the author doesn't have to. Sharpens `/orb:code-investigate` and `/orb:keyword-scan` to acknowledge the `rtk hook claude` PreToolUse intercept that silently routes `rg` through `grep`, and adds two new discipline bullets to `/orb:code-investigate` for diagnosing tool interception and citing substrate rules with freshness probes.
+
+### Added
+
+- **`/orb:prioritise` skill** — read-only synthesis over `orbit audit conformance --json`, `orbit session prime`, and recent memories. Returns the top 5 priorities, each with what + why + effort (S/M/L) + next-action verb. Deterministic 4-tier ranking (severity `HIGH` > `MEDIUM` > `LOW` → memo staleness days desc → open-spec age desc → id asc). Empty-substrate fallback surfaces planned-empty cards or declares "no priorities" explicitly. Card 0043, spec 2026-05-21-session-start-priority-synthesis.
+- **`/orb:code-investigate` gains two new discipline bullets** — *Diagnose before bypassing* (run `type`, `command -V`, `alias`, AND grep `~/.claude/settings.json` for PreToolUse hooks before declaring a tool "shimmed"; hook interception and shell-alias shims feel the same but are different mechanisms) and *Cite the substrate, don't paraphrase* (when applying a project rule, include `file:line` and the exact quoted text; if the rule may have shifted, run `orbit audit conformance --json` first as the freshness probe).
+
+### Changed
+
+- **`/orb:keyword-scan` search-command prose** — drops the "prefer ripgrep for speed" framing. Some environments hook-route `rg` to a grep proxy (e.g. `rtk grep`), so the skill now recommends queries that work in either tool (POSIX ERE alternation, no PCRE2) and points to absolute-path invocation (`/home/linuxbrew/.linuxbrew/bin/rg`) when ripgrep-specific features (PCRE2, `--json`, regex extensions) are required.
+- **`/orb:code-investigate` tool taxonomy** — consolidates the previously-separate `ripgrep (rg)` and `rtk-wrapped variants` rows into a single text-search entry; the hook-route caveat is named inline.
+
 ## [0.4.26] - 2026-05-20
 
 Adds the `park:` block to the Card schema so cards deliberately held — waiting on a second use-case, a cluster synthesis, or an upstream decision — can opt out of the conformance audit's `ready_for_design` finding without losing the rationale. `audit.conformance` now silently skips parked cards in the card-state family while continuing to fire on genuinely-undesigned ones. Six cards in this repo dogfooded the mechanism in the same release, cutting the local card-state finding count from 9 to 3.
