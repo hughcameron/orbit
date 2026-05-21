@@ -36,7 +36,8 @@ scenarios:
   when: the author needs to decide what to do next
   then: the agent performs the ranking and compression; the author sees a brief, not raw substrate
   gate: false
-specs: []
+specs:
+- .orbit/specs/2026-05-21-session-start-priority-synthesis/spec.yaml
 relations:
 - card: 0036-session-handover
   type: feeds

@@ -2,7 +2,7 @@ id: 2026-05-21-session-start-priority-synthesis
 goal: at session start, one command yields a ranked plan I can act on; the agent pays the compression cost so I don't have to
 cards:
 - 0043-session-start-priority-synthesis
-status: open
+status: closed
 labels: []
 acceptance_criteria:
 - id: ac-01
