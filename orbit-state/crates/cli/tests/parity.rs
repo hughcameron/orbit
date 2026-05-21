@@ -1405,6 +1405,201 @@ fn topology_setup_cli_brownfield_strips_legacy_config() {
     );
 }
 
+// ============================================================================
+// Spec 2026-05-21-richer-reconcile-rules ac-04 — canonicalise / reconcile
+// emit a "run orbit audit conformance --json" breadcrumb on parse failure.
+// The breadcrumb fires identically on both envelopes (canonicalise +
+// reconcile) and on both surfaces (JSON envelope `next_step` field +
+// human-readable stderr line).
+// ============================================================================
+
+#[test]
+fn ac_04_canonicalise_envelope_next_step_set_on_parse_failures() {
+    // A spec.yaml with an unknown top-level field — strict parse rejects
+    // (deny_unknown_fields per ac-01 of the orbit-state v0.1 spec), so
+    // canonicalise reports parse_failed = 1. The additive `next_step`
+    // field carries the breadcrumb.
+    let dir = tempfile::tempdir().unwrap();
+    let specs_dir = dir.path().join(".orbit/specs/0001");
+    std::fs::create_dir_all(&specs_dir).unwrap();
+    std::fs::write(
+        specs_dir.join("spec.yaml"),
+        "id: '0001'\ngoal: g\nstatus: open\nbogus_unknown_field: x\n",
+    )
+    .unwrap();
+
+    let cli_bin = env!("CARGO_BIN_EXE_orbit");
+    let output = Command::new(cli_bin)
+        .args(["--root", dir.path().to_str().unwrap(), "--json", "canonicalise"])
+        .stdin(Stdio::null())
+        .output()
+        .expect("run orbit cli");
+
+    let stdout = String::from_utf8(output.stdout).expect("stdout is utf-8");
+    let envelope: serde_json::Value =
+        serde_json::from_str(stdout.trim_end_matches('\n')).expect("json");
+    let next_step = envelope["next_step"].as_str().expect("next_step is a string");
+    assert!(
+        next_step.contains("1 file(s) failed parse"),
+        "next_step missing count: {next_step}"
+    );
+    assert!(
+        next_step.contains("run \"orbit audit conformance --json\""),
+        "next_step missing verb pointer: {next_step}"
+    );
+}
+
+#[test]
+fn ac_04_canonicalise_envelope_next_step_null_on_clean_tree() {
+    // A clean tree → parse_failed empty → next_step is JSON null.
+    // The field is always present (additive) so JSON consumers branch
+    // on null-vs-string without checking for the field's existence.
+    let dir = tempfile::tempdir().unwrap();
+    common::populate_two_specs(dir.path());
+
+    let cli_bin = env!("CARGO_BIN_EXE_orbit");
+    let output = Command::new(cli_bin)
+        .args(["--root", dir.path().to_str().unwrap(), "--json", "canonicalise"])
+        .stdin(Stdio::null())
+        .output()
+        .expect("run orbit cli");
+
+    let stdout = String::from_utf8(output.stdout).expect("stdout is utf-8");
+    let envelope: serde_json::Value =
+        serde_json::from_str(stdout.trim_end_matches('\n')).expect("json");
+    assert!(
+        envelope["next_step"].is_null(),
+        "next_step should be null on clean tree; got: {}",
+        envelope["next_step"]
+    );
+}
+
+#[test]
+fn ac_04_canonicalise_human_emits_breadcrumb_on_parse_failures() {
+    let dir = tempfile::tempdir().unwrap();
+    let specs_dir = dir.path().join(".orbit/specs/0001");
+    std::fs::create_dir_all(&specs_dir).unwrap();
+    std::fs::write(
+        specs_dir.join("spec.yaml"),
+        "id: '0001'\ngoal: g\nstatus: open\nbogus_unknown_field: x\n",
+    )
+    .unwrap();
+
+    let cli_bin = env!("CARGO_BIN_EXE_orbit");
+    let output = Command::new(cli_bin)
+        .args(["--root", dir.path().to_str().unwrap(), "canonicalise"])
+        .stdin(Stdio::null())
+        .output()
+        .expect("run orbit cli");
+
+    let stderr = String::from_utf8(output.stderr).expect("stderr is utf-8");
+    assert!(
+        stderr.contains("run \"orbit audit conformance --json\" for structured findings"),
+        "stderr breadcrumb missing: {stderr}"
+    );
+}
+
+#[test]
+fn ac_04_reconcile_envelope_next_step_set_on_post_reconcile_parse_failures() {
+    // A card.yaml lacking the required `feature` field — permissive
+    // parse succeeds, walk finds no unknown fields to apply, typed
+    // re-parse fails because feature is required. Reconcile's
+    // `parse_failed` is non-empty; the additive `next_step` carries
+    // the breadcrumb identically to canonicalise.
+    let dir = tempfile::tempdir().unwrap();
+    let cards_dir = dir.path().join(".orbit/cards");
+    std::fs::create_dir_all(&cards_dir).unwrap();
+    std::fs::write(
+        cards_dir.join("0099-test.yaml"),
+        "as_a: a\ni_want: w\nso_that: t\nmaturity: planned\n",
+    )
+    .unwrap();
+
+    let cli_bin = env!("CARGO_BIN_EXE_orbit");
+    let output = Command::new(cli_bin)
+        .args([
+            "--root",
+            dir.path().to_str().unwrap(),
+            "--json",
+            "canonicalise",
+            "--reconcile",
+        ])
+        .stdin(Stdio::null())
+        .output()
+        .expect("run orbit cli");
+
+    let stdout = String::from_utf8(output.stdout).expect("stdout is utf-8");
+    let envelope: serde_json::Value =
+        serde_json::from_str(stdout.trim_end_matches('\n')).expect("json");
+    let next_step = envelope["next_step"].as_str().expect("next_step is a string");
+    assert!(
+        next_step.contains("1 file(s) failed parse"),
+        "reconcile next_step missing count: {next_step}"
+    );
+    assert!(
+        next_step.contains("run \"orbit audit conformance --json\""),
+        "reconcile next_step missing verb pointer: {next_step}"
+    );
+}
+
+#[test]
+fn ac_04_reconcile_envelope_next_step_null_on_clean_tree() {
+    let dir = tempfile::tempdir().unwrap();
+    common::populate_two_specs(dir.path());
+
+    let cli_bin = env!("CARGO_BIN_EXE_orbit");
+    let output = Command::new(cli_bin)
+        .args([
+            "--root",
+            dir.path().to_str().unwrap(),
+            "--json",
+            "canonicalise",
+            "--reconcile",
+        ])
+        .stdin(Stdio::null())
+        .output()
+        .expect("run orbit cli");
+
+    let stdout = String::from_utf8(output.stdout).expect("stdout is utf-8");
+    let envelope: serde_json::Value =
+        serde_json::from_str(stdout.trim_end_matches('\n')).expect("json");
+    assert!(
+        envelope["next_step"].is_null(),
+        "reconcile next_step should be null on clean tree; got: {}",
+        envelope["next_step"]
+    );
+}
+
+#[test]
+fn ac_04_reconcile_human_emits_breadcrumb_on_parse_failures() {
+    let dir = tempfile::tempdir().unwrap();
+    let cards_dir = dir.path().join(".orbit/cards");
+    std::fs::create_dir_all(&cards_dir).unwrap();
+    std::fs::write(
+        cards_dir.join("0099-test.yaml"),
+        "as_a: a\ni_want: w\nso_that: t\nmaturity: planned\n",
+    )
+    .unwrap();
+
+    let cli_bin = env!("CARGO_BIN_EXE_orbit");
+    let output = Command::new(cli_bin)
+        .args([
+            "--root",
+            dir.path().to_str().unwrap(),
+            "canonicalise",
+            "--reconcile",
+        ])
+        .stdin(Stdio::null())
+        .output()
+        .expect("run orbit cli");
+
+    let stderr = String::from_utf8(output.stderr).expect("stderr is utf-8");
+    assert!(
+        stderr.contains("run \"orbit audit conformance --json\" for structured findings"),
+        "reconcile stderr breadcrumb missing: {stderr}"
+    );
+}
+
 // Helper visible to ensure the test binary depends on the CLI binary.
 #[allow(dead_code)]
 fn _binary_dep_anchor(_p: &Path) {}

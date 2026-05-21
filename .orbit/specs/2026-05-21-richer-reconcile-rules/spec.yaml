@@ -1,0 +1,48 @@
+id: 2026-05-21-richer-reconcile-rules
+goal: a brownfield project whose specs were authored before id and structured-AC conventions landed reaches `orbit verify` clean in one `orbit canonicalise --reconcile` invocation, and when reconcile's reach is exceeded the failure surface tells the agent to run `orbit audit conformance --json` rather than dumping raw yaml parse errors
+cards:
+- 0032-brownfield-spec-migration
+status: closed
+labels: []
+acceptance_criteria:
+- id: ac-01
+  description: 'When the permissive read encounters a `spec.yaml` lacking a top-level `id` field, the registry synthesises the id from the parent folder''s stem (a `spec.yaml` under `.orbit/specs/2026-05-04-foo/` resolves to `id` value `2026-05-04-foo`). The synthesis fires before `walk_and_classify` recurses (the synthesise phase added under ac-07) because the missing key cannot be discovered by the existing keys-iteration loop. The disposition is recorded in the run summary with `action: synthesise-id-from-filename`. A fixture at `orbit-state/crates/core/tests/fixtures/reconcile/missing-id/spec.yaml` round-trips through `--reconcile` and parses cleanly against the canonical `Spec` schema.'
+  gate: true
+  checked: true
+- id: ac-02
+  description: 'When the permissive read encounters a string scalar at `Spec.acceptance_criteria[N]` where an `AcceptanceCriterion` struct is expected, the registry wraps it into a struct with fields `id` (positional, `ac-01` for index 0, `ac-02` for index 1, in source order), `description` (the original scalar value), `gate` (false), `checked` (false), and `ac_type` (`code`). The wrap fires at the list-element scope added under ac-07 (registry path of form `Spec.acceptance_criteria[]` with no trailing field name), positioned before `recurse_inner`''s `as_mapping_mut` so the wrapped struct becomes walkable by the existing inner-field handlers. The disposition is recorded in the run summary with `action: wrap-scalar-ac`. A fixture at `orbit-state/crates/core/tests/fixtures/reconcile/scalar-ac/spec.yaml` round-trips through `--reconcile` and parses cleanly.'
+  gate: true
+  checked: true
+- id: ac-03
+  description: A fixture at `orbit-state/crates/core/tests/fixtures/reconcile/missing-id-and-scalar-ac/spec.yaml` carrying both shapes — missing top-level `id` and string-shaped acceptance_criteria entries — round-trips through `--reconcile` in a single invocation and parses cleanly against the canonical `Spec` schema. The two rules operate at disjoint scopes (synthesise-id at the pre-walk synthesise phase against the top-level mapping; wrap-scalar-ac at the list-element scope inside `recurse_inner`); composition is commutative for these two rules. The fixture test asserts both that the migrated file parses and that re-running `--reconcile` is a no-op (idempotency, mirroring ac-06 of spec 2026-05-12-reconcile-mode).
+  gate: false
+  checked: true
+- id: ac-04
+  description: When `orbit canonicalise` (with or without `--reconcile`) completes a run and any file remains in `parse_failed` after the registry's full rule set has applied, the run summary appends the breadcrumb line `N file(s) failed parse — run "orbit audit conformance --json" for structured findings` to the human-readable output. The two hand-rolled JSON envelopes (at `cli/src/main.rs:689-708` inside `run_canonicalise`, and at `cli/src/main.rs:742-774` inside `run_reconcile`) each gain an additive optional `next_step` field carrying the same breadcrumb string when `parse_failed > 0` and null otherwise. Existing envelope keys are unchanged on both paths. The breadcrumb text is identical across `--reconcile` and routine `orbit canonicalise` paths.
+  gate: true
+  checked: true
+- id: ac-05
+  description: 'The implementing agent runs `orbit canonicalise --reconcile --dry-run` against a local checkout of the validation-set repo named in `.orbit/memos/2026-05-16-richer-reconcile-rules.md` (54 parse-failed specs baseline), records the dispositions emitted by entity, then runs `--reconcile`, then `orbit verify` against the migrated tree. Recorded result: every spec the two new rules cover (the missing-id and scalar-AC populations) migrates to canonical shape; any residual `parse_failed` entries are enumerated in progress.md with the structural reason each was unreached (a third rule emerging from the residue is a follow-on spec, per choice 0023''s "follow-up spec teaches the registry the richer rule shape once a second project demands it" posture). The breadcrumb from ac-04 surfaces the residue cleanly without blocking close. If the validation-set repo is not locally reachable at implement time, the AC is treated as a structural NO-GO (per `/orb:drive`''s halt-temptation guard) rather than deferred to a later session.'
+  gate: false
+  checked: true
+- id: ac-06
+  description: '`.orbit/choices/0023-reconcile-as-canonicalise-mode.yaml` is updated — its `References` section adds this spec path, and the `Consequences` section is appended with one bullet naming the two new transform rules (`synthesise-id-from-filename`, `wrap-scalar-ac`) and the registry-shape extensions (pre-walk synthesise phase, list-element scope) shipped under this spec. (Card 0032''s `specs` array is updated by `/orb:spec` at spec-write time, not by the implementing agent — this AC covers the choice file only.)'
+  gate: false
+  checked: true
+  ac_type: doc
+- id: ac-07
+  description: 'The reconcile registry gains two structural extensions to support ac-01 and ac-02. (a) A pre-walk synthesise phase fires registered top-level synthesisers before `walk_and_classify`''s keys-iteration loop; the synthesiser receives a `TransformContext` (or equivalent thread-through) carrying the file path so derivation from filename is possible. A registered synthesiser may insert a missing required top-level key with a derived value. (b) A new list-element scope: the registry''s `(EntityType, structural_path) → Disposition` shape accepts structural-paths of form `<field>[]` (no trailing `.<name>`) that fire at the list-element level, positioned before `recurse_inner`''s `as_mapping_mut` check so scalar list entries can be wrapped into mappings the inner-field handlers can then walk. Both extensions carry independent unit-test fixtures (a synthetic missing-top-level-key fixture and a list-with-scalar-elements fixture) at `orbit-state/crates/core/tests/reconcile_shape_extensions.rs` (or equivalent), distinct from the ac-01/ac-02 spec-shape fixtures.'
+  gate: true
+  checked: true
+- id: ac-08
+  description: 'When the permissive read encounters a `spec.yaml` lacking a top-level `status` field, the registry synthesises `status: open` via the pre-walk synthesise phase added under ac-07. The disposition is recorded with `action: synthesise-status-default-open`. The default reflects brownfield reality: pre-canonical specs without a status field were typically in-flight; operators can correct to `closed` for specs already complete. This rule was added mid-implementation per ac-05''s validation finding — 53 of 54 specs in the validation-set repo lacked `status:`, not `id:` as the source memo described, so without this rule no brownfield spec would round-trip cleanly. Composes commutatively with ac-01 (missing-id synthesis) when both fields are absent. Unit test asserts a `spec.yaml` lacking only `status` round-trips through `--reconcile` and parses cleanly.'
+  gate: true
+  checked: true
+- id: ac-09
+  description: When the permissive read encounters `Spec.acceptance_criteria[N].criterion` (a legacy inner field name from pre-orbit-state corpora), the registry applies a `Map` disposition renaming `criterion` to `description`. The rename fires at the existing inner-field scope using the established `Map` variant; no new registry-shape extension is required. Added mid-implementation per ac-05's validation finding — the `_template/spec.yaml` outlier in the validation-set repo carries `criterion`/`description` rename drift. Unit test asserts a `spec.yaml` with a `criterion` inner field round-trips through `--reconcile` and parses cleanly with the field renamed.
+  gate: true
+  checked: true
+memories_considered:
+- key: session-close-2026-05-12-reconcile-mode-spec-approved
+  disposition: not-applicable
+  reason: session-close handover providing historical context for the prior reconcile-mode spec; carries no constraint shape for this follow-up spec which extends the same registry with new transform rules

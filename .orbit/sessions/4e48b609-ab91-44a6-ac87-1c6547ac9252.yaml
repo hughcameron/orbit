@@ -1,0 +1,17 @@
+id: 4e48b609-ab91-44a6-ac87-1c6547ac9252
+started_at: 2026-05-21T01:03:38.931930077Z
+ended_at: 2026-05-21T01:03:38.931930077Z
+distillate: |-
+  The finetype session hit the exact gap captured five days ago in `.orbit/memos/2026-05-16-richer-reconcile-rules.md`. Reconcile's v2 registry handles unknown fields (`constraints:` would drop cleanly), but the 54 specs also lack `id:` per AC and carry string-shaped ACs — both of which need *field synthesis*, not field rename/drop. Reconcile bails on the typed re-parse before write, so nothing changes on disk and session prime keeps tripping.
+
+  That memo names the three discrete additions (`filename-derived id`, `scalar-AC wrapping`, `layout discrimination`) and explicitly recommends distillation into a card. It's been sitting. Now it's the load-bearing blocker on a real downstream repo.
+
+  **Single move: `/orb:distill .orbit/memos/2026-05-16-richer-reconcile-rules.md`** — the memo is already near-card-shape and the field evidence from finetype is exactly the validation set this card needs.
+
+  Two side-notes worth keeping but not blocking on:
+
+  - **Conformance extension** — card 0039 doesn't currently emit a finding family for "parse-failed legacy specs". Once richer reconcile ships, conformance should surface `parse_failed` with remediation `orbit canonicalise --reconcile`. Flag during design, not a separate card.
+  - **Companion memo** `2026-05-20-reconcile-from-idempotent-setup.md` covers *when* reconcile is offered (setup §6 gap) — different problem from *what* reconcile can fix. Distill separately or fold into the richer-reconcile design as a §6 hook update; the design session will decide.
+
+  Want me to run `/orb:distill` on the richer-reconcile memo now?
+labels: []

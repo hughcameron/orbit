@@ -705,7 +705,13 @@ fn run_canonicalise(layout: &OrbitLayout, dry_run: bool, reconcile: bool, json: 
                 msg
             ));
         }
-        out.push_str("]}");
+        out.push(']');
+        // Per spec 2026-05-21-richer-reconcile-rules ac-04: additive
+        // optional `next_step` carrying a breadcrumb when parse_failed
+        // is non-empty, null otherwise. JSON consumers (skills like
+        // /orb:setup §3g, future automation) can route on this.
+        push_next_step(&mut out, &report.parse_failed);
+        out.push('}');
         println!("{out}");
     } else {
         let verb = if dry_run { "would rewrite" } else { "rewrote" };
@@ -718,12 +724,42 @@ fn run_canonicalise(layout: &OrbitLayout, dry_run: bool, reconcile: bool, json: 
         for (path, msg) in &report.parse_failed {
             eprintln!("  parse failed: {} — {msg}", path.display());
         }
+        // Per spec 2026-05-21-richer-reconcile-rules ac-04: human-output
+        // breadcrumb on parse_failed > 0 routes the agent to the
+        // conformance verb rather than leaving them at raw yaml errors.
+        if !report.parse_failed.is_empty() {
+            eprintln!("  {}", parse_failed_breadcrumb(report.parse_failed.len()));
+        }
     }
 
     if report.has_failures() {
         ExitCode::FAILURE
     } else {
         ExitCode::SUCCESS
+    }
+}
+
+/// Breadcrumb text appended to canonicalise / reconcile output when any
+/// file fails strict parse after the registry's full rule set has applied.
+/// The agent that sees this string is meant to run the named verb to get
+/// structured findings. Per spec 2026-05-21-richer-reconcile-rules ac-04.
+fn parse_failed_breadcrumb(count: usize) -> String {
+    format!(
+        "{count} file(s) failed parse — run \"orbit audit conformance --json\" for structured findings"
+    )
+}
+
+/// Push the additive optional `next_step` JSON field. Identical wiring
+/// on both `run_canonicalise` and `run_reconcile` envelopes — keeps the
+/// breadcrumb text and null-vs-string discrimination in one place.
+fn push_next_step(out: &mut String, parse_failed: &[(std::path::PathBuf, String)]) {
+    if parse_failed.is_empty() {
+        out.push_str(",\"next_step\":null");
+    } else {
+        out.push_str(&format!(
+            ",\"next_step\":{:?}",
+            parse_failed_breadcrumb(parse_failed.len())
+        ));
     }
 }
 
@@ -771,7 +807,11 @@ fn run_reconcile(layout: &OrbitLayout, dry_run: bool, json: bool) -> ExitCode {
             }
             out.push('}');
         }
-        out.push_str("]}");
+        out.push(']');
+        // Per spec 2026-05-21-richer-reconcile-rules ac-04: identical
+        // additive `next_step` on both envelopes.
+        push_next_step(&mut out, &report.parse_failed);
+        out.push('}');
         println!("{out}");
     } else {
         let verb = if dry_run { "would rewrite" } else { "rewrote" };
@@ -793,6 +833,11 @@ fn run_reconcile(layout: &OrbitLayout, dry_run: bool, json: bool) -> ExitCode {
         }
         for (path, msg) in &report.parse_failed {
             eprintln!("  parse failed: {} — {msg}", path.display());
+        }
+        // Per spec 2026-05-21-richer-reconcile-rules ac-04: identical
+        // breadcrumb on both human-output paths.
+        if !report.parse_failed.is_empty() {
+            eprintln!("  {}", parse_failed_breadcrumb(report.parse_failed.len()));
         }
     }
 

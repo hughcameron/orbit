@@ -73,10 +73,11 @@ impl EntityType {
 /// without a registry rule is [`Disposition::Quarantine`] — the substrate
 /// never silently destroys content.
 //
-// PartialEq compares fn-pointer addresses for the Transform variant; the
-// derived implementation is fine for the existing Map/Drop/Quarantine
-// tests (which compare against literal variants, not Transform values).
-// We never compare two Transform values for equality in production code.
+// PartialEq compares fn-pointer addresses for Transform/Synthesise/
+// WrapListElement variants; the derived implementation is fine for the
+// existing Map/Drop/Quarantine tests (which compare against literal
+// variants, not function-carrying values). We never compare two
+// function-carrying values for equality in production code.
 #[allow(unpredictable_function_pointer_comparisons)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Disposition {
@@ -100,6 +101,25 @@ pub enum Disposition {
     /// Per spec 2026-05-16-ac-taxonomy ac-05 — second-project trigger
     /// for value-level transforms beyond v1's rename/drop/quarantine.
     Transform(TransformFn),
+    /// Synthesise a missing top-level key. Fires in the pre-walk phase
+    /// before [`walk_and_classify`]'s keys-iteration loop, because a
+    /// missing key cannot be discovered by iterating existing keys.
+    /// The first field is the action label recorded on disposition
+    /// records (e.g. `"synthesise-id-from-filename"`); the function
+    /// receives the file's [`SynthesiseContext`] and may return
+    /// `Some(value)` to insert the key, or `None` to opt out for this
+    /// file. Per spec 2026-05-21-richer-reconcile-rules ac-07 (a).
+    Synthesise(&'static str, SynthesiseFn),
+    /// Wrap a non-mapping list element into a mapping before
+    /// [`recurse_inner`]'s `as_mapping_mut` check. Registered with a
+    /// structural-path of form `<field>[]` (no trailing `.<name>`).
+    /// The first field is the action label recorded on disposition
+    /// records (e.g. `"wrap-scalar-ac"`); the function receives the
+    /// current list element and its index, and may return
+    /// `Some(mapping)` to replace it (the inner-field handlers then
+    /// walk normally), or `None` to skip wrapping. Per spec
+    /// 2026-05-21-richer-reconcile-rules ac-07 (b).
+    WrapListElement(&'static str, WrapListElementFn),
 }
 
 /// Function pointer signature for [`Disposition::Transform`].
@@ -108,6 +128,27 @@ pub enum Disposition {
 /// entity mapping (with the field itself removed so the transform can't
 /// accidentally re-read its own pre-image).
 pub type TransformFn = fn(&serde_yaml::Value, &serde_yaml::Mapping) -> TransformResult;
+
+/// Context passed to [`Disposition::Synthesise`] handlers — the file's
+/// filesystem path so derivation from filename is possible. Per spec
+/// 2026-05-21-richer-reconcile-rules ac-07 (a).
+#[derive(Debug, Clone, Copy)]
+pub struct SynthesiseContext<'a> {
+    pub file_path: &'a Path,
+}
+
+/// Function pointer signature for [`Disposition::Synthesise`]. Returns
+/// `Some(value)` to insert the missing top-level key with the given
+/// value, or `None` to opt out (no insertion, no disposition record).
+pub type SynthesiseFn = fn(&SynthesiseContext) -> Option<serde_yaml::Value>;
+
+/// Function pointer signature for [`Disposition::WrapListElement`].
+/// Receives the current list element and its zero-based index. Returns
+/// `Some(mapping)` to replace the element with the wrapped mapping, or
+/// `None` to skip wrapping (the existing `as_mapping_mut continue` path
+/// will then skip the element). Per spec 2026-05-21-richer-reconcile-rules
+/// ac-07 (b).
+pub type WrapListElementFn = fn(&serde_yaml::Value, usize) -> Option<serde_yaml::Value>;
 
 /// Outcome of a Transform call. Either rewrite the value (with optional
 /// sibling-field writes) or fall back to quarantine.
@@ -135,6 +176,12 @@ impl Disposition {
             Disposition::Drop => "drop",
             Disposition::Quarantine => "quarantine",
             Disposition::Transform(_) => "transform",
+            // Synthesise and WrapListElement carry their action label
+            // inline at registration so the run summary records the
+            // specific rule (e.g. "synthesise-id-from-filename" /
+            // "wrap-scalar-ac") rather than a generic variant kind.
+            Disposition::Synthesise(label, _) => label,
+            Disposition::WrapListElement(label, _) => label,
         }
     }
 }
@@ -175,7 +222,106 @@ pub const FIELD_RULES: &[(EntityType, &str, Disposition)] = &[
     // constraints, exit_conditions — carry semantic content and have no
     // canonical equivalent yet, so they default to quarantine (no rule
     // here). The sidecar preserves the prose for a human to re-anchor.
+    //
+    // Spec missing top-level `id` — pre-orbit-state specs sometimes
+    // omit the field; the canonical writer enforces filename-stem ==
+    // id (per choice 0021), so the synthesise phase backfills `id`
+    // from the parent folder's stem. Fires only when the key is absent
+    // from the mapping. Per spec 2026-05-21-richer-reconcile-rules ac-01.
+    (
+        EntityType::Spec,
+        "id",
+        Disposition::Synthesise("synthesise-id-from-filename", synthesise_spec_id_from_filename),
+    ),
+    // String-shaped `acceptance_criteria[N]` entry — pre-orbit-state
+    // specs sometimes carry ACs as bare prose strings rather than
+    // structured mappings. List-element scope fires before
+    // `recurse_inner`'s `as_mapping_mut` check and wraps each scalar
+    // into a minimal AC struct (id positional, description verbatim,
+    // gate/checked default false). Per spec
+    // 2026-05-21-richer-reconcile-rules ac-02.
+    (
+        EntityType::Spec,
+        "acceptance_criteria[]",
+        Disposition::WrapListElement("wrap-scalar-ac", wrap_scalar_ac),
+    ),
+    // Spec missing top-level `status` — pre-orbit-state specs
+    // typically lack the field entirely. Default to "open" reflecting
+    // the brownfield reality that unstamped work was in-flight; the
+    // operator corrects closed specs after migration. Added per the
+    // ac-05 validation finding (53 of 54 brownfield specs lacked
+    // status, not id as the source memo described). Per spec
+    // 2026-05-21-richer-reconcile-rules ac-08.
+    (
+        EntityType::Spec,
+        "status",
+        Disposition::Synthesise("synthesise-status-default-open", synthesise_spec_status_open),
+    ),
+    // Inner AC `criterion` → `description` rename. Pre-orbit-state
+    // corpora used `criterion` for the AC's free-text body; the
+    // canonical schema named it `description`. The Map disposition
+    // renames the key, value passes through unchanged. Added per the
+    // ac-05 validation finding (the `_template/spec.yaml` outlier in
+    // the validation-set repo carries this drift). Per spec
+    // 2026-05-21-richer-reconcile-rules ac-09.
+    (
+        EntityType::Spec,
+        "acceptance_criteria[].criterion",
+        Disposition::Map("description"),
+    ),
 ];
+
+/// Synthesise a `Spec.id` from the parent folder's stem when the field
+/// is absent. `.orbit/specs/2026-05-04-foo/spec.yaml` resolves to the id
+/// value `2026-05-04-foo`. Returns `None` if the path lacks a parent
+/// with a stem (defensive — not expected in practice).
+/// Per spec 2026-05-21-richer-reconcile-rules ac-01.
+fn synthesise_spec_id_from_filename(ctx: &SynthesiseContext) -> Option<serde_yaml::Value> {
+    let parent = ctx.file_path.parent()?;
+    let stem = parent.file_name()?.to_str()?;
+    Some(serde_yaml::Value::String(stem.to_string()))
+}
+
+/// Synthesise `Spec.status: open` when the field is absent. Pre-canonical
+/// specs typically lacked a status field; defaulting to `open` is the safe
+/// brownfield choice (operators close completed specs explicitly after
+/// migration). The synthesise context's file_path is unused here — the
+/// default is constant — but the signature matches the registry contract.
+/// Per spec 2026-05-21-richer-reconcile-rules ac-08.
+fn synthesise_spec_status_open(_ctx: &SynthesiseContext) -> Option<serde_yaml::Value> {
+    Some(serde_yaml::Value::String("open".to_string()))
+}
+
+/// Wrap a scalar list element at `Spec.acceptance_criteria[N]` into a
+/// minimal AC mapping. The wrapped struct carries an id positional in
+/// source order (`ac-01`, `ac-02`, ...), the original scalar as
+/// `description`, and explicit `gate: false` + `checked: false`.
+/// `ac_type` is left absent so the schema default (Code) applies on
+/// parse — avoids triggering the existing `acceptance_criteria[].ac_type`
+/// pass-through transform per wrapped AC. Returns `None` if the element
+/// is not a scalar string.
+/// Per spec 2026-05-21-richer-reconcile-rules ac-02.
+fn wrap_scalar_ac(value: &serde_yaml::Value, idx: usize) -> Option<serde_yaml::Value> {
+    let s = value.as_str()?;
+    let mut m = serde_yaml::Mapping::new();
+    m.insert(
+        serde_yaml::Value::String("id".into()),
+        serde_yaml::Value::String(format!("ac-{:02}", idx + 1)),
+    );
+    m.insert(
+        serde_yaml::Value::String("description".into()),
+        serde_yaml::Value::String(s.to_string()),
+    );
+    m.insert(
+        serde_yaml::Value::String("gate".into()),
+        serde_yaml::Value::Bool(false),
+    );
+    m.insert(
+        serde_yaml::Value::String("checked".into()),
+        serde_yaml::Value::Bool(false),
+    );
+    Some(serde_yaml::Value::Mapping(m))
+}
 
 /// Transform handler for `acceptance_criteria[].ac_type` — spec
 /// 2026-05-16-ac-taxonomy ac-06. Routes brownfield values onto the
@@ -409,8 +555,17 @@ fn reconcile_one<T>(
 
     // Walk the top-level mapping plus inner lists-of-struct, mutating
     // `value` in place: Map renames keys, Drop removes them, Quarantine
-    // removes them AND records the original value for the sidecar.
-    if let Err(e) = walk_and_classify(&mut value, kind, &display_path, &mut file_dispositions) {
+    // removes them AND records the original value for the sidecar. The
+    // pre-walk synthesise phase inside walk_and_classify also receives
+    // the file path so Synthesise rules can derive values from the
+    // filename (ac-07).
+    if let Err(e) = walk_and_classify(
+        &mut value,
+        kind,
+        &display_path,
+        path,
+        &mut file_dispositions,
+    ) {
         report.parse_failed.push((path.to_path_buf(), e));
         return;
     }
@@ -490,6 +645,7 @@ fn walk_and_classify(
     value: &mut serde_yaml::Value,
     kind: EntityType,
     display_path: &str,
+    file_path: &Path,
     out: &mut Vec<(DispositionRecord, serde_yaml::Value)>,
 ) -> std::result::Result<(), String> {
     let top_fields: &[&str] = match kind {
@@ -503,6 +659,49 @@ fn walk_and_classify(
         Some(m) => m,
         None => return Err("root is not a mapping".into()),
     };
+
+    // Pre-walk synthesise phase: a missing top-level key cannot be
+    // discovered by the keys-iteration loop below (which iterates over
+    // keys that EXIST in the mapping). Iterate the registry for
+    // Synthesise rules matching this kind and fire each whose key is
+    // absent. Per spec 2026-05-21-richer-reconcile-rules ac-07 (a).
+    for (rule_kind, rule_path, disposition) in FIELD_RULES {
+        if *rule_kind != kind {
+            continue;
+        }
+        let (action_label, synthesise_fn) = match disposition {
+            Disposition::Synthesise(label, f) => (*label, *f),
+            _ => continue,
+        };
+        // Synthesise paths must be plain top-level keys (no dots, no
+        // brackets) — anything else is a registration bug.
+        if rule_path.contains('.') || rule_path.contains('[') {
+            return Err(format!(
+                "Synthesise rule registered with non-top-level path: {rule_path}"
+            ));
+        }
+        let key_value = serde_yaml::Value::String((*rule_path).to_string());
+        if mapping.contains_key(&key_value) {
+            continue;
+        }
+        let ctx = SynthesiseContext { file_path };
+        let Some(synthesised) = synthesise_fn(&ctx) else {
+            continue;
+        };
+        mapping.insert(key_value, synthesised);
+        out.push((
+            DispositionRecord {
+                path: display_path.to_string(),
+                kind: kind.as_str().to_string(),
+                field: (*rule_path).to_string(),
+                action: action_label.to_string(),
+                transform_detail: Some(format!(
+                    "synthesised missing top-level `{rule_path}` from file path"
+                )),
+            },
+            serde_yaml::Value::Null,
+        ));
+    }
 
     // Iterate over a snapshot of keys so we can mutate the mapping
     // (rename / remove) without invalidating an active iterator.
@@ -519,8 +718,19 @@ fn walk_and_classify(
             continue;
         }
 
-        // Unknown top-level field — look up registry.
-        let disposition = lookup_disposition(kind, &key);
+        // Unknown top-level field — look up registry. Synthesise/
+        // WrapListElement rules should never reach the top-level apply
+        // path: Synthesise fires in the pre-walk phase above only when
+        // the key is absent; WrapListElement is keyed on `<field>[]`
+        // structural-paths which never match a raw mapping key. If we
+        // hit either here it's a registration bug — quarantine the
+        // field defensively.
+        let disposition = match lookup_disposition(kind, &key) {
+            Disposition::Synthesise(_, _) | Disposition::WrapListElement(_, _) => {
+                Disposition::Quarantine
+            }
+            d => d,
+        };
         let (record, payload) = apply_top_level(mapping, &key, disposition, display_path, kind);
         if let Some(p) = payload {
             out.push((record, p));
@@ -559,7 +769,36 @@ fn recurse_inner(
         None => return Ok(()),
     };
 
+    // List-element scope: a registry rule keyed `<field>[]` (no
+    // trailing `.<name>`) fires before the per-element
+    // `as_mapping_mut continue` skip below. WrapListElement may
+    // replace a non-mapping element with a wrapped mapping, which
+    // the existing inner-field walk then handles normally. Per spec
+    // 2026-05-21-richer-reconcile-rules ac-07 (b).
+    let list_scope_path = format!("{}[]", inner_path_prefix);
+    let list_scope_disposition = lookup_disposition_explicit(kind, &list_scope_path);
+
     for (idx, item) in seq.iter_mut().enumerate() {
+        if let Some(Disposition::WrapListElement(action_label, wrap_fn)) = list_scope_disposition {
+            if !item.is_mapping() {
+                if let Some(wrapped) = wrap_fn(item, idx) {
+                    *item = wrapped;
+                    out.push((
+                        DispositionRecord {
+                            path: display_path.to_string(),
+                            kind: kind.as_str().to_string(),
+                            field: format!("{}[{}]", inner_path_prefix, idx),
+                            action: action_label.to_string(),
+                            transform_detail: Some(format!(
+                                "wrapped non-mapping element at index {idx}"
+                            )),
+                        },
+                        serde_yaml::Value::Null,
+                    ));
+                }
+            }
+        }
+
         let inner_map = match item.as_mapping_mut() {
             Some(m) => m,
             None => continue,
@@ -667,6 +906,17 @@ fn apply_top_level(
                 }
             }
         }
+        // Synthesise and WrapListElement should never reach apply_top_level
+        // — Synthesise fires in the pre-walk phase only on absent keys;
+        // WrapListElement is keyed by `<field>[]` structural-paths that
+        // never match a raw mapping key. The defensive filter in
+        // walk_and_classify routes these to Quarantine before they get
+        // here; the arms below are a belt-and-braces guard.
+        Disposition::Synthesise(_, _) | Disposition::WrapListElement(_, _) => {
+            let payload = mapping.remove(&key_value);
+            record.action = "quarantine".into();
+            (record, payload)
+        }
     }
 }
 
@@ -729,6 +979,15 @@ fn apply_inner(
                     (record, payload)
                 }
             }
+        }
+        // Synthesise / WrapListElement are top-level / list-element
+        // dispositions, never inner-field. If a rule of these kinds
+        // somehow gets registered with an inner structural-path, fall
+        // through to quarantine defensively.
+        Disposition::Synthesise(_, _) | Disposition::WrapListElement(_, _) => {
+            let payload = inner_map.remove(&key_value);
+            record.action = "quarantine".into();
+            (record, payload)
         }
     }
 }
@@ -1331,6 +1590,336 @@ mod tests {
         assert!(!word_contains("compiled binary", "compile"));
         assert!(!word_contains("evaluation pipeline", "eval"));
         assert!(word_contains("eval = 99/100", "eval"));
+    }
+
+    // ========================================================================
+    // Spec 2026-05-21-richer-reconcile-rules — richer reconcile rules.
+    // ac-07: registry-shape extensions (synthesise phase + list-element
+    //        scope) — exercised by mechanism-level tests independent of
+    //        the specific ac-01/ac-02 rules.
+    // ac-01: synthesise-id-from-filename rule.
+    // ac-02: wrap-scalar-ac rule.
+    // ac-03: composition + idempotency.
+    // ========================================================================
+
+    #[test]
+    fn ac_07_disposition_synthesise_carries_action_label() {
+        // The Synthesise variant carries its action label inline (so
+        // the run summary records the rule-specific name like
+        // "synthesise-id-from-filename" rather than a generic kind).
+        fn never(_: &SynthesiseContext) -> Option<serde_yaml::Value> {
+            None
+        }
+        let d = Disposition::Synthesise("test-synth", never);
+        assert_eq!(d.action_str(), "test-synth");
+    }
+
+    #[test]
+    fn ac_07_disposition_wrap_list_element_carries_action_label() {
+        // Same inline-label convention as Synthesise.
+        fn never(_: &serde_yaml::Value, _: usize) -> Option<serde_yaml::Value> {
+            None
+        }
+        let d = Disposition::WrapListElement("test-wrap", never);
+        assert_eq!(d.action_str(), "test-wrap");
+    }
+
+    #[test]
+    fn ac_07_synthesise_phase_fires_on_missing_top_level_key() {
+        // ac-07 (a): the pre-walk phase iterates Synthesise rules and
+        // fires each whose key is absent. The keys-iteration loop can't
+        // discover an absent key, so the synthesise phase is the only
+        // mechanism that handles this case.
+        let (_dir, layout) = fresh_layout();
+        let yaml = "goal: g\nstatus: open\nacceptance_criteria: []\n";
+        let path = write_spec(&layout, "0042-test", yaml);
+
+        let report = reconcile_all(&layout, false);
+        assert_eq!(report.rewrote, 1, "report: {report:?}");
+        assert_eq!(report.dispositions.len(), 1);
+        let d = &report.dispositions[0];
+        assert_eq!(d.action, "synthesise-id-from-filename");
+        assert_eq!(d.field, "id");
+        assert_eq!(d.kind, "spec");
+
+        let after = std::fs::read_to_string(&path).unwrap();
+        assert!(
+            after.contains("id: 0042-test"),
+            "synthesised id should match parent folder stem; got:\n{after}"
+        );
+    }
+
+    #[test]
+    fn ac_07_synthesise_phase_skips_when_key_is_present() {
+        // The synthesise rule must NOT fire when the key is already
+        // present — otherwise it would clobber a valid existing id.
+        let (_dir, layout) = fresh_layout();
+        let yaml =
+            "id: '0042-test'\ngoal: g\nstatus: open\nacceptance_criteria: []\n";
+        write_spec(&layout, "0042-test", yaml);
+
+        let report = reconcile_all(&layout, false);
+        assert!(
+            report.dispositions.is_empty(),
+            "no disposition expected on a clean spec; got: {:?}",
+            report.dispositions
+        );
+    }
+
+    #[test]
+    fn ac_07_list_element_scope_wraps_scalar_element() {
+        // ac-07 (b): a registered `<field>[]` rule fires before
+        // recurse_inner's as_mapping_mut continue, wrapping a scalar
+        // list element into a mapping the inner-field walk can then
+        // handle normally.
+        let (_dir, layout) = fresh_layout();
+        let yaml = "id: '0001'\ngoal: g\nstatus: open\nacceptance_criteria:\n- \"bare scalar AC\"\n";
+        let path = write_spec(&layout, "0001", yaml);
+
+        let report = reconcile_all(&layout, false);
+        assert_eq!(report.rewrote, 1, "report: {report:?}");
+        let wraps: Vec<&DispositionRecord> = report
+            .dispositions
+            .iter()
+            .filter(|d| d.action == "wrap-scalar-ac")
+            .collect();
+        assert_eq!(
+            wraps.len(),
+            1,
+            "expected one wrap, got: {:?}",
+            report.dispositions
+        );
+        assert_eq!(wraps[0].field, "acceptance_criteria[0]");
+        assert_eq!(wraps[0].kind, "spec");
+
+        let after = std::fs::read_to_string(&path).unwrap();
+        assert!(after.contains("id: ac-01"), "got:\n{after}");
+        assert!(
+            after.contains("bare scalar AC"),
+            "description should preserve the original scalar; got:\n{after}"
+        );
+    }
+
+    #[test]
+    fn ac_07_list_element_scope_skips_mapping_elements() {
+        // The wrap rule must NOT touch elements that are already
+        // mappings — only scalar (non-mapping) entries should be
+        // wrapped.
+        let (_dir, layout) = fresh_layout();
+        let yaml = "id: '0001'\ngoal: g\nstatus: open\nacceptance_criteria:\n- id: ac-01\n  description: structured AC\n  gate: false\n  checked: false\n";
+        write_spec(&layout, "0001", yaml);
+
+        let report = reconcile_all(&layout, false);
+        let wraps: Vec<&DispositionRecord> = report
+            .dispositions
+            .iter()
+            .filter(|d| d.action == "wrap-scalar-ac")
+            .collect();
+        assert!(
+            wraps.is_empty(),
+            "no wrap expected on an already-structured AC; got: {:?}",
+            report.dispositions
+        );
+    }
+
+    #[test]
+    fn ac_01_synthesise_id_from_filename_round_trips() {
+        // ac-01: a spec.yaml lacking top-level `id` is synthesised from
+        // the parent folder's stem and the migrated file parses cleanly
+        // against the canonical Spec schema. The reconcile_all engine
+        // only rewrites a file when value_to_canonical succeeds, so a
+        // rewrote-count of 1 already proves cleanliness; we re-parse to
+        // assert the synthesised value matches the folder stem.
+        let (_dir, layout) = fresh_layout();
+        let yaml = "goal: g\nstatus: open\nacceptance_criteria: []\n";
+        let path = write_spec(&layout, "2026-05-04-foo", yaml);
+
+        let report = reconcile_all(&layout, false);
+        assert_eq!(report.rewrote, 1);
+        assert_eq!(report.dispositions.len(), 1);
+        assert_eq!(
+            report.dispositions[0].action,
+            "synthesise-id-from-filename"
+        );
+
+        let after = std::fs::read_to_string(&path).unwrap();
+        let parsed: Spec = crate::canonical::parse_yaml(&after).expect("re-parse");
+        assert_eq!(parsed.id, "2026-05-04-foo");
+    }
+
+    #[test]
+    fn ac_02_wrap_scalar_ac_round_trips() {
+        // ac-02: string-shaped acceptance_criteria entries are wrapped
+        // into structured ACs with positional ids; the migrated file
+        // parses cleanly.
+        let (_dir, layout) = fresh_layout();
+        let yaml = "id: '0001'\ngoal: g\nstatus: open\nacceptance_criteria:\n- \"first scalar AC\"\n- \"second scalar AC\"\n";
+        let path = write_spec(&layout, "0001", yaml);
+
+        let report = reconcile_all(&layout, false);
+        assert_eq!(report.rewrote, 1);
+        let wraps: Vec<&DispositionRecord> = report
+            .dispositions
+            .iter()
+            .filter(|d| d.action == "wrap-scalar-ac")
+            .collect();
+        assert_eq!(
+            wraps.len(),
+            2,
+            "expected two wraps, got: {:?}",
+            report.dispositions
+        );
+
+        let after = std::fs::read_to_string(&path).unwrap();
+        let parsed: Spec = crate::canonical::parse_yaml(&after).expect("re-parse");
+        assert_eq!(parsed.acceptance_criteria.len(), 2);
+        assert_eq!(parsed.acceptance_criteria[0].id, "ac-01");
+        assert_eq!(
+            parsed.acceptance_criteria[0].description,
+            "first scalar AC"
+        );
+        assert_eq!(parsed.acceptance_criteria[1].id, "ac-02");
+        assert_eq!(
+            parsed.acceptance_criteria[1].description,
+            "second scalar AC"
+        );
+    }
+
+    #[test]
+    fn ac_03_composition_missing_id_and_scalar_ac_round_trips_idempotently() {
+        // ac-03: both shapes in one file — missing top-level id AND
+        // scalar ACs — round-trip in a single invocation. A re-run is
+        // a no-op (idempotency, mirroring ac-06 of spec 2026-05-12-
+        // reconcile-mode).
+        let (_dir, layout) = fresh_layout();
+        let yaml = "goal: g\nstatus: open\nacceptance_criteria:\n- \"first scalar AC\"\n- \"second scalar AC\"\n";
+        let path = write_spec(&layout, "2026-05-04-composed", yaml);
+
+        let first = reconcile_all(&layout, false);
+        assert_eq!(first.rewrote, 1);
+        let synths = first
+            .dispositions
+            .iter()
+            .filter(|d| d.action == "synthesise-id-from-filename")
+            .count();
+        let wraps = first
+            .dispositions
+            .iter()
+            .filter(|d| d.action == "wrap-scalar-ac")
+            .count();
+        assert_eq!(synths, 1, "expected one id synthesis");
+        assert_eq!(wraps, 2, "expected two scalar-AC wraps");
+
+        let after = std::fs::read_to_string(&path).unwrap();
+        let parsed: Spec = crate::canonical::parse_yaml(&after).expect("re-parse");
+        assert_eq!(parsed.id, "2026-05-04-composed");
+        assert_eq!(parsed.acceptance_criteria.len(), 2);
+
+        let second = reconcile_all(&layout, false);
+        assert_eq!(
+            second.rewrote, 0,
+            "second pass must be no-op; got: {second:?}"
+        );
+        assert_eq!(second.unchanged, 1);
+        assert!(
+            second.dispositions.is_empty(),
+            "no new dispositions on second pass; got: {:?}",
+            second.dispositions
+        );
+    }
+
+    #[test]
+    fn ac_08_synthesise_status_default_open_when_missing() {
+        // ac-08: a Spec missing top-level `status` synthesises
+        // `status: open` via the pre-walk phase. Together with the
+        // ac-01 id-synthesis rule, the same fixture exercises both
+        // synthesisers composing on a single file.
+        let (_dir, layout) = fresh_layout();
+        let yaml = "id: '0001'\ngoal: g\nacceptance_criteria: []\n";
+        let path = write_spec(&layout, "0001", yaml);
+
+        let report = reconcile_all(&layout, false);
+        assert_eq!(report.rewrote, 1, "report: {report:?}");
+        let synths = report
+            .dispositions
+            .iter()
+            .filter(|d| d.action == "synthesise-status-default-open")
+            .count();
+        assert_eq!(synths, 1, "expected one status synthesis; got: {:?}", report.dispositions);
+
+        let after = std::fs::read_to_string(&path).unwrap();
+        let parsed: Spec = crate::canonical::parse_yaml(&after).expect("re-parse");
+        // The default status is open — matches the brownfield posture
+        // captured in the registry comment for this rule.
+        assert!(
+            matches!(parsed.status, crate::schema::SpecStatus::Open),
+            "default synthesised status should be open"
+        );
+    }
+
+    #[test]
+    fn ac_08_status_synthesis_composes_with_id_synthesis() {
+        // ac-08 + ac-01: a spec missing BOTH id AND status round-trips
+        // through reconcile in a single pass, both synthesisers
+        // composing commutatively at the pre-walk phase.
+        let (_dir, layout) = fresh_layout();
+        let yaml = "goal: g\nacceptance_criteria: []\n";
+        let path = write_spec(&layout, "2026-05-04-bare", yaml);
+
+        let report = reconcile_all(&layout, false);
+        assert_eq!(report.rewrote, 1);
+        // Two synthesise dispositions (one for id, one for status).
+        let id_synths = report
+            .dispositions
+            .iter()
+            .filter(|d| d.action == "synthesise-id-from-filename")
+            .count();
+        let status_synths = report
+            .dispositions
+            .iter()
+            .filter(|d| d.action == "synthesise-status-default-open")
+            .count();
+        assert_eq!(id_synths, 1, "id synthesis must fire");
+        assert_eq!(status_synths, 1, "status synthesis must fire");
+
+        let after = std::fs::read_to_string(&path).unwrap();
+        let parsed: Spec = crate::canonical::parse_yaml(&after).expect("re-parse");
+        assert_eq!(parsed.id, "2026-05-04-bare");
+        assert!(matches!(parsed.status, crate::schema::SpecStatus::Open));
+    }
+
+    #[test]
+    fn ac_09_criterion_renamed_to_description() {
+        // ac-09: an inner AC field named `criterion` is renamed to
+        // `description` via the existing Map disposition shape at the
+        // inner-field scope. No registry-shape extension required —
+        // the existing inner-field handler picks up the rename.
+        let (_dir, layout) = fresh_layout();
+        let yaml = "id: '0001'\ngoal: g\nstatus: open\nacceptance_criteria:\n- id: ac-01\n  criterion: 'AC body authored under the legacy name'\n  gate: false\n  checked: false\n";
+        let path = write_spec(&layout, "0001", yaml);
+
+        let report = reconcile_all(&layout, false);
+        assert_eq!(report.rewrote, 1, "report: {report:?}");
+        let maps: Vec<&DispositionRecord> = report
+            .dispositions
+            .iter()
+            .filter(|d| d.action == "map")
+            .collect();
+        assert_eq!(
+            maps.len(),
+            1,
+            "expected one map disposition; got: {:?}",
+            report.dispositions
+        );
+        assert_eq!(maps[0].field, "acceptance_criteria[0].criterion");
+
+        let after = std::fs::read_to_string(&path).unwrap();
+        let parsed: Spec = crate::canonical::parse_yaml(&after).expect("re-parse");
+        assert_eq!(parsed.acceptance_criteria.len(), 1);
+        assert_eq!(
+            parsed.acceptance_criteria[0].description,
+            "AC body authored under the legacy name"
+        );
     }
 
     #[test]
