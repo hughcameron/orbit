@@ -244,11 +244,11 @@ orbit audit conformance --json
 The verb returns a **structured findings envelope** ({severity, subsystem, subject, state, evidence, remediation} per finding) covering three v1 finding families plus aggregated `audit.drift` + `audit.topology` results:
 
 - **plugin-canonical-file drift** — `.orbit/METHOD.md` and `.orbit/STYLE.md` byte-compared against the canonical bytes embedded in the orbit-state binary; firing remediation = `orbit setup`.
-- **card-state** — cards at `maturity: planned` with empty specs (ready for design); firing remediation = `/orb:tabletop <id>`.
+- **card-state** — cards at `maturity: planned` with empty specs (ready for tabletop); firing remediation = `/orb:tabletop <id>`.
 - **memo staleness** — memos undistilled > 7 days; firing remediation = `/orb:distill <memo-path>`.
 - **plugin-version pin** — per-repo pin in `.orbit/config.yaml` (`plugin_version: "0.4.20"`); `pin_behind` / `pin_ahead` each fire a single dominant finding and suppress per-file findings.
 
-**Parked-card carve-out.** Within the card-state family, cards carrying a `park:` block on the Card schema (with `reason:` and `until:` subfields) are excluded from the `ready_for_design` finding silently — no envelope trace, no remediation surface. This lets the author declare a card deliberately on hold (awaiting evidence, cluster synthesis, a date) without the audit nagging on every pass. The carve-out is scoped to the card-state family only — aggregated drift, topology drift, memo staleness, and plugin-canonical-file findings continue to fire normally for the same card. See `/orb:card`'s *Parking a card* section for the authoring side. Per spec 2026-05-20-conformance-park-signal.
+**Parked-card carve-out.** Within the card-state family, cards carrying a `park:` block on the Card schema (with `reason:` and `until:` subfields) are excluded from the `ready_for_tabletop` finding silently — no envelope trace, no remediation surface. This lets the author declare a card deliberately on hold (awaiting evidence, cluster synthesis, a date) without the audit nagging on every pass. The carve-out is scoped to the card-state family only — aggregated drift, topology drift, memo staleness, and plugin-canonical-file findings continue to fire normally for the same card. See `/orb:card`'s *Parking a card* section for the authoring side. Per spec 2026-05-20-conformance-park-signal.
 
 Each finding carries an explicit **`remediation.verb`** the agent runs without translation. The verb is agent-first: zero-finding case is silent; the operator only sees output on agent escalation. Read-only — invoking it produces no on-disk changes. Per spec 2026-05-19-workflow-conformance.
 

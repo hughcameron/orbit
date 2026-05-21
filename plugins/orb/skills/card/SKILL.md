@@ -129,7 +129,7 @@ Both subfields are free-form prose:
 - **`reason:`** — why the card is held. One short sentence. Examples: `"awaiting third use-case forcing"`, `"blocked on upstream choice 0021"`, `"observation window after substrate-engagement rally closes"`.
 - **`until:`** — the unhold condition. Free-form too. Examples: `"N=2 evidence"`, `"cluster synthesis on cards 0037 + 0038 + 0042"`, `"2026-08-01"`, `"hydrofoil consumer hits the pattern"`.
 
-When the card is parked, conformance's card-state finding family skips it silently — no `ready_for_design` finding, no envelope trace. The carve-out applies only to that family; aggregated drift, topology drift, memo staleness, and plugin-canonical-file findings continue to fire normally if the card or its surroundings warrant them.
+When the card is parked, conformance's card-state finding family skips it silently — no `ready_for_tabletop` finding, no envelope trace. The carve-out applies only to that family; aggregated drift, topology drift, memo staleness, and plugin-canonical-file findings continue to fire normally if the card or its surroundings warrant them.
 
 **To unpark**, remove the `park:` block from the card YAML. The card returns to the audit's view on the next conformance run.
 
