@@ -2,6 +2,33 @@
 
 All notable changes to orbit are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.4.29] - 2026-05-21
+
+Ships `/orb:tabletop` as the canonical pre-spec session and retires `/orb:design`. Tabletop replaces design with a stronger contract-not-solution rule enforced at the SKILL.md level: the 10-question methodology (goal narrowing, values, trade-offs, failure modes, lateral approaches, success criteria, escalation triggers, adjacent code, budget, kill conditions) plus a closing hot-wash, with output landing in a per-spec `tabletop.md` sidecar that carries values + trade-offs + halt conditions + escalation triggers + kill conditions + hot-wash. One session can produce one or more specs (multi-card fan-out); closed-mode tabletop ports `/orb:design`'s closed-space design-note path to a `tabletop-note.md` artefact. Retirement was gated on an ambiguity-floor probe (per spec 2026-05-21-tabletop ac-10) — the probe returned GO under the project-bar criterion (tabletop 0.200 vs baseline 0.165; gap was domain-driven in `criteria_clarity`, `constraint_clarity` beat baseline).
+
+### Added
+
+- **`/orb:tabletop` skill** at `plugins/orb/skills/tabletop/SKILL.md` — front-loaded thinking before specs are written. Goal-scoped (one or more cards, or a goal string with agent-inferred cluster + AUQ author confirmation), one-to-many in spec output, multi-card in scope. The 10-question methodology runs in open/partial mode with each question carrying a role line + stop condition; closed mode (when an accepted choice file pins the approach AND prior specs build on the pattern) skips the methodology and produces a one-screen `tabletop-note.md`. Per spec 2026-05-21-tabletop ac-01..ac-09.
+- **Per-spec `tabletop.md` sidecar** carrying six sections in declared order (values, trade-offs, halt conditions, escalation triggers, kill conditions, hot-wash). Mirrors the 2026-05-07 dogfood pattern. Closed-mode tabletop is exempt — produces `tabletop-note.md` instead (mutually exclusive per session). No `Spec` schema change; the sidecar lives outside `spec.yaml`. Per choice 0027 (`tabletop-contract-sidecar`).
+- **AUQ-prose hybrid pattern** pinned per question — prose opens reframable questions (Q1 goal, Q2 values, Q3 trade-offs, Q4 failure modes, Q5 laterals, Q8 adjacent code); AUQ closes picks (Q6 success criteria, Q7 escalation triggers, Q9 budget with inflation-guard recut applied, Q10 kill conditions). AUQ-refusal fallback: a custom-response reframe returns to the prose phase.
+- **Actionable-shape enforcement** for halt conditions (measurable trigger + revert path), escalation triggers (condition + state snapshot + proposed action), and kill conditions (load-bearing claim + named pivot path). Rejected anti-patterns (`"things go wrong"`, `"halt and reassess"`, `"ask Hugh if confused"`, `"I'm stuck"`) listed inline with canonical shapes.
+- **MADR choice 0026** (`tabletop-replaces-design`, status `accepted`) — names the v1 design failure mode, alternatives considered (heavyweight tier, multi-card variant only), the chosen full replacement, and the ac-10 probe as the gating mechanism.
+- **MADR choice 0027** (`tabletop-contract-sidecar`, status `accepted`) — names the schema-extension and AC-fold alternatives, the chosen sidecar shape, the 2026-05-07 dogfood pattern as precedent, and the per-spec sidecar location convention.
+
+### Changed
+
+- **Conformance audit** now emits `ready_for_tabletop` state slug and `/orb:tabletop <numeric-id>` remediation verb (was `ready_for_design` + `/orb:design <numeric-id>`). The `card has scenarios but no tabletop pass` rationale text updates accordingly. Downstream consumer `/orb:prioritise` updated to surface the new verb.
+- **METHOD.md pipeline** updates from `memo → distill → card → design → spec → ...` to `memo → distill → card → tabletop → spec → ...` across all three byte-identical copies (canonical at `orbit-state/crates/core/canonical/METHOD.md`, vendored at `plugins/orb/skills/setup/METHOD.md`, project at `.orbit/METHOD.md`). Narrative `/design` references at the drive description and verb-routing line also updated.
+- **`/orb:spec`** now accepts `tabletop-note.md` as the closed-space input artefact (was `design-note.md`). The `verbs.rs` sidecar scan-set in `spec.close`'s topology-warning path updated to match.
+- **Plugin skill cascade** — every live `/orb:design` reference in tracked SKILL.md files (`distill`, `discovery`, `prioritise`, `setup`, `review-spec`, `drive`, `keyword-scan`, `card`, `spec`) becomes `/orb:tabletop` or is rewritten for the new shape.
+- **Project `CLAUDE.md`** skill list + pipeline narrative updated.
+- **README** mermaid flowchart node, skills table, and narrative prose updated to name `/orb:tabletop`.
+- **Topology pointer** for the choices subsystem rewritten from `plugins/orb/skills/design/SKILL.md` to `plugins/orb/skills/tabletop/SKILL.md` in `.orbit/topology/choices.yaml`.
+
+### Removed
+
+- **`/orb:design` skill** — `plugins/orb/skills/design/` directory removed. Tabletop is the canonical pre-spec session. Historical artefacts (cards, choices, memos, prior spec records) keep their `/orb:design` references as dated context.
+
 ## [0.4.28] - 2026-05-21
 
 Ships richer brownfield reconcile rules so projects with pre-orbit-state spec corpora can run `orbit canonicalise --reconcile` once and reach `orbit verify` clean. Validation against a brownfield corpus migrated all 54 parse-failed specs to canonical shape in a single invocation. Both `canonicalise` envelopes (with and without `--reconcile`) now emit a "run `orbit audit conformance --json`" breadcrumb when residual parse failures remain, routing agents to the structured-findings verb instead of leaving them at raw yaml errors.
