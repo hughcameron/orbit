@@ -33,27 +33,17 @@ Pull distinctive domain terms — skip generic words (the, when, should, given, 
 
 ## Search Command
 
-Prefer ripgrep (`rg`) for speed. Fall back to `grep` when `rg` is unavailable — both are standard on development machines, but `rg` is not guaranteed on minimal or CI environments.
+Use `rg` or `grep -rlE` — both return file-list output. Some environments hook-route `rg` invocations through a token-frugal grep proxy (e.g. `rtk grep`), so write queries that work in either: POSIX ERE alternation, no PCRE2.
 
 ```bash
-# ripgrep (preferred)
+# alternation pattern that works in both rg and grep -rE
 rg -l "term1|term2|term3" <target>/
-
-# grep fallback — note escaped pipes
-grep -rl "term1\|term2\|term3" <target>/
+grep -rlE "term1|term2|term3" <target>/
 ```
 
-**Detecting availability:**
+When you specifically need ripgrep features (PCRE2, `--json`, regex extensions) and the shell may wrap `rg`, invoke the binary by absolute path (e.g. `/home/linuxbrew/.linuxbrew/bin/rg`).
 
-```bash
-if command -v rg &>/dev/null; then
-  rg -l "pattern" <target>/
-else
-  grep -rl "pattern" <target>/
-fi
-```
-
-Both commands return file paths only (`-l`), not content — keeping token usage minimal.
+`-l` returns file paths only, not content — keeping token usage minimal.
 
 ## Search Targets by Skill
 

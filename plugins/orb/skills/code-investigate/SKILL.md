@@ -45,8 +45,8 @@ The agent reaches for these by default:
 |------|---------|
 | **ast-grep** | Structural patterns regex cannot express — *find unwrap calls in match arms*, *find async functions returning Result*, language-aware AST matching. |
 | **tree-sitter** | AST queries when you need a parse-tree, not just a match — *count async functions per file*, *list trait impls*, structural counts. |
-| **ripgrep** (`rg`) | Text search. Use `-l` for file-list only, `-C N` for context lines, `-c` for per-file counts. Default to the focused output, not the dump. |
-| **rtk-wrapped variants** | When the output of a standard command would burn tokens — `rtk ls`, `rtk tree`, `rtk grep`, `rtk diff`, `rtk find`, `rtk read`, `rtk log`. Always prefer the rtk variant where one exists. |
+| **Text search** (`rg`, `grep -rE`, `rtk grep`) | Use `-l` for file-list only, `-C N` for context lines, `-c` for per-file counts. Some environments hook-route `rg` invocations through a grep proxy — write queries that work in either (POSIX ERE alternation, no PCRE2). For true ripgrep features (PCRE2, `--json`, regex extensions), invoke the binary by absolute path. |
+| **rtk-wrapped variants** | Token-frugal wrappers for verbose commands — `rtk ls`, `rtk tree`, `rtk diff`, `rtk find`, `rtk read`, `rtk log`. Reach for these when raw output would burn tokens. |
 | **Read / Glob** | When you need a full file or a path pattern that isn't search-shaped. Read is the fallback once you know exactly what to open. |
 
 ## Narrow mode
@@ -76,6 +76,8 @@ Return a synthesised picture, not a dump. The calling agent wants the *shape* of
 - **Quote stats accurately.** If you say "47 async functions", run the count via ast-grep or tree-sitter — don't approximate from a regex.
 - **Default to the token-frugal variant.** rtk-wrapped commands exist for a reason; the verbose form is the exception.
 - **Read the cited source.** A grep hit is a candidate, not a conclusion — open the file at the matched line before drawing inferences.
+- **Diagnose before bypassing.** When a CLI returns surprising output (wrong binary, unsupported flag, unexpected stderr), the workaround is justified only after you've named the mechanism. Run `type <cmd>`, `command -V <cmd>`, `alias <cmd>`, AND grep `~/.claude/settings.json` for `PreToolUse` Bash hooks. Hooks (e.g. `rtk hook claude`) intercept unqualified invocations and can rewrite them — "shimmed" and "hook-intercepted" feel the same but are different mechanisms; naming the actual one keeps memory writes accurate.
+- **Cite the substrate, don't paraphrase.** When applying a project rule (`CLAUDE.md`, `.orbit/METHOD.md`, `.orbit/STYLE.md`, choices, memories), include `<file>:<line>` and the exact quoted text. Adjacent files overlap intentionally (CLAUDE.md is per-project, METHOD.md is the orbit canonical, STYLE.md is the prose canonical — easy to conflate). And: project copies of canonical files can drift behind the plugin. If a citation depends on a rule that might have shifted, run `orbit audit conformance --json` first; a non-empty `plugin_canonical_file_drift` finding means the local copy is stale.
 - **Investigate before you change.** This is the discipline the skill exists to make cheap.
 
 ## After using this skill

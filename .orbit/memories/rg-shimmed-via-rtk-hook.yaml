@@ -1,0 +1,5 @@
+key: rg-shimmed-via-rtk-hook
+body: 'Within Claude Code''s Bash tool in this shell, `rg` is functionally shimmed to GNU grep — the rtk hook claude PreToolUse hook (configured at ~/.claude/settings.json) routes invocations through the rtk proxy, which runs grep instead of ripgrep. Verified 2026-05-21: `rg --version` returns ''grep (GNU grep) 3.11''; `/home/linuxbrew/.linuxbrew/bin/rg --version` (absolute path bypasses the hook) returns ''ripgrep 15.1.0''. /home/linuxbrew/.linuxbrew/bin/rg IS a real symlink to Cellar/ripgrep/15.1.0/bin/rg. The rtk binary describes itself as ''a high-performance CLI proxy designed to filter and summarize system outputs before they reach your LLM context'' — token-efficiency intent, not error. How to apply: when an investigation needs true ripgrep features (PCRE2, --json output, regex syntax not in grep), invoke /home/linuxbrew/.linuxbrew/bin/rg directly; for plain literal/regex matching, accept the rtk-routed grep (it''s faster on the token budget). Earlier ''rg is shimmed'' agent observations are correct in effect even if they name the wrong mechanism.'
+timestamp: 2026-05-20T22:31:21.019955014Z
+labels:
+- code-investigate
