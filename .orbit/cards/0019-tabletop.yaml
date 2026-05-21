@@ -61,7 +61,8 @@ scenarios:
   when: the contract is being written
   then: a brief hot-wash captures what kept coming up and what was unclear — fresh, before formal write-up sanitises the signal
   gate: false
-specs: []
+specs:
+- .orbit/specs/2026-05-21-tabletop/spec.yaml
 relations:
 - card: 0010-objective-functions
   type: depends-on
