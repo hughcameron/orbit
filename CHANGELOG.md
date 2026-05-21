@@ -2,6 +2,20 @@
 
 All notable changes to orbit are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.4.28] - 2026-05-21
+
+Ships richer brownfield reconcile rules so projects with pre-orbit-state spec corpora can run `orbit canonicalise --reconcile` once and reach `orbit verify` clean. Validation against a brownfield corpus migrated all 54 parse-failed specs to canonical shape in a single invocation. Both `canonicalise` envelopes (with and without `--reconcile`) now emit a "run `orbit audit conformance --json`" breadcrumb when residual parse failures remain, routing agents to the structured-findings verb instead of leaving them at raw yaml errors.
+
+### Added
+
+- **Reconcile registry-shape extensions** — two structural extensions on top of the existing `(EntityType, structural_path) → Disposition` shape: a pre-walk synthesise phase that fires before `walk_and_classify`'s keys-iteration loop (so rules can insert missing required keys from filesystem context), and a list-element scope keyed by structural-paths of form `<field>[]` (so scalar list entries can be wrapped before the per-element walk). Two new `Disposition` variants — `Synthesise(label, fn)` and `WrapListElement(label, fn)` — carry their action label inline so the run summary records rule-specific names. Per spec 2026-05-21-richer-reconcile-rules ac-07.
+- **Four new reconcile rules.** `synthesise-id-from-filename` derives `Spec.id` from the parent folder's stem when absent. `synthesise-status-default-open` defaults `Spec.status` to `open` when absent (operators correct closed specs after migration). `wrap-scalar-ac` converts bare string `acceptance_criteria[N]` entries into structured ACs with positional id, original string as description, and explicit `gate: false` + `checked: false`. `criterion → description` Map renames the legacy inner field name to the canonical one. Per spec 2026-05-21-richer-reconcile-rules ac-01, ac-02, ac-08, ac-09.
+- **Failure-surface breadcrumb on both canonicalise envelopes.** When any file remains in `parse_failed` after the registry's full rule set has applied, both human-readable output and JSON envelope route the agent to the conformance verb. The two hand-rolled JSON envelopes gain an additive optional `next_step` field carrying the breadcrumb string when `parse_failed > 0` and `null` otherwise; existing keys unchanged. Identical text across `run_canonicalise` and `run_reconcile` paths. Per spec 2026-05-21-richer-reconcile-rules ac-04.
+
+### Changed
+
+- **Choice 0023 (`reconcile-as-canonicalise-mode`) extended** with the second-project-trigger consequence: the registry-shape extensions, the four new rule names, the breadcrumb shape. References section now points at `2026-05-21-richer-reconcile-rules/spec.yaml` as the follow-on substrate.
+
 ## [0.4.27] - 2026-05-21
 
 Ships `/orb:prioritise` — a session-start priority synthesis skill that re-derives a ranked Decision Brief live from workflow conformance, the session-prime envelope, and recent memories. Read-only by prose contract; deterministic 4-tier ranking (severity → memo staleness → open-spec age → id) gives byte-identical ordering on identical substrate. The agent pays the compression cost so the author doesn't have to. Sharpens `/orb:code-investigate` and `/orb:keyword-scan` to acknowledge the `rtk hook claude` PreToolUse intercept that silently routes `rg` through `grep`, and adds two new discipline bullets to `/orb:code-investigate` for diagnosing tool interception and citing substrate rules with freshness probes.
