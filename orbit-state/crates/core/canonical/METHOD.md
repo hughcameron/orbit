@@ -2,16 +2,16 @@
 
 # Orbit method
 
-Orbit is a specification-driven workflow for Claude Code: capture user needs as **cards**, refine them through **design** into **specs**, **implement** against acceptance criteria, **review** the result. Substrate state lives under `.orbit/`; agents read and write it via the `orbit` CLI.
+Orbit is a specification-driven workflow for Claude Code: capture user needs as **cards**, refine them through **tabletop** into **specs**, **implement** against acceptance criteria, **review** the result. Substrate state lives under `.orbit/`; agents read and write it via the `orbit` CLI.
 
 ## Pipeline
 
 ```
-memo  →  distill  →  card  →  design  →  spec  →  implement  →  review-pr  →  ship
+memo  →  distill  →  card  →  tabletop  →  spec  →  implement  →  review-pr  →  ship
 ```
 
 Variants:
-- **drive** — one agent runs design → spec → implement → review-pr autonomously against a single card, with halt and escalation conditions pre-committed in the spec.
+- **drive** — one agent runs tabletop → spec → implement → review-pr autonomously against a single card, with halt and escalation conditions pre-committed in the spec.
 - **rally** — multiple cards delivered together; one rally lead orchestrates parallel drives. Each drive is one fan-out track.
 
 ## Vocabulary
@@ -22,7 +22,7 @@ Variants:
 | Memo       | dated filename    | `.orbit/memos/<date>-<slug>.md`            | Raw idea awaiting distillation. Freeform markdown. Deleted after promotion to a card.   |
 | Choice     | `NNNN-slug`       | `.orbit/choices/NNNN-<slug>.yaml`                | MADR record of an architectural choice — *how* a capability is implemented.             |
 | Spec       | `YYYY-MM-DD-slug` | `.orbit/specs/<date>-<slug>/spec.yaml`           | A discrete unit of work with numbered acceptance criteria. One card may spawn many.     |
-| Interview  | (sidecar of spec) | `.orbit/specs/<date>-<slug>/interview.md`        | Q&A record from a `/design` or `/discovery` session. Feeds the spec.                    |
+| Interview  | (sidecar of spec) | `.orbit/specs/<date>-<slug>/interview.md`        | Q&A record from a `/orb:tabletop` or `/orb:discovery` session. Feeds the spec.                    |
 | Review     | (sidecar of spec) | `.orbit/specs/<date>-<slug>/review-{spec,pr}-<date>.md` | Verdict artefact from `/review-spec` or `/review-pr`.                            |
 | Drive state| (sidecar of spec) | `.orbit/specs/<date>-<slug>/drive.yaml`          | Durable orchestration state for a single-card drive.                                    |
 | Rally state| (sidecar of spec) | `.orbit/specs/<date>-<slug>-rally/rally.yaml`    | Durable orchestration state for a multi-card rally.                                     |
@@ -59,7 +59,7 @@ Discriminate before defaulting to a card. Choosing the wrong artefact is the mos
 
 - Is X a decision about *how* an existing capability is implemented (bash vs rust, MCP vs shell, schema choice, library choice)? → **choice** as a MADR file at `.orbit/choices/NNNN-<slug>.yaml` (see existing files for shape). The capability already exists; only the implementation surface is changing.
 - Is X a *new* capability the product provides? → **card** in `.orbit/cards/`.
-- Is X a discrete piece of work with acceptance criteria? → **spec** via `/design` + `/spec`.
+- Is X a discrete piece of work with acceptance criteria? → **spec** via `/orb:tabletop` + `/orb:spec`.
 - Is X a rough idea you don't want to lose? → **memo** via `/memo`.
 - Is X a retrospective, options memo, or investigation plan? → none of the above. Retrospectives update the card they're about; options memos become `/discovery` sessions; investigation plans become specs.
 

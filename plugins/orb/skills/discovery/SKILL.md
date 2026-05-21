@@ -19,7 +19,7 @@ Explore a vague idea or requirement through questioning. Use this when there's n
 - A card exists but has < 3 scenarios (not enough to design against)
 - The problem space is unclear and needs open exploration
 
-If a well-formed card exists (≥ 3 scenarios), use `/orb:design` instead.
+If a well-formed card exists (≥ 3 scenarios), use `/orb:tabletop` instead.
 
 ## Instructions
 

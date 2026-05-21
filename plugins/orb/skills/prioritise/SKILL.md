@@ -47,7 +47,7 @@ For each priority drawn from a conformance finding, surface its `remediation.ver
 
 When a finding lacks `remediation.verb` (forward-compatible severity-only or info-only findings), surface the finding's `evidence` field verbatim and tag the item `manual action`.
 
-For priorities drawn from non-conformance sources (memos, open specs), the next-action is the verb the author would type — e.g. `/orb:distill .orbit/memos/<file>.md`, `/orb:drive <spec-id>`, `/orb:design <card-id>`.
+For priorities drawn from non-conformance sources (memos, open specs), the next-action is the verb the author would type — e.g. `/orb:distill .orbit/memos/<file>.md`, `/orb:drive <spec-id>`, `/orb:tabletop <card-id>`.
 
 ## Output shape
 
@@ -74,7 +74,7 @@ Total brief: **≤20 lines or ~500 tokens**. Cite memory keys, conformance subje
 
 When `orbit audit conformance --json` returns zero findings and recent memos / open specs are exhausted:
 
-1. Surface planned-empty cards — those with `maturity: planned` AND `specs: []`. Each becomes a priority with next-action `/orb:design <card-id>`. Use `orbit overview` to list orphans / planned-empty cards.
+1. Surface planned-empty cards — those with `maturity: planned` AND `specs: []`. Each becomes a priority with next-action `/orb:tabletop <card-id>`. Use `orbit overview` to list orphans / planned-empty cards.
 2. If no runner-ups exist either, output exactly: `no priorities — substrate is clean and the backlog is exhausted`.
 
 Never return an empty brief without an explanation.

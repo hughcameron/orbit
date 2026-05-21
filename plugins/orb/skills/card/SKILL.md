@@ -148,4 +148,4 @@ The card lives on. Its goal may change, its maturity may shift, but it still des
 
 ---
 
-**Next step:** Refine this card with `/orb:design` to work out the technical approach.
+**Next step:** Refine this card with `/orb:tabletop` to work out the technical approach.

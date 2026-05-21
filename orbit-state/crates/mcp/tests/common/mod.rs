@@ -291,7 +291,7 @@ pub fn expected_envelope_for_audit_conformance_park_signal_fixture(root: &Path) 
                 r.findings.len(),
             );
             assert_eq!(r.findings[0].subject, "0098-planned");
-            assert_eq!(r.findings[0].state, "ready_for_design");
+            assert_eq!(r.findings[0].state, "ready_for_tabletop");
         }
         _ => panic!("unexpected response shape"),
     }

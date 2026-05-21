@@ -4,6 +4,6 @@ canonical_code:
 decision_record:
 - '0016'
 operational_doc:
-- plugins/orb/skills/design/SKILL.md
+- plugins/orb/skills/tabletop/SKILL.md
 test_surface:
 - orbit-state/crates/core/src/schema.rs

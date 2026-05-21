@@ -17,13 +17,13 @@ Generate a validated specification from interview results or conversation contex
 
 ### 1. Gather Interview Context
 
-The input artefact may be a full **interview** (`interview.md`) from an open or partial design space, or a short **design note** (`design-note.md`) from a closed design space. Both are valid inputs — `/orb:spec` does not require a Q&A record. The closed-space path produces a design note instead of an interview, and that design note is a sufficient handoff (see `/orb:design` §3–§4).
+The input artefact may be a full **interview** (`interview.md`) from an open or partial design space, or a short **tabletop note** (`tabletop-note.md`) from a closed design space. Both are valid inputs — `/orb:spec` does not require a Q&A record. The closed-space path produces a tabletop note instead of an interview, and that tabletop note is a sufficient handoff (see `/orb:tabletop` §3–§4).
 
-- If an interview or design-note file path is provided: Read it
-- If no file path: Check conversation history for a recent `/orb:design` or `/orb:discovery` session — and look in `.orbit/specs/YYYY-MM-DD-<topic-slug>/` for either `interview.md` or `design-note.md`
+- If an interview or tabletop-note file path is provided: Read it
+- If no file path: Check conversation history for a recent `/orb:tabletop` or `/orb:discovery` session — and look in `.orbit/specs/YYYY-MM-DD-<topic-slug>/` for either `interview.md` or `tabletop-note.md`
 - If neither: Ask the author what to crystallise
 
-**Cite the user-voice paragraph as the intent contract.** Both the interview template and the design-note template carry a top-of-file **What good looks like** paragraph — written from the user's seat, in the author's idiom. When this paragraph is present in the input artefact, the generated spec quotes or directly references it as the intent contract — not only the structured Q&A or the deferred-items list. Concretely: the paragraph appears in the spec's `goal` (if it compresses to one sentence) or in `notes` / a leading note (if it doesn't), so the implementing agent reads prose-level user intent, not just answers to questions.
+**Cite the user-voice paragraph as the intent contract.** Both the interview template and the tabletop-note template carry a top-of-file **What good looks like** paragraph — written from the user's seat, in the author's idiom. When this paragraph is present in the input artefact, the generated spec quotes or directly references it as the intent contract — not only the structured Q&A or the deferred-items list. Concretely: the paragraph appears in the spec's `goal` (if it compresses to one sentence) or in `notes` / a leading note (if it doesn't), so the implementing agent reads prose-level user intent, not just answers to questions.
 
 ### 2. Assess Ambiguity
 
@@ -35,7 +35,7 @@ Score clarity before generating:
 
 **Formula:** `ambiguity = 1 - (goal * 0.40 + constraints * 0.30 + criteria * 0.30)`
 
-**Threshold:** Ambiguity must be ≤ 0.2. If higher, suggest returning to `/orb:design` or `/orb:discovery`.
+**Threshold:** Ambiguity must be ≤ 0.2. If higher, suggest returning to `/orb:tabletop` or `/orb:discovery`.
 
 ```
 Ambiguity Assessment:
@@ -64,7 +64,7 @@ acceptance_criteria:
     description: "Measurable criterion"
     verification: "How to verify"
 
-implementation_notes:          # means-level leads from the design session — not constraints
+implementation_notes:          # means-level leads from the tabletop session — not constraints
   - "Starting context for the implementing agent"
 
 ontology_schema:
@@ -87,12 +87,12 @@ metadata:
   test_prefix: "remat"  # short label for this spec — disambiguates ACs across specs
   timestamp: "YYYY-MM-DDTHH:MM:SSZ"
   ambiguity_score: 0.15
-  interview_ref: ".orbit/specs/YYYY-MM-DD-<topic>/interview.md"  # or design-note.md for closed-space inputs
+  interview_ref: ".orbit/specs/YYYY-MM-DD-<topic>/interview.md"  # or tabletop-note.md for closed-space inputs
 ```
 
 ### 4. Record memories considered
 
-Lift the design-time memory reconciliations into the spec's `memories_considered` field. The design session ran `orbit memory match <card-slug>` and captured a disposition for each matching memory under **Implementation Notes**. Each entry becomes:
+Lift the tabletop-time memory reconciliations into the spec's `memories_considered` field. The tabletop session ran `orbit memory match <card-slug>` and captured a disposition for each matching memory under **Implementation Notes**. Each entry becomes:
 
 ```yaml
 memories_considered:
@@ -107,7 +107,7 @@ memories_considered:
     reason: "this spec touches enforcement, not memory authorship"
 ```
 
-Per spec 2026-05-19-memory-gates-decisions ac-03 (D3a): `memories_considered` is a top-level `Spec` field — uniform across the spec, not per-AC. `spec.close` reads this field at close time and refuses closure for any matching memory whose key is absent. If the design session found no matching memories, omit the field; it is `skip_serializing_if = "Vec::is_empty"` so absent specs stay byte-identical on disk.
+Per spec 2026-05-19-memory-gates-decisions ac-03 (D3a): `memories_considered` is a top-level `Spec` field — uniform across the spec, not per-AC. `spec.close` reads this field at close time and refuses closure for any matching memory whose key is absent. If the tabletop session found no matching memories, omit the field; it is `skip_serializing_if = "Vec::is_empty"` so absent specs stay byte-identical on disk.
 
 ### 5. Save the Spec
 
@@ -117,16 +117,16 @@ If the interview file exists in a spec directory, save alongside it.
 
 ### 6. Update the Card's Specs Array
 
-The spec references a card (from the interview's or design note's `Card:` line). After saving `spec.yaml`, append its path to the card's `specs` array so the work trail stays complete.
+The spec references a card (from the interview's or tabletop note's `Card:` line). After saving `spec.yaml`, append its path to the card's `specs` array so the work trail stays complete.
 
-1. Parse the card path from the input artefact (the `**Card:**` line in either `interview.md` or `design-note.md`) or from conversation context
+1. Parse the card path from the input artefact (the `**Card:**` line in either `interview.md` or `tabletop-note.md`) or from conversation context
 2. If no card is identified, skip this step — not all specs originate from a card
 3. Read the card YAML
 4. Append the new spec path (e.g. `.orbit/specs/2026-04-12-topic/spec.yaml`) to the `specs` array
 5. If the `specs` array doesn't exist yet, create it
 6. Write the updated card back to disk
 
-**This is non-negotiable.** Every spec that addresses a card must appear in the card's `specs` array. Agents downstream (`/orb:design`, `/orb:implement`) rely on this array to understand cumulative progress. An incomplete array causes agents to lose the thread and repeat or contradict prior work.
+**This is non-negotiable.** Every spec that addresses a card must appear in the card's `specs` array. Agents downstream (`/orb:tabletop`, `/orb:implement`) rely on this array to understand cumulative progress. An incomplete array causes agents to lose the thread and repeat or contradict prior work.
 
 ---
 

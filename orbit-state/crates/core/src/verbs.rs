@@ -887,7 +887,7 @@ pub struct SpecCloseResult {
     /// Topology drift entries for subsystems the closing spec text touched.
     /// Word-boundary match (regex `\b<regex::escape(subsystem)>\b`,
     /// case-insensitive) of subsystem names ≥ 5 characters against the
-    /// concatenation of `spec.yaml + interview.md + design-note.md`
+    /// concatenation of `spec.yaml + interview.md + tabletop-note.md`
     /// (each sidecar included when present). Non-blocking — closure
     /// proceeds with exit 0; this field is informational. Empty (and
     /// `skip_serializing_if`-omitted) when not configured or when no
@@ -1135,7 +1135,7 @@ pub struct ConformanceFinding {
     pub subsystem: String,
     /// Opaque subject identifier — typically a card id or a file path.
     pub subject: String,
-    /// State slug describing the gap: "ready_for_design" | "stale" |
+    /// State slug describing the gap: "ready_for_tabletop" | "stale" |
     /// "byte_drift" | "missing" | "pin_behind" | "pin_ahead".
     pub state: String,
     /// Optional finding-family-specific structured context.
@@ -1149,7 +1149,7 @@ pub struct ConformanceFinding {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct Remediation {
-    /// The agent-runnable verb: "orbit setup", "/orb:design 39",
+    /// The agent-runnable verb: "orbit setup", "/orb:tabletop 39",
     /// "/orb:distill .orbit/memos/...", etc.
     pub verb: String,
     /// Short rationale — why this remediation matches the finding.
@@ -1990,7 +1990,7 @@ fn spec_close(layout: &OrbitLayout, args: &SpecCloseArgs) -> Result<SpecCloseRes
 
     // Topology warnings surface (spec 2026-05-18-topology-substrate-wires
     // ac-03). Concatenate the spec's substantive sidecars
-    // (spec.yaml + interview.md + design-note.md, each when present),
+    // (spec.yaml + interview.md + tabletop-note.md, each when present),
     // and word-boundary-match each topology-doc subsystem name against
     // the concatenation. Subsystem names < 5 characters are excluded to
     // suppress false-positives on short common tokens. Names are passed
@@ -2031,7 +2031,7 @@ fn compute_topology_warnings(layout: &OrbitLayout, spec_id: &str) -> Vec<Topolog
 
     let spec_dir = layout.spec_dir(spec_id);
     let mut text = String::new();
-    for sidecar in &["spec.yaml", "interview.md", "design-note.md"] {
+    for sidecar in &["spec.yaml", "interview.md", "tabletop-note.md"] {
         let path = spec_dir.join(sidecar);
         if let Ok(body) = std::fs::read_to_string(&path) {
             text.push_str(&body);
@@ -3782,7 +3782,7 @@ fn audit_conformance_at(
 
 /// ac-02: walk `.orbit/cards/*.yaml`; emit a finding for each card at
 /// `maturity:planned` with an empty specs array. Remediation:
-/// `/orb:design <numeric-id>`.
+/// `/orb:tabletop <numeric-id>`.
 fn card_state_findings(layout: &OrbitLayout) -> Result<Vec<ConformanceFinding>> {
     const VERB: &str = "audit.conformance";
     let mut findings = Vec::new();
@@ -3800,7 +3800,7 @@ fn card_state_findings(layout: &OrbitLayout) -> Result<Vec<ConformanceFinding>> 
         // serde rename_all = snake_case → "planned" in the on-disk yaml.
         let is_planned = matches!(card.maturity, crate::schema::CardMaturity::Planned);
         if !is_planned || !card.specs.is_empty() || card.park.is_some() {
-            // Parked cards skip the ready_for_design finding silently —
+            // Parked cards skip the ready_for_tabletop finding silently —
             // per spec 2026-05-20-conformance-park-signal. The deliberate-hold
             // signal carries its own reason/until; no envelope trace.
             continue;
@@ -3830,11 +3830,11 @@ fn card_state_findings(layout: &OrbitLayout) -> Result<Vec<ConformanceFinding>> 
             severity: "medium".into(),
             subsystem: "cards".into(),
             subject: card_id,
-            state: "ready_for_design".into(),
+            state: "ready_for_tabletop".into(),
             evidence: Some(serde_yaml::Value::Mapping(evidence)),
             remediation: Remediation {
-                verb: format!("/orb:design {numeric_id}"),
-                rationale: Some("card has scenarios but no design pass".into()),
+                verb: format!("/orb:tabletop {numeric_id}"),
+                rationale: Some("card has scenarios but no tabletop pass".into()),
             },
         });
     }
@@ -4190,7 +4190,7 @@ fn topology_setup_seeds() -> Vec<crate::schema::TopologyEntry> {
             subsystem: "choices".into(),
             canonical_code: vec!["orbit-state/crates/core/src/schema.rs".into()],
             decision_record: vec!["0016".into()],
-            operational_doc: vec!["plugins/orb/skills/design/SKILL.md".into()],
+            operational_doc: vec!["plugins/orb/skills/tabletop/SKILL.md".into()],
             test_surface: vec!["orbit-state/crates/core/src/schema.rs".into()],
         },
         crate::schema::TopologyEntry {
@@ -7272,7 +7272,7 @@ mod tests {
             &layout,
             &MemoryRememberArgs {
                 key: "mechanism".into(),
-                body: "use orbit memory match before /orb:design".into(),
+                body: "use orbit memory match before /orb:tabletop".into(),
                 labels: vec![],
                 timestamp: Some("2026-05-19T00:00:00Z".into()),
                 no_nudge: false,
@@ -8360,13 +8360,13 @@ mod tests {
             ("partial", "s1", "2026-05-15T12:00:00Z"),
             ("incorrect", "s2", "2026-05-15T13:00:00Z"),
         ] {
-            record_invocation(&layout, "design", outcome, None, sess, Some(t)).unwrap();
+            record_invocation(&layout, "tabletop", outcome, None, sess, Some(t)).unwrap();
         }
 
         let resp = skill_recurrence(
             &layout,
             &SkillRecurrenceArgs {
-                skill_id: "design".into(),
+                skill_id: "tabletop".into(),
                 since: None,
             },
         )
@@ -8383,12 +8383,12 @@ mod tests {
         let dir = tempdir().unwrap();
         let layout = OrbitLayout::at(dir.path());
         layout.ensure_dirs().unwrap();
-        record_invocation(&layout, "design", "worked", None, "s1", None).unwrap();
+        record_invocation(&layout, "tabletop", "worked", None, "s1", None).unwrap();
 
         let resp = skill_recurrence(
             &layout,
             &SkillRecurrenceArgs {
-                skill_id: "design".into(),
+                skill_id: "tabletop".into(),
                 since: None,
             },
         )
@@ -8409,7 +8409,7 @@ mod tests {
         layout.ensure_dirs().unwrap();
         record_invocation(
             &layout,
-            "design",
+            "tabletop",
             "incorrect",
             Some("missed the cold-fork contract"),
             "s1",
@@ -8420,7 +8420,7 @@ mod tests {
         let resp = skill_recurrence(
             &layout,
             &SkillRecurrenceArgs {
-                skill_id: "design".into(),
+                skill_id: "tabletop".into(),
                 since: None,
             },
         )
@@ -8437,12 +8437,12 @@ mod tests {
         let dir = tempdir().unwrap();
         let layout = OrbitLayout::at(dir.path());
         layout.ensure_dirs().unwrap();
-        record_invocation(&layout, "design", "worked", None, "s1", None).unwrap();
+        record_invocation(&layout, "tabletop", "worked", None, "s1", None).unwrap();
 
         let resp = skill_recurrence(
             &layout,
             &SkillRecurrenceArgs {
-                skill_id: "design".into(),
+                skill_id: "tabletop".into(),
                 since: None,
             },
         )
@@ -8460,15 +8460,15 @@ mod tests {
         let dir = tempdir().unwrap();
         let layout = OrbitLayout::at(dir.path());
         layout.ensure_dirs().unwrap();
-        record_invocation(&layout, "design", "worked", None, "s1", Some("2026-05-10T00:00:00Z"))
+        record_invocation(&layout, "tabletop", "worked", None, "s1", Some("2026-05-10T00:00:00Z"))
             .unwrap();
-        record_invocation(&layout, "design", "worked", None, "s1", Some("2026-05-15T00:00:00Z"))
+        record_invocation(&layout, "tabletop", "worked", None, "s1", Some("2026-05-15T00:00:00Z"))
             .unwrap();
 
         let resp = skill_recurrence(
             &layout,
             &SkillRecurrenceArgs {
-                skill_id: "design".into(),
+                skill_id: "tabletop".into(),
                 since: Some("2026-05-12T00:00:00Z".into()),
             },
         )
@@ -8486,7 +8486,7 @@ mod tests {
         let resp = skill_recurrence(
             &layout,
             &SkillRecurrenceArgs {
-                skill_id: "design".into(),
+                skill_id: "tabletop".into(),
                 since: None,
             },
         )
@@ -8797,7 +8797,7 @@ mod tests {
         let inv = skill_record_invocation(
             &layout,
             &SkillRecordInvocationArgs {
-                skill_id: "design".into(),
+                skill_id: "tabletop".into(),
                 outcome: "worked".into(),
                 correction: None,
                 session_id: None,
@@ -9595,7 +9595,7 @@ canonical_code:
     /// Plant a spec + sidecars under `layout.spec_dir(id)` with the given
     /// text inside spec.yaml's goal. Spec ACs are empty so spec.close does
     /// not block.
-    fn install_spec_for_warnings(layout: &OrbitLayout, id: &str, spec_text: &str, interview: Option<&str>, design_note: Option<&str>) {
+    fn install_spec_for_warnings(layout: &OrbitLayout, id: &str, spec_text: &str, interview: Option<&str>, tabletop_note: Option<&str>) {
         layout.ensure_spec_dir(id).unwrap();
         let spec = Spec {
             id: id.into(),
@@ -9610,8 +9610,8 @@ canonical_code:
         if let Some(body) = interview {
             std::fs::write(layout.spec_dir(id).join("interview.md"), body).unwrap();
         }
-        if let Some(body) = design_note {
-            std::fs::write(layout.spec_dir(id).join("design-note.md"), body).unwrap();
+        if let Some(body) = tabletop_note {
+            std::fs::write(layout.spec_dir(id).join("tabletop-note.md"), body).unwrap();
         }
     }
 
@@ -9680,8 +9680,8 @@ canonical_code:
     }
 
     #[test]
-    fn spec_close_topology_warnings_match_in_design_note_only() {
-        // ac-03 cycle-1 LOW: design-note.md must be in the scan set, not
+    fn spec_close_topology_warnings_match_in_tabletop_note_only() {
+        // ac-03 cycle-1 LOW: tabletop-note.md must be in the scan set, not
         // just spec.yaml + interview.md.
         let (_dir, layout) = fresh_topology_layout();
         layout.ensure_dirs().unwrap();
@@ -9696,7 +9696,7 @@ canonical_code:
         let result = spec_close(&layout, &SpecCloseArgs { id: "0004".into(), force: false }).unwrap();
         assert!(
             result.topology_warnings.iter().any(|w| w.subsystem == "session-prime"),
-            "design-note.md must be scanned: {:?}",
+            "tabletop-note.md must be scanned: {:?}",
             result.topology_warnings
         );
     }
@@ -9954,9 +9954,9 @@ unknown: surprise
         assert_eq!(card_findings.len(), 1);
         let f = card_findings[0];
         assert_eq!(f.subject, "0099-planned-empty");
-        assert_eq!(f.state, "ready_for_design");
+        assert_eq!(f.state, "ready_for_tabletop");
         assert_eq!(f.severity, "medium");
-        assert_eq!(f.remediation.verb, "/orb:design 99");
+        assert_eq!(f.remediation.verb, "/orb:tabletop 99");
     }
 
     #[test]
@@ -10023,7 +10023,7 @@ unknown: surprise
     fn conformance_card_state_skips_parked_card() {
         // Spec 2026-05-20-conformance-park-signal ac-02 (b): a card at
         // maturity:planned with empty specs but a park: block produces NO
-        // ready_for_design finding — the deliberate-hold carve-out.
+        // ready_for_tabletop finding — the deliberate-hold carve-out.
         let (_dir, layout) = fresh_conformance_layout();
         write_parked_card(&layout, "0099-parked", crate::schema::CardMaturity::Planned, vec![]);
         let result =

@@ -244,7 +244,7 @@ orbit audit conformance --json
 The verb returns a **structured findings envelope** ({severity, subsystem, subject, state, evidence, remediation} per finding) covering three v1 finding families plus aggregated `audit.drift` + `audit.topology` results:
 
 - **plugin-canonical-file drift** — `.orbit/METHOD.md` and `.orbit/STYLE.md` byte-compared against the canonical bytes embedded in the orbit-state binary; firing remediation = `orbit setup`.
-- **card-state** — cards at `maturity: planned` with empty specs (ready for design); firing remediation = `/orb:design <id>`.
+- **card-state** — cards at `maturity: planned` with empty specs (ready for design); firing remediation = `/orb:tabletop <id>`.
 - **memo staleness** — memos undistilled > 7 days; firing remediation = `/orb:distill <memo-path>`.
 - **plugin-version pin** — per-repo pin in `.orbit/config.yaml` (`plugin_version: "0.4.20"`); `pin_behind` / `pin_ahead` each fire a single dominant finding and suppress per-file findings.
 
@@ -278,4 +278,4 @@ One folder name, one convention, not configurable. See spec `.orbit/specs/2026-0
 
 ---
 
-**Next step:** Write feature cards with `/orb:card`, then refine them with `/orb:design`.
+**Next step:** Write feature cards with `/orb:card`, then refine them with `/orb:tabletop`.

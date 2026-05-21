@@ -1,0 +1,103 @@
+id: '0026'
+title: Tabletop replaces /orb:design as the canonical pre-spec session
+status: accepted
+date_created: 2026-05-21
+date_modified: 2026-05-21
+body: |
+  # 0026. Tabletop replaces /orb:design as the canonical pre-spec session
+
+  ## Context and Problem Statement
+
+  Orbit shipped `/orb:design` (plus its closed-mode design-note path per
+  spec 2026-05-09-design-session-user-language) as the canonical pre-spec
+  session. The v1 `/orb:design` failure mode — drift into implementation
+  planning during what should have been alignment work — is the load-bearing
+  reason choice 0017 (`tabletop-output-is-contract`) exists. Card 0019
+  introduced tabletop as a structurally stronger alternative: goal-scoped,
+  one-to-many in spec output, with a contract-not-solution rule that's
+  enforced at the SKILL.md level rather than at agent discretion.
+
+  Now tabletop is on disk (spec 2026-05-21-tabletop, this spec). The decision:
+  what's tabletop's relationship to `/orb:design` going forward?
+
+  ## Considered Options
+
+  - **A. Keep `/orb:design` alongside `/orb:tabletop` (parallel operation).**
+    Each skill keeps its niche; the author picks per session. The v1
+    failure mode survives in `/orb:design` because its prose still does not
+    structurally prevent implementation drift; tabletop becomes the
+    *recommended* tool but not the canonical one. Drift between the two
+    skills accumulates in cascade docs (METHOD.md, distill, drive prose).
+
+  - **B. Tabletop replaces `/orb:design`; design retires.** One canonical
+    pre-spec session. The contract-not-solution rule is enforced
+    everywhere. Closed-mode tabletop (the `tabletop-note.md` path) absorbs
+    `/orb:design`'s closed-mode design-note path. Cascade work is
+    substantial but bounded: skill removal + SKILL.md prose updates +
+    METHOD.md pipeline rewrite + conformance engine + project CLAUDE.md +
+    README.
+
+  - **C. Tabletop is heavyweight tier; design stays as lightweight tier.**
+    Tabletop is reserved for substantive R&D; `/orb:design`'s closed-mode
+    design-note path remains the lightweight pre-flight for single-card
+    work with a pinned approach. Both skills coexist by design, with
+    different routing rules.
+
+  ## Decision Outcome
+
+  Chosen option: **B — tabletop replaces /orb:design, conditional on
+  ambiguity-floor parity.**
+
+  The author's framing during the 2026-05-21 design session was: *"I'd be
+  open to tabletop replacing design as long as spec ambiguity is still
+  minimised. Tabletop typically has a 'one to many' approach to specs
+  whereas design is still one to one. Honestly — as an author — I'd like to
+  spend more time at a one-to-many level and encourage more fan out as
+  long as quality and visibility remains high."*
+
+  The replacement is gated by ac-10 (the ambiguity-floor probe in spec
+  2026-05-21-tabletop) — a fresh tabletop session must produce a spec
+  whose ambiguity score is parity-or-better against a baseline scored from
+  a recent `/orb:design`-produced spec. The probe runs in a fresh
+  context-separated agent. On GO, the cascade lands (ac-11) and this
+  choice flips from `proposed` to `accepted`. On NO-GO, three documented
+  exit paths apply: (a) re-design tabletop and re-run, (b) accept parallel
+  operation indefinitely and update METHOD.md, (c) revert ac-01..ac-09 and
+  this choice is removed.
+
+  ### Consequences
+
+  - Good, because the v1 design failure mode is structurally prevented at
+    the SKILL.md level (rather than at agent discretion via choice 0017
+    alone).
+  - Good, because one canonical pre-spec session removes cascade-drift
+    between two skills that would otherwise need to be kept in sync across
+    METHOD.md, distill, drive, and consumer prose.
+  - Good, because the one-to-many fan-out the author wants more of becomes
+    the default shape rather than a special case.
+  - Bad, because the cascade is a one-shot atomic operation (ac-11) with
+    six steps spanning SKILL.md prose, METHOD.md×3, the conformance engine
+    in Rust, project CLAUDE.md, and the README. Partial failure requires
+    `git restore .` and full retry; half-cascaded state is not a
+    checkpoint.
+  - Bad, because the NO-GO branch leaves the spec half-shipped if the
+    ambiguity probe fails. Three exit paths are documented but none of
+    them is free.
+  - Neutral, because historical artefacts (cards, choices, memos, prior
+    spec records) keep their `/orb:design` references — they are dated
+    context, not live agent prose. The cascade scopes to the
+    agent-facing live surface only.
+
+  ## References
+
+  - Card 0019 — `tabletop` (the canonical capability description)
+  - Choice 0017 — `tabletop-output-is-contract` (the load-bearing
+    contract-not-solution rule that survives the retirement; this choice
+    extends 0017's framing rather than superseding it)
+  - Choice 0027 — `tabletop-contract-sidecar` (the sibling choice — where
+    the tabletop contract lands on disk)
+  - Spec 2026-05-21-tabletop — the spec that ships this choice
+  - Spec 2026-05-09-design-session-user-language — `/orb:design`'s
+    closed-mode design-note path, ported into tabletop's closed-mode
+    `tabletop-note.md` path under ac-09
+references: []

@@ -1,6 +1,6 @@
 # orbit
 
-This repo is the orbit workflow plugin for Claude Code. Sessions here are about **workflow refinement** — improving how orbit guides the card → design → spec → implement → review pipeline.
+This repo is the orbit workflow plugin for Claude Code. Sessions here are about **workflow refinement** — improving how orbit guides the card → tabletop → spec → implement → review pipeline.
 
 ## Persona
 
@@ -16,7 +16,7 @@ Agent-to-author prose follows the discipline owned by card 0026 (`.orbit/cards/0
 
 ## What This Is
 
-orbit is a Claude Code plugin that provides specification-driven workflow skills (`/orb:card`, `/orb:distill`, `/orb:design`, `/orb:spec`, `/orb:implement`, `/orb:review-pr`, etc.). The skills, hooks, and card format are the product.
+orbit is a Claude Code plugin that provides specification-driven workflow skills (`/orb:card`, `/orb:distill`, `/orb:tabletop`, `/orb:spec`, `/orb:implement`, `/orb:review-pr`, etc.). The skills, hooks, and card format are the product.
 
 ## Working in This Repo
 

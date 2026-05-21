@@ -177,15 +177,15 @@ Card numbering is determined at write time. This is a single-user workflow — c
 
 5. **Consider topology update (conditional).** If `.orbit/topology/` exists and is populated (the canonical predicate per choice 0025 — substrate-folder shape), ask: did any of the newly-written cards correspond to a *subsystem-level capability* (a multi-file area with its own data shape, wiring, and operational surface) — rather than a prose, UX, or single-file change? If yes, invoke `/orb:topology` write-mode against the relevant subsystem name so the topology substrate accretes alongside the new card. This is quality-gated — only fire when the distillation genuinely describes a subsystem, not on every distill.
 
-If any cards were written, suggest next step: `/orb:design` to refine a card into a spec.
+If any cards were written, suggest next step: `/orb:tabletop` to refine a card into a spec.
 
 ## Integration with Other Skills
 
 - **`/orb:card`** — distill produces the same YAML format, so distilled cards are interchangeable with interview-created cards
 - **`.orbit/memos/`** — the primary input source; consumed memos are deleted after card extraction (§5 step 4). Git history preserves the original content
-- **`/orb:design`** — the natural next step after distilling a card
+- **`/orb:tabletop`** — the natural next step after distilling a card
 - **`/orb:discovery`** — interview.md files from discovery sessions are valid distill inputs
 
 ---
 
-**Next step:** Run `/orb:design` on an approved card to work out the technical approach.
+**Next step:** Run `/orb:tabletop` on an approved card to work out the technical approach.

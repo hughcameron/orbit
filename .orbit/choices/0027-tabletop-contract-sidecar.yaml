@@ -1,0 +1,90 @@
+id: '0027'
+title: Tabletop contract lands in a per-spec tabletop.md sidecar, not in the Spec schema
+status: accepted
+date_created: 2026-05-21
+date_modified: 2026-05-21
+body: |
+  # 0027. Tabletop contract lands in a per-spec tabletop.md sidecar, not in the Spec schema
+
+  ## Context and Problem Statement
+
+  Card 0019's tabletop produces a contract with six elements: values,
+  trade-offs, halt conditions, escalation triggers, kill conditions, and a
+  closing hot-wash. The 2026-05-07 dogfood at
+  `.orbit/archive/specs/2026-05-07-orbit-state-v0.1/tabletop.md` (241
+  lines, walked methodology by hand) carried all six in a markdown sidecar
+  next to `spec.yaml`.
+
+  The current `Spec` schema in `orbit-state/crates/core/src/schema.rs:231`
+  carries `id`, `goal`, `cards`, `status`, `labels`,
+  `acceptance_criteria`, and `memories_considered` — and is marked
+  `#[serde(deny_unknown_fields)]`. Tabletop-contract content cannot land in
+  `spec.yaml` without a schema change. Where should the contract live?
+
+  ## Considered Options
+
+  - **A. Extend `Spec` schema with tabletop-contract fields.** Add
+    `halt_conditions`, `escalation_triggers`, `kill_conditions`, `values`,
+    `trade_offs`, `hot_wash` as top-level optional fields. Conformance can
+    machine-read them (e.g. halt-condition coverage as a check). Widens
+    the substrate API significantly — every consumer of `Spec` (CLI, MCP,
+    audit, conformance, downstream tooling) absorbs the change. The
+    `deny_unknown_fields` discipline that catches legacy drift becomes a
+    backwards-compatibility hazard for older specs.
+
+  - **B. Sidecar `tabletop.md` next to `spec.yaml`.** Matches the
+    2026-05-07 dogfood pattern. No substrate change. Markdown shape is
+    human-first; conformance can read it as text if any text-level
+    coverage check is wanted later. Keeps `spec.yaml` tight and
+    schema-stable. The trade-off: contract content is markdown, not
+    structured — programmatic queries against halt conditions or
+    escalation triggers across the corpus require markdown parsing.
+
+  - **C. Fold contract into ACs.** Each contract element becomes an AC of
+    a specific shape — e.g. `ac-halt-01`, `ac-escalation-02`. No new
+    fields, no sidecar. The downside: the contract loses its distinctness
+    from the AC list. Halt conditions are pre-flight assertions about
+    when to stop, not deliverable acceptance criteria — collapsing them
+    into ACs muddies what the AC list is for.
+
+  ## Decision Outcome
+
+  Chosen option: **B — sidecar `tabletop.md` next to `spec.yaml`.**
+
+  This matches the 2026-05-07 dogfood pattern that has already proven
+  workable. The substrate stays stable. The contract has its own home
+  with its own shape, distinct from the AC contract. Per-spec sidecar at
+  `.orbit/specs/<spec-id>/tabletop.md`; closed-mode tabletop produces a
+  `tabletop-note.md` instead (mutually exclusive per session, per ac-02
+  and ac-09 of spec 2026-05-21-tabletop).
+
+  ### Consequences
+
+  - Good, because the substrate API stays stable — no `Spec` schema
+    change, no `deny_unknown_fields` migration hazard.
+  - Good, because the contract has its own structural shape (six
+    sections in declared order) that the AC list doesn't muddy.
+  - Good, because the closed-mode `tabletop-note.md` path (four sections:
+    What good looks like, Pinned approach, Deferred items, Implementation
+    notes) is structurally distinct from open-mode and operators see the
+    distinction in the filename.
+  - Bad, because programmatic queries across the contract content
+    (e.g. "show me all halt conditions in shipped specs") require
+    markdown parsing. If that need emerges, conformance can pick it up as
+    a text-level check.
+  - Neutral, because the sidecar lives in the spec folder — `git log`,
+    `orbit spec show`, and reviewer flows naturally surface it alongside
+    `spec.yaml`.
+
+  ## References
+
+  - Card 0019 — `tabletop` (the canonical capability description)
+  - Choice 0017 — `tabletop-output-is-contract` (the load-bearing
+    contract-not-solution rule; this choice pins *where* the contract
+    lands)
+  - Choice 0026 — `tabletop-replaces-design` (the sibling choice — what's
+    happening to `/orb:design`)
+  - Spec 2026-05-21-tabletop — the spec that ships this choice
+  - `.orbit/archive/specs/2026-05-07-orbit-state-v0.1/tabletop.md` — the
+    worked-example dogfood that established the sidecar shape
+references: []

@@ -56,7 +56,7 @@ Every piece of work in orbit becomes a **card**: a short YAML file describing wh
 - **`/distill`**: you've got some reference material (meeting notes, research or an existing project). Distill extracts candidate cards from it and presents them as a batch for your review.
 - **`/discovery`**: the idea is big and new. A Socratic Q&A session explores it until a card can be written.
 
-Whichever door you come in, you land in the same place: a card ready for `/design`, then `/spec`, then implementation. Some capabilities ship in a single pass; others take multiple specs — each design session reads the cumulative progress and anchors on what remains.
+Whichever door you come in, you land in the same place: a card ready for `/orb:tabletop`, then `/spec`, then implementation. Some capabilities ship in a single pass; others take multiple specs — each tabletop session reads the cumulative progress and anchors on what remains.
 
 ## A feature, end to end
 
@@ -66,7 +66,7 @@ You've been thinking about adding progress indicators to a long-running pipeline
 
 Next session, the hook surfaces it: *"1 outstanding memo in .orbit/memos/"*. You run `/distill .orbit/memos/2026-04-07-pipeline-progress.md` and the agent extracts a candidate card, showing it to you for approval. You tweak a scenario, approve it, and it's saved as `.orbit/cards/0004-pipeline-progress.yaml`.
 
-Now `/design .orbit/cards/0004-pipeline-progress.yaml` opens a focused session. The agent has already searched prior specs and surfaces what's relevant (*"earlier work found stdout flushing is the bottleneck; treating that as a constraint"*) and asks only the questions evidence can't answer. Four questions later, you have an interview.
+Now `/orb:tabletop .orbit/cards/0004-pipeline-progress.yaml` opens a focused session. The agent has already searched prior specs and surfaces what's relevant (*"earlier work found stdout flushing is the bottleneck; treating that as a constraint"*) and asks only the questions evidence can't answer. Four questions later, you have an interview.
 
 `/spec` turns the interview into a structured spec with numbered acceptance criteria. It's a STANDARD-tier change, so no spec review needed. You run `/implement .orbit/specs/2026-04-07-pipeline-progress/spec.yaml` and the agent reads the spec, writes a progress tracker, and starts work. Halfway through, it hits a decision the spec didn't cover and stops to ask rather than guess.
 
@@ -74,7 +74,7 @@ When it's done, `/review-pr` runs in a fresh context, reads the diff cold, check
 
 Six commands. No re-explaining the feature mid-session. No manually cross-checking tests against requirements. No wondering which decisions the agent made silently.
 
-That's the simple case — one spec, one ship. For capabilities that take longer, the loop continues: after shipping, you return to `/design` for the same card. The design session reads the card's `specs` array, summarises what prior work achieved, and anchors on the gap between current state and goal. Each pass adds a spec to the array and advances the card's maturity. Not every pass is linear — some specs approach the goal from different angles (infrastructure, data quality, tooling) rather than continuing the last spec's thread.
+That's the simple case — one spec, one ship. For capabilities that take longer, the loop continues: after shipping, you return to `/orb:tabletop` for the same card. The tabletop session reads the card's `specs` array, summarises what prior work achieved, and anchors on the gap between current state and goal. Each pass adds a spec to the array and advances the card's maturity. Not every pass is linear — some specs approach the goal from different angles (infrastructure, data quality, tooling) rather than continuing the last spec's thread.
 
 ## What this saves you
 
@@ -95,7 +95,7 @@ flowchart LR
         Discovery["/discovery<br/>(for new ideas)"]
     end
     Card["/card"]
-    Design["/design"]
+    Tabletop["/orb:tabletop"]
     Spec["/spec"]
     ReviewSpec["/review-spec<br/>(for large changes)"]
     Implement["/implement"]
@@ -125,7 +125,7 @@ flowchart LR
 | `/discovery` | Explore a vague idea through Socratic Q&A |
 | `/memo` | Quickly jot a rough idea and file it in `.orbit/memos/` |
 | `/distill` | Extract feature cards from notes, documents, or an existing project |
-| `/design` | Refine a card into technical decisions and constraints |
+| `/orb:tabletop` | Refine a card or cluster into a contract — values, trade-offs, halt conditions, escalation triggers, kill conditions |
 | `/spec` | Generate a structured spec from an interview |
 | `/review-spec` | Stress-test a spec before implementation |
 | `/implement` | Pre-flight spec check: extract ACs as a tracked checklist, then implement |
@@ -226,7 +226,7 @@ The `/audit` skill checks traceability across all specs — it finds untested co
 
 ### Decisions
 
-Decisions use the [MADR](https://adr.github.io/madr/) format and live in `.orbit/choices/`. They surface during design and discovery sessions and are recorded immediately, not after implementation.
+Decisions use the [MADR](https://adr.github.io/madr/) format and live in `.orbit/choices/`. They surface during tabletop and discovery sessions and are recorded immediately, not after implementation.
 
 ### Context separation
 

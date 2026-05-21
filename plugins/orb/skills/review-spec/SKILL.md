@@ -159,4 +159,4 @@ The header line `**Verdict:** APPROVE | REQUEST_CHANGES | BLOCK` is a **contract
 
 - **APPROVE**: "I couldn't find problems" (not "this is good")
 - **REQUEST_CHANGES**: Specific changes needed before implementation
-- **BLOCK**: Plan needs rework — return to `/orb:design` or `/orb:discovery`
+- **BLOCK**: Plan needs rework — return to `/orb:tabletop` or `/orb:discovery`

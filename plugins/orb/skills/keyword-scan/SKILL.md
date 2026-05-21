@@ -49,7 +49,7 @@ When you specifically need ripgrep features (PCRE2, `--json`, regex extensions) 
 
 | Skill | Target | What you're looking for |
 |-------|--------|------------------------|
-| `/orb:design` | `.orbit/specs/` | Orphaned specs not in the card's `specs` array |
+| `/orb:tabletop` | `.orbit/specs/` | Orphaned specs not in the card's `specs` array |
 | `/orb:distill` | `.orbit/cards/` | Existing cards that overlap with candidates being drafted |
 | `/orb:card` | `.orbit/cards/`, `.orbit/specs/` | Overlap with existing capabilities before creating a new card |
 | `/orb:discovery` | `.orbit/specs/`, `.orbit/choices/` | Prior art — specs or decisions that already explored this topic |
