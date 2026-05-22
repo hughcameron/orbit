@@ -7,7 +7,7 @@ description: Front-loaded thinking before specs are written — one session walk
 
 Tabletop is the canonical pre-spec session for substantive R&D. One session, one card or a cluster in scope, one or more specs out. The output is the spec's **contract** — values, trade-offs, halt conditions, escalation triggers, kill conditions, hot-wash — *never* the spec's solution.
 
-Choice 0017 (`tabletop-output-is-contract`) pins the load-bearing rule: tabletop captures *what to optimise for and what would stop us*; the spec captures the AC contract; the drive captures the implementation. Conflating these is the v1 `/orb:design` failure mode this skill replaces.
+Choice 0017 (`tabletop-output-is-contract`) pins the load-bearing rule: tabletop captures *what to optimise for and what would stop us*; the spec captures the AC contract; the drive captures the implementation. Conflating these is the failure mode this skill exists to prevent.
 
 Agent prose follows the discipline in `.orbit/STYLE.md` (see card 0026 — `.orbit/cards/0026-agent-prose-discipline.yaml`).
 
@@ -24,9 +24,7 @@ Agent prose follows the discipline in `.orbit/STYLE.md` (see card 0026 — `.orb
 - **Substantive R&D** where alignment cost would compound across the work
 - **Cross-cutting work** touching two or more cards in one cluster
 - **Goal-scoped work** where the cluster of cards isn't pre-determined ("ship X" with no card list)
-- Any pre-spec session previously served by the retired `/orb:design` skill
-
-Tabletop replaces the retired `/orb:design`. The closed-mode path (§ Closed mode below) covers the lightweight pre-flight that `/orb:design` §3-§4 used to handle.
+- **Lightweight pre-flight** where the approach is already decided — use closed mode (§ Closed mode below)
 
 ## Trivial-skip advisory
 

@@ -8,7 +8,7 @@ maturity: planned
 scenarios:
 - name: Agent declares a known playbook instead of opening Q&A
   given: an investigation arrives that the agent has run successfully ≥2 times before with consistent results
-  when: a discovery or design session starts
+  when: a discovery or tabletop session starts
   then: the agent surfaces "I have a known playbook for this" with the named sequence of steps and asks for approval before executing rather than asking Socratic clarifying questions
   gate: false
 - name: Author role shifts to approve-and-review

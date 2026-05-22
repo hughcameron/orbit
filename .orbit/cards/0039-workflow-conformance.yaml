@@ -9,7 +9,7 @@ scenarios:
 - name: Agent reads conformance and gets actionable findings
   given: an orbit-using repo where STYLE.md byte-differs from the pinned plugin canonical, and some card has maturity planned with empty specs
   when: the agent invokes `orbit audit conformance --json`
-  then: the envelope contains two findings, each with subject, state, severity, evidence, and remediation.verb (`orbit setup` and `/orb:design <id>` respectively)
+  then: the envelope contains two findings, each with subject, state, severity, evidence, and remediation.verb (`orbit setup` and `/orb:tabletop <id>` respectively)
   gate: true
 - name: Aggregates over existing audits
   given: a repo with both schema field drift (audit_drift target) and topology pointer drift (audit_topology target)
@@ -24,7 +24,7 @@ scenarios:
 - name: Card-state finding fires on planned + empty specs
   given: a card at maturity planned with an empty specs array
   when: conformance runs
-  then: a finding fires with subject = the card id, state = ready_for_design, remediation.verb = `/orb:design <id>`, severity = medium
+  then: a finding fires with subject = the card id, state = ready_for_tabletop, remediation.verb = `/orb:tabletop <id>`, severity = medium
   gate: true
 - name: Plugin-canonical-file drift via byte-compare
   given: a repo whose .orbit/STYLE.md or METHOD.md or .gitignore byte-differs from the pinned plugin canonical
