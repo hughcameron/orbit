@@ -1,0 +1,31 @@
+id: a160d533-37b9-4874-9cec-29023e70c817
+started_at: 2026-05-21T04:28:36.824646472Z
+ended_at: 2026-05-21T04:28:36.824646472Z
+distillate: |-
+  1. card 0013 playbook-fast-path — planned with scenarios, no design pass
+     why: conformance MEDIUM `cards/0013-playbook-fast-path`; oldest of three card-design gaps
+     effort: M
+     next: `/orb:design 13`
+
+  2. card 0014 default-merge-after-review — planned with scenarios, no design pass
+     why: conformance MEDIUM `cards/0014-default-merge-after-review`
+     effort: M
+     next: `/orb:design 14`
+
+  3. card 0019 tabletop — planned with scenarios, no design pass
+     why: conformance MEDIUM `cards/0019-tabletop`
+     effort: M
+     next: `/orb:design 19`
+
+  4. spec 2026-05-20-memory-match-bm25 — only open spec, still at 0 ACs
+     why: BM25 ranker migration for `orbit memory match`; flagged in prior session carry-forward
+     effort: L
+     next: `/orb:drive 2026-05-20-memory-match-bm25`
+
+  5. memo 2026-05-21-reconcile-dispositions-on-parse-fail — small follow-up vs card 0032
+     why: dispositions silently dropped on typed-reparse fail (`reconcile.rs:421-427`); 4-line fix proposed, named in last session's carry-forward
+     effort: S
+     next: `/orb:distill .orbit/memos/2026-05-21-reconcile-dispositions-on-parse-fail.md`
+
+  + 2 more deferred (distill `source_lines` SKILL.md tightening; METHOD.md TaskCreate prose sharpening)
+labels: []
