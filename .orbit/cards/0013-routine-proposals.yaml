@@ -31,7 +31,8 @@ scenarios:
   when: the agent considers surfacing a proposal
   then: it does not — the threshold is two or more occurrences with consistent ordering (and consistent branch logic for DAGs), mirroring the recurrence threshold in `.orbit/conventions/skill-self-improvement.md`, and below that the agent records the chain observation but does not propose
   gate: false
-specs: []
+specs:
+- .orbit/specs/2026-05-22-routine-proposals/spec.yaml
 relations:
 - card: 0022-skill-curator
   type: depends-on

@@ -2,7 +2,7 @@ id: 2026-05-22-routine-proposals
 goal: Agents observing recurring chains or DAGs of existing skill invocations author named routine SKILL.md files directly to .claude/skills/<name>/SKILL.md (no proposal artefact; commit message surfaces the chain to the author). Routines carry front-matter compatible with card 0022's curator (created_by agent, created_at, pinned false, plus a new last_verified field for audit-driven freshness). orbit audit conformance flags stale routines so the author edits inline or archives via the curator — preserving the author's time for higher-order thinking by encoding the "how" as named substrate. Complementary to card 0022 (single-skill authoring via skill-author spec ceremony) which handles recurring procedures within one domain.
 cards:
 - 0013-routine-proposals
-status: open
+status: closed
 labels: []
 acceptance_criteria:
 - id: ac-01
