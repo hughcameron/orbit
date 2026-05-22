@@ -2,6 +2,16 @@
 
 All notable changes to orbit are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.4.30] - 2026-05-22
+
+Sharpens `/orb:prioritise` from a top-5 menu to a single-move recommendation. The default output is one imperative verb plus one sentence on why-now; the full top-5 list moves to an on-request follow-up. Aligns with STYLE.md's "pick one action" rule and makes the layering visibly distinct from `orbit session prime` (raw envelope vs synthesis).
+
+### Changed
+
+- **`/orb:prioritise` output contract** — default output is now one verb + one why-now sentence + a deferred count (≤5 lines), not a top-5 list. The full list (`N. what / why / effort / next`) remains available when the author asks for it on a follow-up turn. The ranking algorithm still applies (severity HIGH > MEDIUM > LOW → memo staleness desc → open-spec age desc → id asc) but now picks one move rather than enumerating five.
+- **Why-now framing** — the supporting sentence justifies *timing* (the pattern that promotes this to now), not the item's intrinsic value. Restatement of the item's own stake is called out as the anti-pattern.
+- **Card 0043 scenarios** updated to match the new contract (one move + verb verbatim + full list on request + differentiated from `orbit session prime` and `orbit overview`).
+
 ## [0.4.29] - 2026-05-21
 
 Ships `/orb:tabletop` as the canonical pre-spec session and retires `/orb:design`. Tabletop replaces design with a stronger contract-not-solution rule enforced at the SKILL.md level: the 10-question methodology (goal narrowing, values, trade-offs, failure modes, lateral approaches, success criteria, escalation triggers, adjacent code, budget, kill conditions) plus a closing hot-wash, with output landing in a per-spec `tabletop.md` sidecar that carries values + trade-offs + halt conditions + escalation triggers + kill conditions + hot-wash. One session can produce one or more specs (multi-card fan-out); closed-mode tabletop ports `/orb:design`'s closed-space design-note path to a `tabletop-note.md` artefact. Retirement was gated on an ambiguity-floor probe (per spec 2026-05-21-tabletop ac-10) — the probe returned GO under the project-bar criterion (tabletop 0.200 vs baseline 0.165; gap was domain-driven in `criteria_clarity`, `constraint_clarity` beat baseline).
