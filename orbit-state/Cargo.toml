@@ -45,6 +45,12 @@ uuid = { version = "1", features = ["v4"] }
 # passed through regex::escape before \b...\b interpolation.
 regex = "1.10"
 
+# SHA-256 digests for routine `chain_id` (per spec 2026-05-22-routine-proposals
+# ac-04). The id is the SHA-256 hex digest of the JCS-canonical-JSON
+# encoding of the ordered skill_id sequence — byte-deterministic across
+# sessions and agents so archive-state lookup is content-addressed.
+sha2 = "0.10"
+
 # Test utilities
 tempfile = "3.10"
 

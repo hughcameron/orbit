@@ -156,6 +156,23 @@ impl OrbitLayout {
         self.skills_dir().join(format!("{skill_id}.invocations.jsonl"))
     }
 
+    /// `.claude/skills/` — project-local Claude Code skill directory. Routine
+    /// SKILL.md files authored by `orbit routine author` land at
+    /// `<.claude/skills/<name>/SKILL.md>`. Per spec
+    /// `2026-05-22-routine-proposals` ac-03.
+    pub fn claude_skills_dir(&self) -> PathBuf {
+        self.repo_root().join(".claude").join("skills")
+    }
+
+    /// Archive directory for retired routines: `.claude/skills/.archive/`.
+    /// The curator (card 0022) moves stale agent-authored skills here via
+    /// `git mv`. Routine lookup by `chain_id` (ac-09) scans both
+    /// `claude_skills_dir()` and `claude_skills_archive_dir()` so a renamed
+    /// or archived routine still anchors the content-addressed dedupe.
+    pub fn claude_skills_archive_dir(&self) -> PathBuf {
+        self.claude_skills_dir().join(".archive")
+    }
+
     pub fn session_id_file(&self) -> PathBuf {
         self.root.join(".session-id")
     }

@@ -18,6 +18,7 @@ pub mod locks;
 pub mod migrate;
 pub mod migrations;
 pub mod reconcile;
+pub mod routine;
 pub mod schema;
 pub mod session;
 pub mod sqlite_link;
@@ -47,7 +48,10 @@ pub use verbs::{
     SessionDistillArgs, SessionDistillResult, SessionHandoverArgs, SessionHandoverResult,
     SessionPrimeArgs, SessionPrimeResult, SessionSetCardArgs, SessionSetCardResult,
     SessionStartArgs, SessionStartResult, SkillRecordInvocationArgs, SkillRecordInvocationResult,
-    SkillRecurrenceArgs, SkillRecurrenceResult, SpecCloseArgs, SpecCloseResult, SpecCreateArgs,
+    SkillRecurrenceArgs, SkillRecurrenceResult,
+    RoutineAuthorArgs, RoutineAuthorResult, RoutineChainsArgs, RoutineChainsResult,
+    RoutineDetectArgs, RoutineDetectResult, RoutineVerifyArgs, RoutineVerifyResult,
+    SpecCloseArgs, SpecCloseResult, SpecCreateArgs,
     SpecCreateResult, SpecListArgs, SpecListResult, SpecNoteArgs, SpecNoteResult,
     SpecResolveArgs, SpecResolveCandidate, SpecResolveResult, SpecShowArgs,
     SpecShowResult, SpecSummary, SpecUpdateArgs, SpecUpdateResult, TaskClaimArgs, TaskDoneArgs,

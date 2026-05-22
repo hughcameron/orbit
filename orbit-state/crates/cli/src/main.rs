@@ -35,7 +35,10 @@ use orbit_state_core::{
     SessionDistillResult, SessionHandoverArgs, SessionHandoverResult, SessionPrimeArgs,
     SessionPrimeResult, SessionSetCardArgs, SessionSetCardResult, SessionStartArgs,
     SessionStartResult, SkillRecordInvocationArgs, SkillRecordInvocationResult,
-    SkillRecurrenceArgs, SkillRecurrenceResult, SpecCloseArgs, SpecCloseResult, SpecCreateArgs,
+    SkillRecurrenceArgs, SkillRecurrenceResult,
+    RoutineAuthorArgs, RoutineAuthorResult, RoutineChainsArgs, RoutineChainsResult,
+    RoutineDetectArgs, RoutineDetectResult, RoutineVerifyArgs, RoutineVerifyResult,
+    SpecCloseArgs, SpecCloseResult, SpecCreateArgs,
     SpecCreateResult, SpecListArgs, SpecListResult, SpecNoteArgs, SpecNoteResult,
     SpecResolveArgs, SpecResolveResult, SpecShowArgs,
     SpecShowResult, SpecUpdateArgs, SpecUpdateResult, TaskClaimArgs, TaskDoneArgs,
@@ -100,6 +103,14 @@ enum Command {
     Skill {
         #[command(subcommand)]
         action: SkillAction,
+    },
+    /// Routine verbs (chains, detect, author, verify) — per spec
+    /// 2026-05-22-routine-proposals. Routines are agent-authored
+    /// SKILL.md files at `.claude/skills/<name>/SKILL.md` that wrap
+    /// recurring chains of existing skill invocations.
+    Routine {
+        #[command(subcommand)]
+        action: RoutineAction,
     },
     /// Single-screen project synthesis — open specs, cards-by-maturity,
     /// recent memories, most-connected card, and orphan cards. Bounded
@@ -234,6 +245,57 @@ enum SkillAction {
         /// Only count rows whose timestamp is at or after this RFC 3339 cutoff.
         #[arg(long)]
         since: Option<String>,
+    },
+}
+
+/// Routine verbs — per spec 2026-05-22-routine-proposals.
+#[derive(Debug, Subcommand)]
+enum RoutineAction {
+    /// Reconstruct one chain per session_id from
+    /// `.orbit/skills/*.invocations.jsonl` rows. Per ac-01.
+    Chains,
+    /// Detect recurring sequential chains at or above the threshold
+    /// (default ≥ 2 occurrences). v1 is sequential-only — DAG-shaped
+    /// patterns are recorded in the invocation stream but not surfaced
+    /// here (per ac-05).
+    Detect,
+    /// Author a routine SKILL.md at `.claude/skills/<name>/SKILL.md`
+    /// carrying validated front-matter (created_by, created_at,
+    /// pinned, last_verified, chain_id, chain). Per ac-03 + ac-04.
+    /// Idempotent — if a routine with the same chain_id already exists
+    /// anywhere under `.claude/skills/` or its `.archive/` subtree the
+    /// existing path is returned and no write happens (ac-09).
+    Author {
+        /// Repeatable. Ordered skill_id sequence. Pass each step as
+        /// `--step /orb:<verb>`. Length ≥ 2 enforced.
+        #[arg(long = "step", required = true, num_args = 1..)]
+        chain: Vec<String>,
+        /// Optional routine directory name. Defaults to a derived
+        /// hyphen-joined slug.
+        #[arg(long)]
+        name: Option<String>,
+        /// Optional one-sentence description for the front-matter.
+        #[arg(long)]
+        description: Option<String>,
+        /// Optional override timestamp (RFC 3339). For migration / test.
+        #[arg(long)]
+        timestamp: Option<String>,
+        /// Occurrence count surfaced into the agent's commit message.
+        #[arg(long)]
+        occurrences: Option<usize>,
+    },
+    /// Re-validate every `/orb:<verb>` reference in the routine's
+    /// SKILL.md body and on pass advance `last_verified`. Per ac-06.
+    /// The verb is the ONLY writer of `last_verified` —
+    /// `audit conformance` is read-only on routines.
+    Verify {
+        /// Path to the routine's SKILL.md (relative to the repo root or
+        /// absolute).
+        path: String,
+        /// Optional override timestamp written into `last_verified`.
+        /// For migration / test.
+        #[arg(long)]
+        timestamp: Option<String>,
     },
 }
 
@@ -1188,6 +1250,30 @@ fn build_request(layout: &OrbitLayout, command: &Command) -> Result<VerbRequest,
                 })
             }
         },
+        Command::Routine { action } => match action {
+            RoutineAction::Chains => VerbRequest::RoutineChains(RoutineChainsArgs::default()),
+            RoutineAction::Detect => VerbRequest::RoutineDetect(RoutineDetectArgs::default()),
+            RoutineAction::Author {
+                chain,
+                name,
+                description,
+                timestamp,
+                occurrences,
+            } => VerbRequest::RoutineAuthor(RoutineAuthorArgs {
+                chain: chain.clone(),
+                name: name.clone(),
+                description: description.clone(),
+                body: None,
+                timestamp: timestamp.clone(),
+                occurrences: *occurrences,
+            }),
+            RoutineAction::Verify { path, timestamp } => {
+                VerbRequest::RoutineVerify(RoutineVerifyArgs {
+                    path: path.clone(),
+                    timestamp: timestamp.clone(),
+                })
+            }
+        },
         Command::Overview { memory_cap } => VerbRequest::Overview(OverviewArgs {
             memory_cap: *memory_cap,
         }),
@@ -1280,6 +1366,10 @@ fn render_human(response: &VerbResponse) {
         VerbResponse::SessionHandover(result) => render_session_handover(result),
         VerbResponse::SkillRecordInvocation(result) => render_skill_record_invocation(result),
         VerbResponse::SkillRecurrence(result) => render_skill_recurrence(result),
+        VerbResponse::RoutineChains(result) => render_routine_chains(result),
+        VerbResponse::RoutineDetect(result) => render_routine_detect(result),
+        VerbResponse::RoutineAuthor(result) => render_routine_author(result),
+        VerbResponse::RoutineVerify(result) => render_routine_verify(result),
     }
 }
 
@@ -1341,6 +1431,73 @@ fn render_skill_recurrence(result: &SkillRecurrenceResult) {
         "  incorrect:   {}",
         result.by_outcome.incorrect.count
     );
+}
+
+fn render_routine_chains(result: &RoutineChainsResult) {
+    if result.chains.is_empty() {
+        println!("routine.chains: no session chains reconstructed");
+        return;
+    }
+    println!("routine.chains: {} session(s)", result.chains.len());
+    for c in &result.chains {
+        println!("  {}\t[{}]", c.session_id, c.chain.join(" → "));
+    }
+}
+
+fn render_routine_detect(result: &RoutineDetectResult) {
+    if result.recurring.is_empty() {
+        println!("routine.detect: no recurring chains at threshold");
+        return;
+    }
+    println!(
+        "routine.detect: {} recurring chain(s)",
+        result.recurring.len()
+    );
+    for r in &result.recurring {
+        println!(
+            "  {} ({} occurrences) [{}]",
+            r.chain_id,
+            r.occurrences,
+            r.chain.join(" → ")
+        );
+    }
+}
+
+fn render_routine_author(result: &RoutineAuthorResult) {
+    if result.written {
+        println!(
+            "routine.author: wrote {}\n  chain_id: {}\n  name: {}",
+            result.path, result.chain_id, result.name,
+        );
+    } else {
+        println!(
+            "routine.author: chain_id already authored at {}\n  chain_id: {}\n  name: {}",
+            result.path, result.chain_id, result.name,
+        );
+    }
+}
+
+fn render_routine_verify(result: &RoutineVerifyResult) {
+    println!("routine.verify: {}", result.path);
+    if result.broken_refs.is_empty() {
+        println!(
+            "  PASS — {} ref(s) resolved; last_verified={}",
+            result.resolved.len(),
+            result
+                .last_verified
+                .as_deref()
+                .unwrap_or("(timestamp missing)"),
+        );
+    } else {
+        println!(
+            "  FAIL — {} broken ref(s):",
+            result.broken_refs.len()
+        );
+        for r in &result.broken_refs {
+            println!("    {r}");
+        }
+        println!("  last_verified NOT advanced");
+    }
 }
 
 fn render_session_prime(result: &SessionPrimeResult) {
