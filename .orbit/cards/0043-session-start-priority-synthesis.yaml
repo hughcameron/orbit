@@ -1,40 +1,45 @@
 id: 0043-session-start-priority-synthesis
-feature: Session-start priority synthesis
+feature: Session-priming move synthesis
 as_a: author starting a new session (or resuming work after a gap)
-i_want: a skill that re-derives a ranked list of priorities live from substrate signals — workflow conformance, session-prime envelope, recent memories — and presents them as a Decision Brief
-so_that: I see what to do next without reconstructing context from a frozen handover or running the synthesis verbs by hand
-goal: at session start, one command yields a ranked plan I can act on; the agent pays the compression cost so I don't have to
+i_want: a skill that re-derives the next move live from substrate signals — workflow conformance, session-prime envelope, recent memories — and names it as a single imperative verb with one sentence on why-now
+so_that: I see what to do next without reconstructing context from a frozen handover, running the synthesis verbs by hand, or parsing a menu
+goal: at session start, one command names the move; the agent pays the compression and selection cost so I don't have to
 maturity: emerging
 scenarios:
-- name: One command produces a ranked Decision Brief
+- name: One command names the next move
   given: an orbit project at session start (or any time the author wants to re-plan)
   when: the author invokes /prioritise
-  then: the agent returns a top-N ranked list, each item carrying what + why + estimated effort + next-action verb
+  then: the agent returns one imperative verb, one sentence on why-now (the pattern that makes this the move), and a deferred count of what else is open
   gate: true
 - name: Substrate is re-derived live, not read from a frozen handover
   given: time has passed since the last session close (memos have accumulated, cards have aged, conformance findings have changed)
   when: /prioritise runs
   then: it reads `orbit audit conformance --json`, `orbit session prime`, and recent memories — not the handover's frozen synthesis
   gate: true
-- name: Output is read-only — the author picks, the author runs
-  given: a Decision Brief has been produced
+- name: Output is read-only — the author runs the verb
+  given: a move has been named
   when: the author reviews it
-  then: the skill does not auto-execute any remediation verb; the author selects one and runs it themselves
+  then: the skill does not auto-execute the verb; the author types it themselves
   gate: true
-- name: Each priority carries a next-action verb
-  given: a finding from `orbit audit conformance` carries a `remediation.verb` field
-  when: that finding appears in the brief
-  then: the remediation.verb is surfaced verbatim as the next-action so the author runs it without translation
+- name: The move carries a next-action verb surfaced verbatim
+  given: the picked finding from `orbit audit conformance` carries a `remediation.verb` field
+  when: the move is rendered
+  then: the remediation.verb is surfaced verbatim — no translation, no paraphrase — so the author runs it without rewriting
+  gate: true
+- name: Full list available on request, not by default
+  given: a move has been named with a deferred count
+  when: the author asks "what are the others?" or "show me the full list"
+  then: the skill renders up to top 5 with what + why + effort + next-action, on the follow-up turn only
   gate: true
 - name: Differentiated from adjacent skills
-  given: /orb:overview already produces a status snapshot and /orb:handover (card 0036) writes the outgoing prompt
+  given: '`orbit session prime` already produces the raw envelope (handover + open specs + memories) and `orbit overview` produces a status snapshot'
   when: /prioritise runs
-  then: it produces a ranked ACTION plan (not a status snapshot) re-derived LIVE (not frozen at handover write-time)
+  then: it produces a one-move action recommendation derived LIVE from those inputs — not a duplicate envelope, not a status snapshot
   gate: false
-- name: Pillar 1 mechanism — author pays no compression cost
+- name: Pillar 1 mechanism — author pays no compression or selection cost
   given: the data substrate (conformance findings, session prime, memories) is already present
   when: the author needs to decide what to do next
-  then: the agent performs the ranking and compression; the author sees a brief, not raw substrate
+  then: the agent performs the ranking, the selection, and the compression; the author sees one verb and one sentence, not raw substrate
   gate: false
 specs:
 - .orbit/specs/2026-05-21-session-start-priority-synthesis/spec.yaml
