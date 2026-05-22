@@ -138,6 +138,14 @@ pub enum VerbRequest {
     SkillRecordInvocation(SkillRecordInvocationArgs),
     #[serde(rename = "skill.recurrence")]
     SkillRecurrence(SkillRecurrenceArgs),
+    #[serde(rename = "routine.chains")]
+    RoutineChains(RoutineChainsArgs),
+    #[serde(rename = "routine.detect")]
+    RoutineDetect(RoutineDetectArgs),
+    #[serde(rename = "routine.author")]
+    RoutineAuthor(RoutineAuthorArgs),
+    #[serde(rename = "routine.verify")]
+    RoutineVerify(RoutineVerifyArgs),
 }
 
 /// Args for `spec.list`. Optional `status` filter; further filters land later.
@@ -660,6 +668,83 @@ pub struct SkillRecurrenceArgs {
     pub since: Option<String>,
 }
 
+// ----------------------------------------------------------------------------
+// Routine verb args (spec 2026-05-22-routine-proposals)
+// ----------------------------------------------------------------------------
+
+/// Args for `routine.chains` — reconstruct one chain per `session_id`
+/// from every `.orbit/skills/*.invocations.jsonl` row. Per ac-01.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct RoutineChainsArgs {}
+
+/// Args for `routine.detect` — run [`crate::routine::detect_recurring_chains`]
+/// against the reconstructed session chains and return recurring chains
+/// at or above the threshold. Per ac-02 + ac-05.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct RoutineDetectArgs {}
+
+/// Args for `routine.author` — write a routine SKILL.md at
+/// `.claude/skills/<name>/SKILL.md` carrying validated front-matter.
+/// Per ac-03 + ac-04.
+///
+/// Idempotency: if a routine for the same `chain_id` already exists
+/// anywhere under `.claude/skills/` or its `.archive/` subtree, the
+/// verb returns `RoutineAuthorResult { written: false, path }` rather
+/// than overwriting. The author-archive (ac-09) is the load-bearing
+/// case: once an author archives a routine, the agent never re-authors
+/// the same chain.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct RoutineAuthorArgs {
+    /// Ordered skill_id sequence the routine wraps. Length ≥ 2 is
+    /// enforced — single-skill "chains" don't go through this path.
+    pub chain: Vec<String>,
+    /// Directory name under `.claude/skills/`. When omitted the
+    /// substrate derives one from the chain via
+    /// [`crate::routine::default_routine_name`]. Author renames later
+    /// don't break the content-addressed lookup (per ac-09).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    /// One-sentence description for the front-matter. Optional —
+    /// defaults to a derived sentence naming the chain.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    /// SKILL.md body that follows the front-matter block. Optional —
+    /// the substrate emits a default body listing the chain steps when
+    /// the caller omits one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub body: Option<String>,
+    /// Override the substrate timestamp used for both `created_at`
+    /// and the initial `last_verified`. For migration and test use.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub timestamp: Option<String>,
+    /// How many times the chain was observed — surfaces in the result
+    /// for the agent's commit message ("N occurrences"). Optional;
+    /// defaults to `None` (caller may pass for traceability).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub occurrences: Option<usize>,
+}
+
+/// Args for `routine.verify` — re-validate every `/orb:<verb>`
+/// reference in the routine's SKILL.md body and on pass write the
+/// run timestamp to the routine's `last_verified` front-matter field.
+/// Per ac-06.
+///
+/// The verb is the *only* writer of `last_verified` —
+/// `audit.conformance` is read-only on routines (ac-06 split).
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct RoutineVerifyArgs {
+    /// Path to the routine's SKILL.md, relative to the repo root.
+    pub path: String,
+    /// Override the substrate timestamp written into `last_verified`.
+    /// For migration / test use.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub timestamp: Option<String>,
+}
+
 /// Args for `spec.note` — append a timestamped note to a spec.
 ///
 /// The `timestamp` arg is the documented test/migration seam. Production
@@ -764,6 +849,14 @@ pub enum VerbResponse {
     SkillRecordInvocation(SkillRecordInvocationResult),
     #[serde(rename = "skill.recurrence")]
     SkillRecurrence(SkillRecurrenceResult),
+    #[serde(rename = "routine.chains")]
+    RoutineChains(RoutineChainsResult),
+    #[serde(rename = "routine.detect")]
+    RoutineDetect(RoutineDetectResult),
+    #[serde(rename = "routine.author")]
+    RoutineAuthor(RoutineAuthorResult),
+    #[serde(rename = "routine.verify")]
+    RoutineVerify(RoutineVerifyResult),
 }
 
 /// Result for `spec.list`.
@@ -1356,6 +1449,57 @@ pub struct SkillRecurrenceResult {
     pub total: usize,
 }
 
+/// Result for `routine.chains` — per-session reconstructed chains
+/// (ordered skill_id sequences, one per `session_id`). Per ac-01.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct RoutineChainsResult {
+    pub chains: Vec<crate::routine::SessionChain>,
+}
+
+/// Result for `routine.detect` — recurring chains that pass the
+/// threshold (per ac-02 + ac-05). DAG-shaped patterns are excluded
+/// from the output even when they recur (v1 is sequential-only per
+/// ac-05).
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct RoutineDetectResult {
+    pub recurring: Vec<crate::routine::RecurringChain>,
+}
+
+/// Result for `routine.author`. Per ac-03 + ac-09.
+///
+/// `written` is `true` when this call created the SKILL.md, `false`
+/// when an existing routine with the same `chain_id` was found anywhere
+/// under `.claude/skills/` or its `.archive/` subtree. The `path` field
+/// is always populated — to the newly-written file when `written` is
+/// true, or to the existing matching file when `written` is false.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct RoutineAuthorResult {
+    pub written: bool,
+    pub path: String,
+    pub chain_id: String,
+    pub name: String,
+}
+
+/// Result for `routine.verify`. Per ac-06 + ac-07.
+///
+/// `resolved` is the list of `/orb:<verb>` references that resolved to
+/// a live skill; `broken_refs` is the list that did not. `last_verified`
+/// is the timestamp written into the SKILL.md when every reference
+/// resolved; absent when the verification failed and the timestamp was
+/// NOT advanced.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct RoutineVerifyResult {
+    pub path: String,
+    pub resolved: Vec<String>,
+    pub broken_refs: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_verified: Option<String>,
+}
+
 /// Reduced view of a task — its current state derived from the last event
 /// for its task_id, plus the event history count.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -1485,6 +1629,18 @@ pub fn execute(layout: &OrbitLayout, request: &VerbRequest) -> Result<VerbRespon
         }
         VerbRequest::SkillRecurrence(args) => {
             skill_recurrence(layout, args).map(VerbResponse::SkillRecurrence)
+        }
+        VerbRequest::RoutineChains(args) => {
+            routine_chains(layout, args).map(VerbResponse::RoutineChains)
+        }
+        VerbRequest::RoutineDetect(args) => {
+            routine_detect(layout, args).map(VerbResponse::RoutineDetect)
+        }
+        VerbRequest::RoutineAuthor(args) => {
+            routine_author(layout, args).map(VerbResponse::RoutineAuthor)
+        }
+        VerbRequest::RoutineVerify(args) => {
+            routine_verify(layout, args).map(VerbResponse::RoutineVerify)
         }
     }
 }
@@ -3697,6 +3853,11 @@ fn audit_topology(
 /// finding under ac-03. Fixed at v1; no `.orbit/config.yaml` override.
 const MEMO_STALENESS_THRESHOLD_DAYS: i64 = 7;
 
+/// Routine-staleness threshold in days. Routines whose `last_verified`
+/// is older than this fire a `routines/stale` finding from
+/// `audit.conformance`. Per spec 2026-05-22-routine-proposals ac-07.
+const ROUTINE_STALENESS_THRESHOLD_DAYS: i64 = 30;
+
 /// Plugin-canonical-file inventory — `(operator_relative_path,
 /// canonical_bytes)` pairs. The bytes are pulled at compile time via
 /// `include_str!`, which means they always match the orbit-state
@@ -3772,6 +3933,12 @@ fn audit_conformance_at(
     if !pin_dominates {
         findings.extend(canonical_file_findings(layout)?);
     }
+
+    // Routine findings (per spec 2026-05-22-routine-proposals ac-07).
+    // Two state slugs — `stale` (last_verified > 30d) and `broken_refs`
+    // (one or more /orb:<verb> refs no longer resolve). Read-only — the
+    // audit aggregator never mutates routines (ac-06 split).
+    findings.extend(routine_findings(layout, today)?);
 
     Ok(AuditConformanceResult {
         findings,
@@ -3970,6 +4137,153 @@ fn canonical_file_findings(layout: &OrbitLayout) -> Result<Vec<ConformanceFindin
         });
     }
     Ok(findings)
+}
+
+/// Routine-conformance findings (per spec 2026-05-22-routine-proposals
+/// ac-07). Two state slugs:
+///
+/// - `stale`: `last_verified` older than [`ROUTINE_STALENESS_THRESHOLD_DAYS`].
+///   Remediation: `orbit routine verify <path>`.
+/// - `broken_refs`: one or more `/orb:<verb>` refs in the routine's
+///   SKILL.md body no longer resolves to a live skill. Remediation:
+///   `archive via curator`.
+///
+/// Audit is **read-only** — does NOT mutate routine files (the ac-06
+/// split puts `last_verified` writes exclusively in `routine.verify`).
+fn routine_findings(
+    layout: &OrbitLayout,
+    today: time::Date,
+) -> Result<Vec<ConformanceFinding>> {
+    let mut findings = Vec::new();
+    let claude_dir = layout.claude_skills_dir();
+    if !claude_dir.exists() {
+        return Ok(findings);
+    }
+    let entries = match std::fs::read_dir(&claude_dir) {
+        Ok(e) => e,
+        Err(_) => return Ok(findings),
+    };
+    for entry in entries {
+        let entry = match entry {
+            Ok(e) => e,
+            Err(_) => continue,
+        };
+        let path = entry.path();
+        if !path.is_dir() {
+            continue;
+        }
+        // .archive/ is the curator's bin; routines there are intentionally
+        // out of view.
+        if path.file_name().and_then(|s| s.to_str()) == Some(".archive") {
+            continue;
+        }
+        let skill_md = path.join("SKILL.md");
+        if !skill_md.is_file() {
+            continue;
+        }
+        let body = match std::fs::read_to_string(&skill_md) {
+            Ok(b) => b,
+            Err(_) => continue,
+        };
+        let fm = match crate::routine::parse_front_matter(&body) {
+            Ok(f) => f,
+            // Routines with malformed front-matter aren't this audit's
+            // problem (the AC-04 write-path validation gates that on
+            // creation); skip silently here to keep the audit narrow.
+            Err(_) => continue,
+        };
+        // Only flag agent-authored routines. Human-authored skills are
+        // out of scope per the curator's invariants (card 0022).
+        if fm.created_by != "agent" {
+            continue;
+        }
+
+        let rel_subject = skill_md
+            .strip_prefix(layout.repo_root())
+            .map(|p| p.to_string_lossy().into_owned())
+            .unwrap_or_else(|_| skill_md.to_string_lossy().into_owned());
+
+        // Stale check.
+        if let Some(days_old) = days_since_iso(&fm.last_verified, today) {
+            if days_old > ROUTINE_STALENESS_THRESHOLD_DAYS {
+                let mut evidence = serde_yaml::Mapping::new();
+                evidence.insert(
+                    serde_yaml::Value::String("last_verified".into()),
+                    serde_yaml::Value::String(fm.last_verified.clone()),
+                );
+                evidence.insert(
+                    serde_yaml::Value::String("days_since_verified".into()),
+                    serde_yaml::Value::Number(days_old.into()),
+                );
+                findings.push(ConformanceFinding {
+                    severity: "medium".into(),
+                    subsystem: "routines".into(),
+                    subject: rel_subject.clone(),
+                    state: "stale".into(),
+                    evidence: Some(serde_yaml::Value::Mapping(evidence)),
+                    remediation: Remediation {
+                        verb: format!("orbit routine verify {rel_subject}"),
+                        rationale: Some(
+                            "last_verified is older than the 30-day routine freshness threshold"
+                                .into(),
+                        ),
+                    },
+                });
+            }
+        }
+
+        // Broken-refs check.
+        let mut prose_refs = extract_orb_refs(&body);
+        for ch in &fm.chain {
+            if !prose_refs.contains(ch) {
+                prose_refs.push(ch.clone());
+            }
+        }
+        let (_resolved, broken) = partition_refs(layout, &prose_refs);
+        if !broken.is_empty() {
+            let mut evidence = serde_yaml::Mapping::new();
+            evidence.insert(
+                serde_yaml::Value::String("broken_refs".into()),
+                serde_yaml::Value::Sequence(
+                    broken
+                        .iter()
+                        .map(|r| serde_yaml::Value::String(r.clone()))
+                        .collect(),
+                ),
+            );
+            findings.push(ConformanceFinding {
+                severity: "medium".into(),
+                subsystem: "routines".into(),
+                subject: rel_subject,
+                state: "broken_refs".into(),
+                evidence: Some(serde_yaml::Value::Mapping(evidence)),
+                remediation: Remediation {
+                    verb: "archive via curator".into(),
+                    rationale: Some(
+                        "one or more /orb:<verb> references no longer resolve to a live skill"
+                            .into(),
+                    ),
+                },
+            });
+        }
+    }
+    Ok(findings)
+}
+
+/// Return the (positive) day-count between an RFC 3339 / ISO 8601
+/// timestamp and `today`. Returns `None` when the timestamp can't be
+/// parsed (the substrate wrote a malformed value) so the audit skips
+/// silently — `audit.conformance` mustn't error on bad routine data.
+fn days_since_iso(ts: &str, today: time::Date) -> Option<i64> {
+    // Take just the date portion (YYYY-MM-DD prefix). The substrate
+    // writes RFC 3339 UTC so this is always the first 10 chars.
+    if ts.len() < 10 {
+        return None;
+    }
+    let date_str = &ts[..10];
+    let format = time::format_description::parse("[year]-[month]-[day]").ok()?;
+    let then = time::Date::parse(date_str, &format).ok()?;
+    Some((today - then).whole_days())
 }
 
 /// ac-05: derive PinState. The installed plugin version is read from
@@ -5060,6 +5374,331 @@ fn skill_recurrence(
         by_outcome,
         total,
     })
+}
+
+// ============================================================================
+// Routine verbs — per spec 2026-05-22-routine-proposals.
+//
+// AC-08 boundary: this section explicitly does NOT import any "skill author"
+// module — card 0022's skill-author flow is in spec/verb space, not here.
+// The boundary is enforced by `routine_no_cross_imports_with_skill_author`
+// in the test module below: it greps both routine.rs and this section for
+// any `skill_author` reference and asserts none exist.
+// ============================================================================
+
+/// `routine.chains` — reconstruct per-session chains from the
+/// SkillInvocation substrate. Per ac-01 (option b: aggregator verb,
+/// no schema change).
+fn routine_chains(
+    layout: &OrbitLayout,
+    _args: &RoutineChainsArgs,
+) -> Result<RoutineChainsResult> {
+    let chains = crate::routine::reconstruct_chains(&layout.skills_dir())?;
+    Ok(RoutineChainsResult { chains })
+}
+
+/// `routine.detect` — surface recurring sequential chains at or above
+/// the threshold. v1 is sequential-only (ac-05) so DAG-shaped patterns
+/// are recorded in the invocation stream but never returned here.
+fn routine_detect(
+    layout: &OrbitLayout,
+    _args: &RoutineDetectArgs,
+) -> Result<RoutineDetectResult> {
+    let chains = crate::routine::reconstruct_chains(&layout.skills_dir())?;
+    let recurring = crate::routine::detect_recurring_chains(&chains);
+    Ok(RoutineDetectResult { recurring })
+}
+
+/// `routine.author` — write a routine SKILL.md at
+/// `.claude/skills/<name>/SKILL.md` carrying validated front-matter
+/// (created_by, created_at, pinned, last_verified, chain_id, chain).
+/// Per ac-03 + ac-04.
+///
+/// Content-addressed idempotency (ac-09): if a routine with the same
+/// `chain_id` already exists under `.claude/skills/` or its `.archive/`
+/// subtree the verb returns `written: false` and points at the
+/// existing file. Author archives permanently silence re-authoring.
+///
+/// The verb validates the front-matter against [`RoutineFrontMatter`]
+/// before writing — schema-validation failure surfaces as a Malformed
+/// error so the agent can react per the tabletop's halt condition #1.
+fn routine_author(
+    layout: &OrbitLayout,
+    args: &RoutineAuthorArgs,
+) -> Result<RoutineAuthorResult> {
+    const VERB: &str = "routine.author";
+
+    if args.chain.len() < 2 {
+        return Err(Error::malformed(
+            VERB,
+            "chain must contain ≥ 2 skill_ids (single-skill routines aren't chains)",
+        ));
+    }
+
+    let chain_id = crate::routine::chain_id(&args.chain);
+    let name = args
+        .name
+        .clone()
+        .unwrap_or_else(|| crate::routine::default_routine_name(&args.chain));
+    if name.is_empty() {
+        return Err(Error::malformed(VERB, "routine name must not be empty"));
+    }
+    if name.contains('/') || name.contains('\\') || name.contains("..") {
+        return Err(Error::malformed(
+            VERB,
+            format!("name must not contain path separators or '..': '{name}'"),
+        ));
+    }
+
+    let claude_dir = layout.claude_skills_dir();
+
+    // AC-09: content-addressed dedupe across .claude/skills/ AND .archive/.
+    if let Some(existing) = crate::routine::existing_routine_for_chain(&claude_dir, &chain_id)? {
+        return Ok(RoutineAuthorResult {
+            written: false,
+            path: existing.to_string_lossy().into_owned(),
+            chain_id,
+            name,
+        });
+    }
+
+    let timestamp = match &args.timestamp {
+        Some(t) => t.clone(),
+        None => current_rfc3339_utc().map_err(|e| {
+            Error::unavailable(VERB, format!("substrate timestamp generation failed: {e}"))
+        })?,
+    };
+
+    let description = args.description.clone().unwrap_or_else(|| {
+        format!(
+            "Routine chain: {}",
+            args.chain.join(" → "),
+        )
+    });
+
+    let body = args.body.clone().unwrap_or_else(|| default_routine_body(&args.chain));
+
+    let fm = crate::routine::RoutineFrontMatter {
+        name: name.clone(),
+        description,
+        created_by: "agent".into(),
+        created_at: timestamp.clone(),
+        pinned: false,
+        last_verified: timestamp,
+        chain_id: chain_id.clone(),
+        chain: args.chain.clone(),
+    };
+
+    let rendered = crate::routine::render_skill_md(&fm, &body);
+
+    // Re-parse what we just rendered — AC-04 validates the front-matter
+    // schema on every agent write. If the schema check ever fails on a
+    // freshly-rendered payload, the rendering itself is broken: surface
+    // as Malformed so the agent halts (tabletop halt condition #1).
+    crate::routine::parse_front_matter(&rendered).map_err(|e| {
+        Error::malformed(VERB, format!("rendered front-matter failed validation: {}", e.0))
+    })?;
+
+    let target_dir = claude_dir.join(&name);
+    std::fs::create_dir_all(&target_dir).map_err(|e| {
+        Error::unavailable(VERB, format!("create {}: {e}", target_dir.display()))
+    })?;
+    let target_path = target_dir.join("SKILL.md");
+    write_atomic(&target_path, rendered.as_bytes()).map_err(|mut e| {
+        e.verb = VERB.into();
+        e
+    })?;
+
+    Ok(RoutineAuthorResult {
+        written: true,
+        path: target_path.to_string_lossy().into_owned(),
+        chain_id,
+        name,
+    })
+}
+
+/// `routine.verify` — re-validate every `/orb:<verb>` reference in the
+/// routine's SKILL.md body resolves to a live skill, and on pass write
+/// the run timestamp to `last_verified`. Per ac-06.
+///
+/// Atomic semantics (per ac-06 verification): read the file, mutate
+/// the front-matter in memory, atomic rewrite. Concurrent
+/// `audit.conformance` + verify can't corrupt because
+/// `audit.conformance` doesn't write.
+///
+/// Resolution surface: a `/orb:<verb>` reference resolves when
+/// `<repo_root>/plugins/orb/skills/<verb>/SKILL.md` exists OR
+/// `<repo_root>/.claude/skills/<verb>/SKILL.md` exists. The plugins/
+/// path is the orbit-owned skill set; `.claude/skills/` is the
+/// project-local agent-authored set (where routines themselves live).
+fn routine_verify(
+    layout: &OrbitLayout,
+    args: &RoutineVerifyArgs,
+) -> Result<RoutineVerifyResult> {
+    const VERB: &str = "routine.verify";
+
+    if args.path.is_empty() {
+        return Err(Error::malformed(VERB, "path must not be empty"));
+    }
+    if args.path.contains("..") {
+        return Err(Error::malformed(
+            VERB,
+            format!("path must not contain '..': '{}'", args.path),
+        ));
+    }
+
+    // Resolve `path` relative to the repo root when it isn't absolute.
+    let path_buf = std::path::PathBuf::from(&args.path);
+    let resolved_path = if path_buf.is_absolute() {
+        path_buf
+    } else {
+        layout.repo_root().join(&path_buf)
+    };
+    if !resolved_path.exists() {
+        return Err(Error::not_found(
+            VERB,
+            format!("no SKILL.md at {}", resolved_path.display()),
+        ));
+    }
+
+    let body = std::fs::read_to_string(&resolved_path).map_err(|e| {
+        Error::unavailable(VERB, format!("read {}: {e}", resolved_path.display()))
+    })?;
+
+    // Parse + validate front-matter to enforce the AC-04 invariant on every
+    // write path that touches the file.
+    let mut fm = crate::routine::parse_front_matter(&body).map_err(|e| {
+        Error::malformed(VERB, e.0)
+    })?;
+
+    // Walk the body (everything after the closing `---`) and pull out
+    // every `/orb:<verb>` reference. We also consult `fm.chain` so the
+    // declarative chain is verified even if the body prose drifted.
+    let prose_refs = extract_orb_refs(&body);
+    let mut all_refs: Vec<String> = fm.chain.clone();
+    for r in prose_refs {
+        if !all_refs.contains(&r) {
+            all_refs.push(r);
+        }
+    }
+
+    let (resolved, broken_refs) = partition_refs(layout, &all_refs);
+
+    let timestamp = match &args.timestamp {
+        Some(t) => t.clone(),
+        None => current_rfc3339_utc().map_err(|e| {
+            Error::unavailable(VERB, format!("substrate timestamp generation failed: {e}"))
+        })?,
+    };
+
+    let last_verified = if broken_refs.is_empty() {
+        // Pass: advance last_verified via atomic rewrite. Read again
+        // before write to preserve any body edits the author made
+        // since parse.
+        fm.last_verified = timestamp.clone();
+        // Extract the post-front-matter body and rewrite the SKILL.md
+        // with the new front-matter block.
+        let body_after = split_off_body(&body).unwrap_or_default();
+        let rewritten = crate::routine::render_skill_md(&fm, body_after);
+        write_atomic(&resolved_path, rewritten.as_bytes()).map_err(|mut e| {
+            e.verb = VERB.into();
+            e
+        })?;
+        Some(timestamp)
+    } else {
+        None
+    };
+
+    Ok(RoutineVerifyResult {
+        path: resolved_path.to_string_lossy().into_owned(),
+        resolved,
+        broken_refs,
+        last_verified,
+    })
+}
+
+/// Walk `body` and return every `/orb:<verb>` reference, in
+/// first-occurrence order. Used by [`routine_verify`] to extract the
+/// references whose live-skill status determines `last_verified`.
+fn extract_orb_refs(body: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut chars = body.char_indices().peekable();
+    while let Some((i, c)) = chars.next() {
+        if c != '/' {
+            continue;
+        }
+        // Match `/orb:`...
+        let rest = &body[i..];
+        if !rest.starts_with("/orb:") {
+            continue;
+        }
+        let after = &rest[5..];
+        let end = after
+            .find(|c: char| !(c.is_ascii_alphanumeric() || c == '-' || c == '_'))
+            .unwrap_or(after.len());
+        if end == 0 {
+            continue;
+        }
+        let verb = &after[..end];
+        let full = format!("/orb:{verb}");
+        if !out.contains(&full) {
+            out.push(full);
+        }
+        // Consume the matched chars so the outer iterator advances.
+        for _ in 0..(5 + end - 1) {
+            chars.next();
+        }
+    }
+    out
+}
+
+/// Split `body` into front-matter and after-block. Returns the slice
+/// AFTER the closing `---\n`. Returns `None` when the front-matter
+/// markers are not present (which can't happen for a body that
+/// [`crate::routine::parse_front_matter`] just accepted).
+fn split_off_body(body: &str) -> Option<&str> {
+    let trimmed = body.trim_start_matches('\u{feff}');
+    let after_open = trimmed.strip_prefix("---\n")?;
+    let close_offset = after_open.find("\n---")?;
+    let after_close = &after_open[close_offset + 4..]; // skip `\n---`
+    // The closing marker is `\n---` followed by `\n` and the body.
+    Some(after_close.strip_prefix('\n').unwrap_or(after_close))
+}
+
+/// Partition a list of `/orb:<verb>` refs into (resolved, broken).
+/// A ref resolves when either `plugins/orb/skills/<verb>/SKILL.md` or
+/// `.claude/skills/<verb>/SKILL.md` exists.
+fn partition_refs(layout: &OrbitLayout, refs: &[String]) -> (Vec<String>, Vec<String>) {
+    let mut resolved = Vec::new();
+    let mut broken = Vec::new();
+    let plugin_root = layout.repo_root().join("plugins").join("orb").join("skills");
+    let claude_root = layout.claude_skills_dir();
+    for r in refs {
+        let verb = r.strip_prefix("/orb:").unwrap_or(r);
+        let plugin_path = plugin_root.join(verb).join("SKILL.md");
+        let claude_path = claude_root.join(verb).join("SKILL.md");
+        if plugin_path.is_file() || claude_path.is_file() {
+            resolved.push(r.clone());
+        } else {
+            broken.push(r.clone());
+        }
+    }
+    (resolved, broken)
+}
+
+/// Default body the substrate emits when `routine.author` is called
+/// without a `body` arg. Lists the chain steps and points at the
+/// verify verb so authors know how to refresh `last_verified`.
+fn default_routine_body(chain: &[String]) -> String {
+    let mut out = String::from("# Routine\n\n");
+    out.push_str("Run the following skill chain in order:\n\n");
+    for step in chain {
+        out.push_str(&format!("1. `{}`\n", step));
+    }
+    out.push_str(
+        "\n---\n\nGenerated by `orbit routine author` — re-verify with `orbit routine verify <path>`.\n",
+    );
+    out
 }
 
 fn parse_invocation_outcome(verb: &str, raw: &str) -> Result<InvocationOutcome> {
@@ -10436,5 +11075,701 @@ mystery_field: surprise
             }
             other => panic!("unexpected response: {other:?}"),
         }
+    }
+
+    // ========================================================================
+    // Spec 2026-05-22-routine-proposals — per-AC test fixtures.
+    //
+    // Test naming follows the convention `routine_ac_<NN>_<what>`. Each AC
+    // owns its block. AC-10 (`ac_type: observation`) defers — no test here,
+    // closure is post-ship soak per the spec.
+    // ========================================================================
+
+    /// Helper: write a SkillInvocation row directly to the skill stream.
+    /// Bypasses `skill_record_invocation` so tests can control timestamp +
+    /// session_id without env-var dancing.
+    fn write_invocation(
+        layout: &OrbitLayout,
+        skill_id: &str,
+        session_id: &str,
+        timestamp: &str,
+    ) {
+        std::fs::create_dir_all(layout.skills_dir()).unwrap();
+        let inv = SkillInvocation {
+            skill_id: skill_id.into(),
+            session_id: session_id.into(),
+            outcome: InvocationOutcome::Worked,
+            correction: None,
+            timestamp: timestamp.into(),
+        };
+        let line = serde_json::to_string(&inv).unwrap();
+        let path = layout.skill_invocations_file(skill_id);
+        use std::io::Write;
+        let mut f = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&path)
+            .unwrap();
+        writeln!(f, "{line}").unwrap();
+    }
+
+    // ---- AC-01: chain reconstruction via aggregator (option b) -------------
+
+    #[test]
+    fn routine_ac_01_chain_reconstruction_via_aggregator() {
+        // Substrate fixture: two sessions, each invoking a 3-step chain.
+        // The aggregator should reconstruct one chain per session_id from
+        // session_id + timestamp ordering — no SkillInvocation schema change.
+        let (_dir, layout) = fresh_conformance_layout();
+        write_invocation(&layout, "tabletop", "s1", "2026-05-21T10:00:00Z");
+        write_invocation(&layout, "spec", "s1", "2026-05-21T10:01:00Z");
+        write_invocation(&layout, "implement", "s1", "2026-05-21T10:02:00Z");
+        write_invocation(&layout, "tabletop", "s2", "2026-05-22T09:00:00Z");
+        write_invocation(&layout, "spec", "s2", "2026-05-22T09:01:00Z");
+        write_invocation(&layout, "implement", "s2", "2026-05-22T09:02:00Z");
+
+        let resp = execute(&layout, &VerbRequest::RoutineChains(RoutineChainsArgs::default()))
+            .unwrap();
+        let chains = match resp {
+            VerbResponse::RoutineChains(r) => r.chains,
+            other => panic!("unexpected: {other:?}"),
+        };
+        assert_eq!(chains.len(), 2);
+        for c in &chains {
+            assert_eq!(c.chain, vec!["tabletop", "spec", "implement"]);
+        }
+    }
+
+    // ---- AC-02: recurrence detection matching rules -----------------------
+
+    #[test]
+    fn routine_ac_02_exact_match_length_two() {
+        let chains = vec![
+            crate::routine::SessionChain {
+                session_id: "s1".into(),
+                chain: vec!["a".into(), "b".into()],
+            },
+            crate::routine::SessionChain {
+                session_id: "s2".into(),
+                chain: vec!["a".into(), "b".into()],
+            },
+        ];
+        let recurring = crate::routine::detect_recurring_chains(&chains);
+        assert_eq!(recurring.len(), 1);
+        assert_eq!(recurring[0].chain, vec!["a", "b"]);
+        assert_eq!(recurring[0].occurrences, 2);
+    }
+
+    #[test]
+    fn routine_ac_02_length_three_allows_one_skipped_step() {
+        // s1 has the exact chain a-b-c; s2 has a-b-X-c with one skip.
+        let chains = vec![
+            crate::routine::SessionChain {
+                session_id: "s1".into(),
+                chain: vec!["a".into(), "b".into(), "c".into()],
+            },
+            crate::routine::SessionChain {
+                session_id: "s2".into(),
+                chain: vec!["a".into(), "b".into(), "x".into(), "c".into()],
+            },
+        ];
+        let recurring = crate::routine::detect_recurring_chains(&chains);
+        // The a-b-c chain should be recognised across both sessions.
+        let abc = recurring
+            .iter()
+            .find(|r| r.chain == vec!["a".to_string(), "b".to_string(), "c".to_string()]);
+        assert!(abc.is_some(), "a-b-c should match with one skip: {recurring:?}");
+        assert_eq!(abc.unwrap().occurrences, 2);
+    }
+
+    #[test]
+    fn routine_ac_02_longest_chain_wins() {
+        // Both sessions run a-b-c-d. The length-3 sub-chains (a-b-c, b-c-d)
+        // also "recur" in the same sessions; the longest-wins rule means
+        // only a-b-c-d is returned.
+        let chains = vec![
+            crate::routine::SessionChain {
+                session_id: "s1".into(),
+                chain: vec!["a".into(), "b".into(), "c".into(), "d".into()],
+            },
+            crate::routine::SessionChain {
+                session_id: "s2".into(),
+                chain: vec!["a".into(), "b".into(), "c".into(), "d".into()],
+            },
+        ];
+        let recurring = crate::routine::detect_recurring_chains(&chains);
+        assert_eq!(recurring.len(), 1);
+        assert_eq!(recurring[0].chain, vec!["a", "b", "c", "d"]);
+    }
+
+    #[test]
+    fn routine_ac_02_single_session_does_not_trigger() {
+        let chains = vec![crate::routine::SessionChain {
+            session_id: "only".into(),
+            chain: vec!["a".into(), "b".into(), "c".into()],
+        }];
+        let recurring = crate::routine::detect_recurring_chains(&chains);
+        assert!(recurring.is_empty(), "below threshold must not surface");
+    }
+
+    // ---- AC-03: routine.author writes a SKILL.md ---------------------------
+
+    #[test]
+    fn routine_ac_03_author_writes_skill_md() {
+        let (_dir, layout) = fresh_conformance_layout();
+        let args = RoutineAuthorArgs {
+            chain: vec![
+                "/orb:tabletop".into(),
+                "/orb:spec".into(),
+                "/orb:implement".into(),
+            ],
+            name: None,
+            description: None,
+            body: None,
+            timestamp: Some("2026-05-22T10:00:00Z".into()),
+            occurrences: Some(3),
+        };
+        let resp = execute(&layout, &VerbRequest::RoutineAuthor(args)).unwrap();
+        let result = match resp {
+            VerbResponse::RoutineAuthor(r) => r,
+            other => panic!("{other:?}"),
+        };
+        assert!(result.written);
+        assert_eq!(result.name, "tabletop-spec-implement");
+        let path = std::path::PathBuf::from(&result.path);
+        assert!(path.exists());
+        let body = std::fs::read_to_string(&path).unwrap();
+        // Front-matter parseable + chain matches.
+        let fm = crate::routine::parse_front_matter(&body).expect("parses");
+        assert_eq!(fm.chain, vec!["/orb:tabletop", "/orb:spec", "/orb:implement"]);
+        assert_eq!(fm.created_by, "agent");
+        assert!(!fm.pinned);
+    }
+
+    // ---- AC-04: front-matter compliance + chain_id correctness -------------
+
+    #[test]
+    fn routine_ac_04_chain_id_matches_canonical_example() {
+        // The spec gives a worked example: SHA-256 of the canonical JSON for
+        // ["/orb:tabletop","/orb:spec","/orb:implement"]. The substrate
+        // function must produce exactly that.
+        let id = crate::routine::chain_id(&[
+            "/orb:tabletop".into(),
+            "/orb:spec".into(),
+            "/orb:implement".into(),
+        ]);
+        // Recompute the expected hash from the exact canonical bytes.
+        use sha2::{Digest, Sha256};
+        let mut h = Sha256::new();
+        h.update(br#"["/orb:tabletop","/orb:spec","/orb:implement"]"#);
+        let expected = h.finalize();
+        // Hex-encode for comparison.
+        let mut hex = String::with_capacity(64);
+        for b in &expected {
+            hex.push_str(&format!("{:02x}", b));
+        }
+        assert_eq!(id, hex);
+        assert_eq!(id.len(), 64);
+    }
+
+    #[test]
+    fn routine_ac_04_front_matter_validates_on_write() {
+        let (_dir, layout) = fresh_conformance_layout();
+        let args = RoutineAuthorArgs {
+            chain: vec!["/orb:a".into(), "/orb:b".into()],
+            name: None,
+            description: None,
+            body: None,
+            timestamp: Some("2026-05-22T10:00:00Z".into()),
+            occurrences: None,
+        };
+        let result = match execute(&layout, &VerbRequest::RoutineAuthor(args)).unwrap() {
+            VerbResponse::RoutineAuthor(r) => r,
+            other => panic!("{other:?}"),
+        };
+        let body = std::fs::read_to_string(&result.path).unwrap();
+        let fm = crate::routine::parse_front_matter(&body).expect("schema passes");
+        // Additive fields per ac-04 are present.
+        assert_eq!(fm.last_verified, "2026-05-22T10:00:00Z");
+        assert_eq!(fm.chain_id, crate::routine::chain_id(&fm.chain));
+        // Card 0022-compatible fields present.
+        assert_eq!(fm.created_by, "agent");
+        assert_eq!(fm.created_at, "2026-05-22T10:00:00Z");
+        assert!(!fm.pinned);
+    }
+
+    #[test]
+    fn routine_ac_04_rejects_short_chain() {
+        let (_dir, layout) = fresh_conformance_layout();
+        let args = RoutineAuthorArgs {
+            chain: vec!["/orb:only-one".into()],
+            name: None,
+            description: None,
+            body: None,
+            timestamp: None,
+            occurrences: None,
+        };
+        let err = execute(&layout, &VerbRequest::RoutineAuthor(args)).unwrap_err();
+        assert_eq!(err.category, Category::Malformed);
+        assert!(err.message.contains("≥ 2"));
+    }
+
+    // ---- AC-05: v1 scope is sequential chains only -------------------------
+
+    #[test]
+    fn routine_ac_05_fan_out_pattern_does_not_trigger_authoring() {
+        // A fan-out pattern: one session runs rally → drive(card-a)
+        // → drive(card-b). The detection algorithm is sequential-only,
+        // so even if a similar shape repeats, the DAG (variable ordering
+        // across the two drive branches) is not authored as a routine.
+        //
+        // We model this by having two sessions where the rally step is
+        // identical but the post-rally ordering varies (a then b vs b
+        // then a). The longest exact-match sub-chain across both is
+        // just `[rally]`, which is length-1 and excluded. So no
+        // recurring chain should surface.
+        let chains = vec![
+            crate::routine::SessionChain {
+                session_id: "s1".into(),
+                chain: vec!["rally".into(), "drive-a".into(), "drive-b".into()],
+            },
+            crate::routine::SessionChain {
+                session_id: "s2".into(),
+                chain: vec!["rally".into(), "drive-b".into(), "drive-a".into()],
+            },
+        ];
+        let recurring = crate::routine::detect_recurring_chains(&chains);
+        // No length-≥2 sub-chain matches across both sessions (the only
+        // common length-2 subslice would be [rally, drive-X] and they
+        // differ).
+        assert!(
+            recurring.is_empty(),
+            "fan-out / DAG-shaped pattern must not trigger sequential routine authoring: {recurring:?}"
+        );
+    }
+
+    // ---- AC-06: routine.verify is the only writer of last_verified ---------
+
+    #[test]
+    fn routine_ac_06_verify_advances_last_verified_on_pass() {
+        let (_dir, layout) = fresh_conformance_layout();
+        // Author a routine pointing at /orb:audit (a real shipped skill
+        // in plugins/orb/skills/audit/SKILL.md — but we don't have that
+        // skill tree in the test temp dir, so create the plugin path
+        // explicitly to make the ref resolve).
+        std::fs::create_dir_all(layout.repo_root().join("plugins/orb/skills/audit")).unwrap();
+        std::fs::write(
+            layout.repo_root().join("plugins/orb/skills/audit/SKILL.md"),
+            "---\nname: audit\n---\n# /orb:audit\n",
+        )
+        .unwrap();
+        std::fs::create_dir_all(layout.repo_root().join("plugins/orb/skills/spec")).unwrap();
+        std::fs::write(
+            layout.repo_root().join("plugins/orb/skills/spec/SKILL.md"),
+            "---\nname: spec\n---\n",
+        )
+        .unwrap();
+
+        let args = RoutineAuthorArgs {
+            chain: vec!["/orb:audit".into(), "/orb:spec".into()],
+            name: Some("aud-spec".into()),
+            description: None,
+            body: None,
+            timestamp: Some("2026-04-01T00:00:00Z".into()),
+            occurrences: None,
+        };
+        let authored = match execute(&layout, &VerbRequest::RoutineAuthor(args)).unwrap() {
+            VerbResponse::RoutineAuthor(r) => r,
+            other => panic!("{other:?}"),
+        };
+
+        // Snapshot the file content before verify.
+        let before = std::fs::read_to_string(&authored.path).unwrap();
+        let fm_before = crate::routine::parse_front_matter(&before).unwrap();
+        assert_eq!(fm_before.last_verified, "2026-04-01T00:00:00Z");
+
+        // Verify with a fresh timestamp.
+        let verify_resp = execute(
+            &layout,
+            &VerbRequest::RoutineVerify(RoutineVerifyArgs {
+                path: authored.path.clone(),
+                timestamp: Some("2026-05-22T12:00:00Z".into()),
+            }),
+        )
+        .unwrap();
+        let v = match verify_resp {
+            VerbResponse::RoutineVerify(r) => r,
+            other => panic!("{other:?}"),
+        };
+        assert!(v.broken_refs.is_empty(), "refs should resolve: {v:?}");
+        assert_eq!(v.last_verified.as_deref(), Some("2026-05-22T12:00:00Z"));
+
+        let after = std::fs::read_to_string(&authored.path).unwrap();
+        let fm_after = crate::routine::parse_front_matter(&after).unwrap();
+        assert_eq!(fm_after.last_verified, "2026-05-22T12:00:00Z");
+    }
+
+    #[test]
+    fn routine_ac_06_verify_does_not_advance_when_ref_broken() {
+        let (_dir, layout) = fresh_conformance_layout();
+        // Author a routine pointing at a skill that DOESN'T exist.
+        // Verify must NOT advance last_verified.
+        // Create the spec ref so chain parses with ≥ 2 valid-ish refs.
+        std::fs::create_dir_all(layout.repo_root().join("plugins/orb/skills/spec")).unwrap();
+        std::fs::write(
+            layout.repo_root().join("plugins/orb/skills/spec/SKILL.md"),
+            "---\nname: spec\n---\n",
+        )
+        .unwrap();
+
+        let args = RoutineAuthorArgs {
+            chain: vec!["/orb:retired-skill".into(), "/orb:spec".into()],
+            name: Some("retired-spec".into()),
+            description: None,
+            body: None,
+            timestamp: Some("2026-04-01T00:00:00Z".into()),
+            occurrences: None,
+        };
+        let authored = match execute(&layout, &VerbRequest::RoutineAuthor(args)).unwrap() {
+            VerbResponse::RoutineAuthor(r) => r,
+            other => panic!("{other:?}"),
+        };
+
+        let verify_resp = execute(
+            &layout,
+            &VerbRequest::RoutineVerify(RoutineVerifyArgs {
+                path: authored.path.clone(),
+                timestamp: Some("2026-05-22T12:00:00Z".into()),
+            }),
+        )
+        .unwrap();
+        let v = match verify_resp {
+            VerbResponse::RoutineVerify(r) => r,
+            other => panic!("{other:?}"),
+        };
+        assert!(v.broken_refs.contains(&"/orb:retired-skill".into()));
+        assert!(v.last_verified.is_none());
+
+        // File on disk must still carry the OLD last_verified.
+        let after = std::fs::read_to_string(&authored.path).unwrap();
+        let fm_after = crate::routine::parse_front_matter(&after).unwrap();
+        assert_eq!(fm_after.last_verified, "2026-04-01T00:00:00Z");
+    }
+
+    #[test]
+    fn routine_ac_06_audit_is_read_only_byte_equal_across_runs() {
+        // AC-06 verification (b): audit.conformance must not modify
+        // SKILL.md content — byte-equal across two consecutive runs.
+        let (_dir, layout) = fresh_conformance_layout();
+        write_canonical_files(&layout);
+        // Author a routine whose refs all resolve, then run audit twice.
+        std::fs::create_dir_all(layout.repo_root().join("plugins/orb/skills/audit")).unwrap();
+        std::fs::write(
+            layout.repo_root().join("plugins/orb/skills/audit/SKILL.md"),
+            "---\nname: audit\n---\n",
+        )
+        .unwrap();
+        std::fs::create_dir_all(layout.repo_root().join("plugins/orb/skills/spec")).unwrap();
+        std::fs::write(
+            layout.repo_root().join("plugins/orb/skills/spec/SKILL.md"),
+            "---\nname: spec\n---\n",
+        )
+        .unwrap();
+
+        let authored = match execute(
+            &layout,
+            &VerbRequest::RoutineAuthor(RoutineAuthorArgs {
+                chain: vec!["/orb:audit".into(), "/orb:spec".into()],
+                name: Some("a-s".into()),
+                description: None,
+                body: None,
+                timestamp: Some("2026-05-22T10:00:00Z".into()),
+                occurrences: None,
+            }),
+        )
+        .unwrap()
+        {
+            VerbResponse::RoutineAuthor(r) => r,
+            other => panic!("{other:?}"),
+        };
+        let path = authored.path.clone();
+        let snap_before = std::fs::read(&path).unwrap();
+        // Two audit runs — neither must mutate the routine file.
+        let _ = execute(
+            &layout,
+            &VerbRequest::AuditConformance(AuditConformanceArgs::default()),
+        )
+        .unwrap();
+        let _ = execute(
+            &layout,
+            &VerbRequest::AuditConformance(AuditConformanceArgs::default()),
+        )
+        .unwrap();
+        let snap_after = std::fs::read(&path).unwrap();
+        assert_eq!(snap_before, snap_after, "audit must be read-only on routines");
+    }
+
+    // ---- AC-07: audit finding family `routines` ----------------------------
+
+    #[test]
+    fn routine_ac_07_stale_finding_at_thirty_days() {
+        let (_dir, layout) = fresh_conformance_layout();
+        write_canonical_files(&layout);
+        std::fs::create_dir_all(layout.repo_root().join("plugins/orb/skills/audit")).unwrap();
+        std::fs::write(
+            layout.repo_root().join("plugins/orb/skills/audit/SKILL.md"),
+            "---\nname: audit\n---\n",
+        )
+        .unwrap();
+        std::fs::create_dir_all(layout.repo_root().join("plugins/orb/skills/spec")).unwrap();
+        std::fs::write(
+            layout.repo_root().join("plugins/orb/skills/spec/SKILL.md"),
+            "---\nname: spec\n---\n",
+        )
+        .unwrap();
+        // Author with a last_verified well over 30 days before our injected today.
+        let _ = execute(
+            &layout,
+            &VerbRequest::RoutineAuthor(RoutineAuthorArgs {
+                chain: vec!["/orb:audit".into(), "/orb:spec".into()],
+                name: Some("stale-routine".into()),
+                description: None,
+                body: None,
+                timestamp: Some("2026-01-01T00:00:00Z".into()),
+                occurrences: None,
+            }),
+        )
+        .unwrap();
+
+        let findings = audit_conformance_at(
+            &layout,
+            &AuditConformanceArgs::default(),
+            date(2026, 5, 22),
+        )
+        .unwrap()
+        .findings;
+        let stale: Vec<_> = findings
+            .iter()
+            .filter(|f| f.subsystem == "routines" && f.state == "stale")
+            .collect();
+        assert_eq!(stale.len(), 1, "expected 1 routines/stale finding: {findings:#?}");
+        let f = stale[0];
+        assert_eq!(f.severity, "medium");
+        assert!(f.remediation.verb.starts_with("orbit routine verify "));
+        assert!(f.subject.contains("stale-routine"));
+    }
+
+    #[test]
+    fn routine_ac_07_broken_refs_finding() {
+        let (_dir, layout) = fresh_conformance_layout();
+        write_canonical_files(&layout);
+        // No plugin/skill tree at all — every /orb:<verb> ref resolves
+        // nowhere. Author a routine; both refs should land in broken_refs.
+        // We need at least one valid ref so the chain has ≥2 entries
+        // that get authored; but for the broken-refs finding to fire it
+        // suffices that at least one ref is broken. Use one resolvable
+        // ref + one broken ref.
+        std::fs::create_dir_all(layout.repo_root().join("plugins/orb/skills/spec")).unwrap();
+        std::fs::write(
+            layout.repo_root().join("plugins/orb/skills/spec/SKILL.md"),
+            "---\nname: spec\n---\n",
+        )
+        .unwrap();
+
+        let _ = execute(
+            &layout,
+            &VerbRequest::RoutineAuthor(RoutineAuthorArgs {
+                chain: vec!["/orb:gone".into(), "/orb:spec".into()],
+                name: Some("broken-routine".into()),
+                description: None,
+                body: None,
+                timestamp: Some("2026-05-22T10:00:00Z".into()),
+                occurrences: None,
+            }),
+        )
+        .unwrap();
+
+        let findings = audit_conformance_at(
+            &layout,
+            &AuditConformanceArgs::default(),
+            date(2026, 5, 22),
+        )
+        .unwrap()
+        .findings;
+        let broken: Vec<_> = findings
+            .iter()
+            .filter(|f| f.subsystem == "routines" && f.state == "broken_refs")
+            .collect();
+        assert_eq!(broken.len(), 1, "expected 1 routines/broken_refs finding: {findings:#?}");
+        let f = broken[0];
+        assert_eq!(f.severity, "medium");
+        assert_eq!(f.remediation.verb, "archive via curator");
+    }
+
+    // ---- AC-08: no cross-imports between routine-author and skill-author ---
+
+    /// AC-08: the routine-author code paths must not invoke any
+    /// `skill_author` module. There is no `skill_author` module today
+    /// (card 0022's skill-author is in spec/verb space, not core), so
+    /// the assertion is: zero references to the literal `skill_author`
+    /// identifier in routine.rs and in the routine-verb block of
+    /// verbs.rs. The test reads its own source tree under the crate
+    /// manifest dir to do the grep — read-only.
+    #[test]
+    fn routine_ac_08_no_cross_imports_with_skill_author() {
+        let manifest_dir = env!("CARGO_MANIFEST_DIR");
+        let routine_rs = std::path::PathBuf::from(manifest_dir).join("src/routine.rs");
+        let body = std::fs::read_to_string(&routine_rs).expect("read routine.rs");
+        // Strip comments to avoid false-positives on documentation prose
+        // (which is allowed to mention skill_author in the AC-08 note).
+        let mut active = String::with_capacity(body.len());
+        for line in body.lines() {
+            let trimmed = line.trim_start();
+            if trimmed.starts_with("//") {
+                continue;
+            }
+            active.push_str(line);
+            active.push('\n');
+        }
+        assert!(
+            !active.contains("skill_author"),
+            "routine.rs must not reference skill_author (AC-08): {}",
+            routine_rs.display()
+        );
+        // Symmetric check on the routine verb block in verbs.rs — anything
+        // between the routine-verbs header and the end of the routine
+        // implementations. We grep more narrowly with a marker comment.
+        let verbs_rs = std::path::PathBuf::from(manifest_dir).join("src/verbs.rs");
+        let verbs_body = std::fs::read_to_string(&verbs_rs).expect("read verbs.rs");
+        // Locate the routine verb block by the AC-08 marker line we wrote
+        // into the source. The block extends from that marker to the
+        // `fn parse_invocation_outcome` boundary (which sits right after
+        // the routine impls).
+        let start = verbs_body
+            .find("// Routine verbs — per spec 2026-05-22-routine-proposals.")
+            .expect("AC-08 marker present in verbs.rs");
+        let end = verbs_body[start..]
+            .find("fn parse_invocation_outcome(")
+            .expect("routine block boundary marker missing")
+            + start;
+        let block = &verbs_body[start..end];
+        // Strip comment-only lines.
+        let mut active_block = String::with_capacity(block.len());
+        for line in block.lines() {
+            let trimmed = line.trim_start();
+            if trimmed.starts_with("//") {
+                continue;
+            }
+            active_block.push_str(line);
+            active_block.push('\n');
+        }
+        assert!(
+            !active_block.contains("skill_author"),
+            "routine verb block in verbs.rs must not reference skill_author (AC-08)"
+        );
+    }
+
+    // ---- AC-09: content-addressed lookup by chain_id -----------------------
+
+    #[test]
+    fn routine_ac_09_archived_chain_is_not_reauthored() {
+        let (_dir, layout) = fresh_conformance_layout();
+        let chain = vec!["/orb:tabletop".into(), "/orb:spec".into()];
+        // Author once.
+        let first = match execute(
+            &layout,
+            &VerbRequest::RoutineAuthor(RoutineAuthorArgs {
+                chain: chain.clone(),
+                name: Some("first".into()),
+                description: None,
+                body: None,
+                timestamp: Some("2026-05-22T10:00:00Z".into()),
+                occurrences: None,
+            }),
+        )
+        .unwrap()
+        {
+            VerbResponse::RoutineAuthor(r) => r,
+            other => panic!("{other:?}"),
+        };
+        assert!(first.written);
+
+        // Simulate curator archive: git-mv-equivalent move to .archive/.
+        let archive_dir = layout.claude_skills_archive_dir().join("first");
+        std::fs::create_dir_all(archive_dir.parent().unwrap()).unwrap();
+        let live_dir = layout.claude_skills_dir().join("first");
+        std::fs::rename(&live_dir, &archive_dir).unwrap();
+        assert!(!live_dir.exists());
+        assert!(archive_dir.join("SKILL.md").exists());
+
+        // Author again with the same chain — must be a no-op pointing at
+        // the archived file.
+        let second = match execute(
+            &layout,
+            &VerbRequest::RoutineAuthor(RoutineAuthorArgs {
+                chain: chain.clone(),
+                name: Some("second".into()),
+                description: None,
+                body: None,
+                timestamp: Some("2026-05-23T10:00:00Z".into()),
+                occurrences: None,
+            }),
+        )
+        .unwrap()
+        {
+            VerbResponse::RoutineAuthor(r) => r,
+            other => panic!("{other:?}"),
+        };
+        assert!(!second.written, "must not re-author after archive");
+        assert!(second.path.contains(".archive"));
+    }
+
+    #[test]
+    fn routine_ac_09_renamed_directory_still_matches() {
+        let (_dir, layout) = fresh_conformance_layout();
+        let chain = vec!["/orb:a".into(), "/orb:b".into()];
+        // Author.
+        let first = match execute(
+            &layout,
+            &VerbRequest::RoutineAuthor(RoutineAuthorArgs {
+                chain: chain.clone(),
+                name: Some("original-name".into()),
+                description: None,
+                body: None,
+                timestamp: Some("2026-05-22T10:00:00Z".into()),
+                occurrences: None,
+            }),
+        )
+        .unwrap()
+        {
+            VerbResponse::RoutineAuthor(r) => r,
+            other => panic!("{other:?}"),
+        };
+        // Simulate author rename of the routine directory.
+        let original = layout.claude_skills_dir().join("original-name");
+        let renamed = layout.claude_skills_dir().join("renamed-by-author");
+        std::fs::rename(&original, &renamed).unwrap();
+
+        // Second author with the same chain — must dedupe by chain_id
+        // (path-independent).
+        let second = match execute(
+            &layout,
+            &VerbRequest::RoutineAuthor(RoutineAuthorArgs {
+                chain: chain.clone(),
+                name: Some("trying-again".into()),
+                description: None,
+                body: None,
+                timestamp: Some("2026-05-23T10:00:00Z".into()),
+                occurrences: None,
+            }),
+        )
+        .unwrap()
+        {
+            VerbResponse::RoutineAuthor(r) => r,
+            other => panic!("{other:?}"),
+        };
+        assert!(!second.written, "rename must not break chain_id dedupe");
+        assert_eq!(second.chain_id, first.chain_id);
+        assert!(second.path.contains("renamed-by-author"));
     }
 }

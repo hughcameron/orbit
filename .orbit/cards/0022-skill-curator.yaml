@@ -44,6 +44,9 @@ scenarios:
 specs:
 - .orbit/specs/2026-05-15-agent-learning-loop/spec.yaml
 relations:
+- card: 0013-routine-proposals
+  type: feeds
+  reason: 0013 is the sibling chain-skill authoring path — single-skill authoring (this card) handles recurring procedures within one domain via the skill-author spec ceremony; routine-proposals (card 0013) handles orchestrations of existing skills written directly to .claude/skills/<name>/SKILL.md without the spec ceremony; both share the curator lifecycle metadata (created_by, pinned) defined here
 - card: 0023-memory-loop
   type: feeds
   reason: memories that recur with steps promote to skills via the workshop spec

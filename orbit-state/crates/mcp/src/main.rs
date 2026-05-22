@@ -599,6 +599,54 @@ fn tool_descriptors() -> Vec<Value> {
                 "additionalProperties": false
             }
         }),
+        json!({
+            "name": "routine.chains",
+            "description": "Reconstruct per-session chains from .orbit/skills/*.invocations.jsonl rows (per spec 2026-05-22-routine-proposals ac-01). Purely additive aggregator — no SkillInvocation schema change.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {},
+                "additionalProperties": false
+            }
+        }),
+        json!({
+            "name": "routine.detect",
+            "description": "Surface recurring sequential chains at or above the ≥2-occurrence threshold (ac-02). v1 is sequential-only — DAG-shaped patterns are not returned (ac-05).",
+            "inputSchema": {
+                "type": "object",
+                "properties": {},
+                "additionalProperties": false
+            }
+        }),
+        json!({
+            "name": "routine.author",
+            "description": "Write a routine SKILL.md at .claude/skills/<name>/SKILL.md with validated front-matter (created_by, created_at, pinned, last_verified, chain_id, chain). Idempotent — if a routine with the same chain_id already exists under .claude/skills/ or its .archive/ subtree, returns the existing path and skips the write (ac-09).",
+            "inputSchema": {
+                "type": "object",
+                "required": ["chain"],
+                "properties": {
+                    "chain": { "type": "array", "items": { "type": "string" }, "minItems": 2 },
+                    "name": { "type": "string" },
+                    "description": { "type": "string" },
+                    "body": { "type": "string" },
+                    "timestamp": { "type": "string" },
+                    "occurrences": { "type": "integer", "minimum": 0 }
+                },
+                "additionalProperties": false
+            }
+        }),
+        json!({
+            "name": "routine.verify",
+            "description": "Re-validate every /orb:<verb> reference in the routine's SKILL.md body and on pass write the run timestamp to last_verified (ac-06). The verb is the only writer of last_verified; audit.conformance is read-only on routines.",
+            "inputSchema": {
+                "type": "object",
+                "required": ["path"],
+                "properties": {
+                    "path": { "type": "string" },
+                    "timestamp": { "type": "string" }
+                },
+                "additionalProperties": false
+            }
+        }),
     ]
 }
 
