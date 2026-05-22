@@ -15,7 +15,7 @@ Skill invocations are recorded as an append-only JSONL stream at
 
 ```jsonc
 {
-  "skill_id": "design",
+  "skill_id": "tabletop",
   "session_id": "5b7e…",
   "outcome": "incorrect",          // worked | partial | didnt-apply | incorrect
   "correction": "missed the cold-fork contract",  // optional, free text
@@ -63,11 +63,11 @@ chosen because they already produce structured outputs the agent can
 reason about with the recurrence stream:
 
 - `card`
-- `design`
 - `discovery`
 - `implement`
 - `review-spec`
 - `spec`
+- `tabletop`
 
 Skills outside this list MUST NOT be live-edited by an agent under this
 convention. The author edits those by hand. When card 0022 ships its
@@ -76,29 +76,29 @@ metadata becomes the enforcement surface.
 
 ## Worked example
 
-The agent runs `/orb:design` against a card. A reviewer flags that the
-design session over-indexed on edge cases instead of the happy path.
+The agent runs `/orb:tabletop` against a card. A reviewer flags that the
+session over-indexed on edge cases instead of the happy path.
 The agent records:
 
 ```bash
-orbit skill record-invocation design \
+orbit skill record-invocation tabletop \
   --outcome incorrect \
   --correction "over-indexed on edge cases; happy path under-specified"
 ```
 
-A few sessions later, a second `/orb:design` run drifts the same way.
+A few sessions later, a second `/orb:tabletop` run drifts the same way.
 The agent records another `incorrect` row with a similar correction.
 
 At the start of the next session, the agent queries:
 
 ```bash
-orbit --json skill recurrence design
+orbit --json skill recurrence tabletop
 ```
 
 The response shows `by_outcome.incorrect.count == 2` and the two
 `correction` strings. The agent reads both, notices the recurring
 pattern ("happy path under-specified"), and edits
-`plugins/orb/skills/design/SKILL.md` to add an explicit step that
+`plugins/orb/skills/tabletop/SKILL.md` to add an explicit step that
 forces a happy-path scenario before edge-case enumeration. The edit
 references the corrections as the load-bearing evidence.
 
