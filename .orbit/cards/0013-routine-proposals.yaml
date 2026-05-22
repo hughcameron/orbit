@@ -4,7 +4,7 @@ as_a: author
 i_want: an agent that has observed the same chain or DAG of skill invocations recur across two or more sessions or cards to surface a proposal for promoting the chain into a named routine — for my approve / edit / reject
 so_that: the substrate accretes named, valid routines (joining /orb:drive, /orb:rally, /orb:release) and my attention stays at vision-level thinking — the "how" lives in named routines, my time stays on the "what next" — while I retain final say on what becomes a first-class routine
 goal: agents observing recurring chains or DAGs of existing skill invocations surface proposals to promote the chain into a named routine, with author approval as the gate — preserving the author's time for vision-level thinking by encoding the "how" as named substrate; complementary to card 0022 (single-skill authoring) which handles recurring procedures within one domain
-maturity: planned
+maturity: emerging
 scenarios:
 - name: Agent surfaces a routine proposal on recurring chain
   given: an agent has invoked the same chain of skills (e.g. /orb:tabletop → /orb:spec → /orb:implement → /orb:review-pr) two or more times across sessions or cards with consistent ordering
