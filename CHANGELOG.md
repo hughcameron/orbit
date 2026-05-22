@@ -2,6 +2,31 @@
 
 All notable changes to orbit are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.4.31] - 2026-05-22
+
+Ships v1 of the routine-authoring substrate (card 0013, spec 2026-05-22-routine-proposals). Agents observing recurring chains of skill invocations now author named routine SKILL.md files directly to `.claude/skills/<name>/`, with audit-driven freshness via a dedicated `orbit routine verify` verb. Pillar-2 (agent self-learning) sibling to card 0022 (single-skill authoring) — sequential chains in v1 (DAGs deferred), content-addressed via `chain_id` (SHA-256 of the canonical-JSON-encoded skill sequence) so author renames don't break archive-state lookups.
+
+### Added
+
+- **`orbit routine` verb family** — four new substrate verbs covering the routine lifecycle: `routine detect` (aggregator over SkillInvocation JSONL — reconstructs chains from existing rows via session_id + timestamp ordering, no schema migration), `routine author` (writes `.claude/skills/<name>/SKILL.md` with front-matter per card 0022 + this card's additive `chain_id` and `last_verified` fields), `routine verify` (atomic-write of `last_verified` on a passing resolve-check of every `/orb:<verb>` reference), and `routine list` (status overview of authored routines). CLI subcommands and MCP tools registered for all four. Per spec 2026-05-22-routine-proposals ac-01..ac-09.
+- **Audit conformance `routines` finding family** — `orbit audit conformance` emits findings with subsystem slug `routines` and two state slugs: `stale` (`last_verified` >30 days) and `broken_refs` (one or more `/orb:<verb>` references no longer resolves to a live skill). Severity medium; remediation verbs `orbit routine verify <path>` and `archive via curator`. Audit stays read-only — the verify verb is the only writer of `last_verified`.
+- **`RoutineFrontMatter` schema** with `created_by`, `created_at`, `pinned` (card 0022 compatibility) plus `chain_id` and `last_verified` (additive to 0022's metadata convention — no 0022 amendment). `chain_id` is SHA-256 hex digest of RFC-8785-canonical-JSON-encoded ordered skill_id sequence (e.g. SHA-256 of `["/orb:tabletop","/orb:spec","/orb:implement"]`) — content-addressed, deterministic across sessions and agents.
+
+### Changed
+
+- **Card 0013 reframed** — playbook-fast-path → skill-orchestration-proposals → routine-proposals across the session. Original framing solved a problem choice 0012 (`design-intent-not-means`) already handled; accepted reframe targets the empty wedge — orchestration of existing skills into named chains — with `/orb:drive`, `/orb:rally`, and `/orb:release` as shipped proof. Maturity bumped planned → emerging on v1 ship.
+- **Card 0022 → 0013 back-reference** added to `relations` (closes the AC-08 cross-reference loop; was one-sided).
+- **`skill-self-improvement.md`** worked example now uses `/orb:tabletop` (was `/orb:design`); allowlist drops `design`, adds `tabletop`.
+
+### Fixed
+
+- **Stale `/orb:design` references** in canonical SKILL.md files (`tabletop/SKILL.md`'s load-bearing-rule prose and "When to use" bullets) and in card 0039's `ready_for_design` scenarios (corrected to `ready_for_tabletop` + `/orb:tabletop <id>` to match the conformance audit's actual emitted verb).
+
+### Notes
+
+- Substrate gap surfaced + captured at `.orbit/memos/2026-05-22-same-day-nogo-promote-collision.md` — drive's §NO-GO path hits a name collision when `promote.sh` derives the same `<YYYY-MM-DD>-<slug>` spec-id within one session. Cycle-3 inline override avoided the lossy mechanical path; future workflow-refinement spec to fix at the substrate level (memo proposes 3 fix shapes; APPROVE_WITH_CONDITIONS verdict is the leanest).
+- ac-10 (`ac_type: observation`) deferred per spec — post-ship drift soak; closure pending a real drift event within 30 days of the first agent-authored routine landing in any orbit-using repo.
+
 ## [0.4.30] - 2026-05-22
 
 Sharpens `/orb:prioritise` from a top-5 menu to a single-move recommendation. The default output is one imperative verb plus one sentence on why-now; the full top-5 list moves to an on-request follow-up. Aligns with STYLE.md's "pick one action" rule and makes the layering visibly distinct from `orbit session prime` (raw envelope vs synthesis).

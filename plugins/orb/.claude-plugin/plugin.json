@@ -1,7 +1,7 @@
 {
   "name": "orb",
   "description": "Opinionated specification-driven workflow for Claude Code",
-  "version": "0.4.30",
+  "version": "0.4.31",
   "author": {
     "name": "Hugh Cameron"
   }
