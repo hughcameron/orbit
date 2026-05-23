@@ -23,7 +23,7 @@ AC state lives in the spec's `acceptance_criteria` field.
 
 | Level | Behaviour |
 |-------|-----------|
-| **full** | Agent self-answers in promote / review gates. All stages run without human interaction. Pauses only for PR merge. Requires ≥3 card scenarios. |
+| **full** | Agent self-answers in promote / review gates. All stages run without human interaction. APPROVE auto-merges via `gh pr merge --auto`. Requires ≥3 card scenarios. |
 | **guided** | Promote runs autonomously. All stages run without intermediate pauses — the reviews ARE the quality gates. Author approves the final review-pr verdict before PR creation. Default. |
 | **supervised** | Author greenlights after each stage before proceeding. |
 
@@ -532,7 +532,10 @@ read full review first
 
 ## Completion
 
-On APPROVE at review-pr (interactive gates per autonomy mode passed):
+On APPROVE at review-pr (interactive gates per autonomy mode passed),
+§Completion runs the following six steps in order. REQUEST_CHANGES and
+BLOCK verdicts NEVER reach this section — they route through §NO-GO
+Handling unchanged.
 
 1. **Stage and commit the implementation** (commit 1):
    - All code changes and the review files
@@ -544,16 +547,101 @@ On APPROVE at review-pr (interactive gates per autonomy mode passed):
      success criteria
    - Commit message: `docs: update <card> — maturity and goal after drive`
 
-3. **Create the PR:**
-   - Title: `drive: <spec goal>`
-   - Body references the spec-id and review files
+3. **Push** (all autonomy levels):
+   `git push -u origin <branch>` so `gh pr create` and downstream
+   reviewers can see the work. Push runs at every autonomy level — it
+   is a precondition for step (4), not a full-only step.
 
-4. **Set drive.yaml stage and close the spec:**
+4. **Create the PR** (idempotent on resume):
+   - Before creating, inspect the current branch for an existing PR:
+     ```bash
+     gh pr view --json number,autoMergeRequest,state 2>/dev/null
+     ```
+     If a PR already exists for the branch (the call returns `state:
+     OPEN` and `autoMergeRequest` is null), skip the create step and
+     carry the existing PR forward to step (5). This handles the case
+     where a prior drive run crashed between `gh pr create` and the
+     merge step — the resume path lands here at `stage: review-pr`
+     (§Resumption is unchanged; no new stage value is introduced),
+     §3.2's idempotent check parses the existing APPROVE review file,
+     and the drive advances to §Completion where this inspection
+     catches the half-created state.
+   - Otherwise, create the PR:
+     - Title: `drive: <spec goal>`
+     - Body references the spec-id and review files
+
+5. **Merge the PR** (full autonomy only):
+
+   Skip this step when `autonomy != full`. Under `guided` and
+   `supervised` autonomy the four-option prompt (§Four-option verdict
+   prompt) has already gated the APPROVE before reaching §Completion;
+   the author handles the merge themselves after this section returns.
+
+   Under `full` autonomy, invoke `gh pr merge --auto` on the PR. The
+   cold-fork review from Stage 3 is the merge gate; no second
+   author-look gate is added here. Pick the merge strategy that
+   matches the repo's convention (`--squash`, `--merge`, or
+   `--rebase`); see `gh pr merge --help` for flags.
+
+   **Graceful degradation on merge failure.** When `gh pr merge --auto`
+   returns a non-zero exit code (auto-merge not enabled in the repo's
+   settings, branch protection refusing outright, draft PR,
+   authentication failure, network error), the drive does NOT halt.
+   It degrades to today's manual-merge flow via the following five
+   steps:
+
+   a. Log the exit code and a one-line stderr summary inline.
+   b. Run `orbit spec note <spec-id> "merge deferred — <reason>"`
+      where `<reason>` is a short canonical token drawn from this set:
+
+      - `auto-merge-disabled` — repo setting "Allow auto-merge" is off
+      - `branch-protection` — branch protection rules refuse the merge
+      - `draft-pr` — the PR is in draft state (full-autonomy drives
+        do not open drafts by convention; this path is defensive)
+      - `auth-failure` — `gh` could not authenticate
+      - `network-error` — the call failed before reaching GitHub
+      - `unknown` — the failure does not match a known shape; capture
+        the raw stderr in the spec note alongside this token
+
+      Map `gh pr merge` exit codes / stderr to these tokens
+      heuristically.
+   c. The PR url is included in step (6)'s close-comment.
+   d. Continue to step (6) — `orbit spec close <spec-id>` runs as
+      normal.
+   e. Exit step (5) with status 0 — the drive does not halt or
+      escalate; the author handles the merge manually when they next
+      look.
+
+   **Draft PRs are NOT given a `gh pr ready` call.** Full-autonomy
+   drives are expected not to open drafts; if a draft is encountered
+   it falls through to the graceful-degradation path above with
+   `<reason>` token `draft-pr`.
+
+6. **Close the spec:**
    ```bash
    # Edit drive.yaml: stage: complete
    orbit spec note <spec-id> "drive completed: <one-line summary>"
    orbit spec close <spec-id>
    ```
+
+   **Close-comment notification payload.** The drive's close-comment
+   (the summary the operator sees on next look) carries three fields
+   in addition to today's free-text summary:
+
+   - **PR url** — the value returned by `gh pr view --json url`
+   - **Review verdict** — always `APPROVE` on this path (non-APPROVE
+     verdicts route through §NO-GO Handling, never reach here)
+   - **Merge state** — one of:
+     - `queued` — the universal success case for `gh pr merge --auto`,
+       which enables auto-merge and returns immediately without
+       waiting for required checks
+     - `deferred-<reason>` — where `<reason>` is the same canonical
+       token written to the spec note in step (5)'s graceful
+       degradation, so audit-trail entries do not diverge between the
+       close-comment and the spec note
+
+   The payload is appended to the existing drive close output — no
+   new notification infrastructure is added.
 
    `spec.close` transactionally appends the spec's path to every linked
    card's `specs` array. It rejects if any open child tasks remain;
@@ -590,11 +678,11 @@ On APPROVE at review-pr (interactive gates per autonomy mode passed):
      (Per spec 2026-05-16-ac-taxonomy: `ac_type` of `code`, `config`,
      or `doc` blocks close; `ops` or `observation` defers.)
 
-5. **Heartbeat cleanup (full autonomy only).** Attempt `CronDelete
-   drive-checkin-<spec-id>`. **Failure is non-fatal** — log
-   `heartbeat cleanup skipped: <reason>` and continue. The spec is
-   already closed; the next heartbeat tick (if any) self-terminates
-   on `spec.status == closed`.
+**Post-close — heartbeat cleanup (full autonomy only).** After step
+(6) closes the spec, attempt `CronDelete drive-checkin-<spec-id>`.
+**Failure is non-fatal** — log `heartbeat cleanup skipped: <reason>`
+and continue. The spec is already closed; the next heartbeat tick
+(if any) self-terminates on `spec.status == closed`.
 
 ## NO-GO Handling
 
@@ -812,5 +900,7 @@ drive per §Input contract):
 
 ---
 
-**Next step:** after `orbit spec close` at completion, the PR is ready
-for human review and merge.
+**Next step:** after `orbit spec close` at completion, the PR is
+either auto-merged (full autonomy on APPROVE — step (5) of §Completion)
+or ready for the author's manual merge (guided/supervised, or full
+autonomy that fell through graceful degradation in step (5)).

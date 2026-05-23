@@ -1,0 +1,56 @@
+id: 2026-05-22-default-merge-after-review
+goal: at /orb:drive full autonomy, an APPROVE verdict from the forked review-pr triggers an automatic merge with notification; guided and supervised retain today's author-confirms-merge behaviour; REQUEST_CHANGES and BLOCK route through existing NO-GO paths unchanged
+cards:
+- 0014-default-merge-after-review
+status: open
+labels: []
+acceptance_criteria:
+- id: ac-01
+  description: At /orb:drive full autonomy, when the forked review-pr verdict file reports APPROVE, the drive invokes `gh pr merge --auto` on the just-created PR before running `orbit spec close`. The drive SKILL.md §Completion gains an explicit merge step between commit-2-push and spec-close, scoped to `autonomy == full`. Verification — the SKILL.md prose orders the steps as commit-1 → commit-2 → push → gh pr create → gh pr merge --auto → spec close, with the merge step explicitly guarded by `if autonomy == full`. Real-world verification of the queue accepting the merge is ac-09's observation-window concern.
+  gate: true
+  checked: true
+  ac_type: doc
+- id: ac-02
+  description: At /orb:drive guided or supervised autonomy, when the forked review-pr verdict file reports APPROVE, the drive presents the existing four-option prompt (`approve / request changes / block / read full review first`) and does NOT invoke `gh pr merge`. The four-option gate prose in drive SKILL.md L495-531 is preserved unchanged for these two modes. Verification — drive SKILL.md prose explicitly scopes the merge step to `autonomy == full`; guided/supervised dispatch path is unchanged from current behaviour.
+  gate: true
+  checked: true
+  ac_type: doc
+- id: ac-03
+  description: A REQUEST_CHANGES or BLOCK verdict from the forked review-pr does NOT invoke `gh pr merge` at any autonomy level. The verdict routes through the existing §NO-GO Handling path (drive SKILL.md L599+) without modification. Verification — drive SKILL.md prose places the merge step inside the APPROVE branch only; no merge call appears on the NO-GO routing.
+  gate: true
+  checked: true
+  ac_type: doc
+- id: ac-04
+  description: The merge step runs only after the card-updates commit (commit-2) has been pushed. Drive SKILL.md §Completion is reordered to six numbered steps — (1) commit implementation, (2) propose card updates and commit, (3) push, (4) gh pr create, (5) gh pr merge --auto (full autonomy only), (6) spec close. Step (3) push is a new explicit step not present in today's §Completion (L533-557 today enumerates 4 steps with push implicit inside step 3 "Create the PR"); it runs at all autonomy levels because `gh pr create` requires it. Verification — SKILL.md prose explicitly numbers the steps in this order and surfaces push as its own step.
+  gate: false
+  checked: true
+  ac_type: doc
+- id: ac-05
+  description: When `gh pr merge --auto` returns a non-zero exit code (auto-merge not enabled in repo settings, branch protection refuses outright, draft PR, authentication failure, network error), the drive degrades gracefully — does NOT halt. The failure-branch shape is explicit, not a comparative reference to other patterns — on non-zero exit the drive (a) logs the exit code and a one-line stderr summary, (b) runs `orbit spec note <spec-id> "merge deferred — <reason>"` where `<reason>` is a short canonical token (e.g. `auto-merge-disabled`, `branch-protection`, `draft-pr`, `auth-failure`, `network-error`), (c) includes the PR url in the close-comment, (d) runs `orbit spec close <spec-id>`, and (e) exits 0. Draft PRs are NOT handled with a `gh pr ready` call — drafts fall through to this graceful-degradation path by convention (full-autonomy drives do not open drafts). Verification — drive SKILL.md prose enumerates the five-step failure branch verbatim and names the canonical `<reason>` tokens.
+  gate: false
+  checked: true
+  ac_type: doc
+- id: ac-06
+  description: After the merge step (success or deferral), the drive's close-comment surfaces a notification payload containing three fields — PR url, review-pr verdict (always APPROVE on this path), and merge state. Merge state is one of `queued` (the universal success case for `gh pr merge --auto`, which enqueues the merge and returns immediately without waiting for required checks) or `deferred-<reason>` (where `<reason>` is the same canonical token written by ac-05's spec note, so audit-trail entries do not diverge between the close-comment and the spec note). The payload is appended to the existing drive close output, not built as new notification infrastructure. Verification — drive SKILL.md §Completion prose enumerates the three fields, names the two reachable merge states, and points to ac-05 for the `<reason>` token source.
+  gate: false
+  checked: true
+  ac_type: doc
+- id: ac-07
+  description: A drive that crashed or was interrupted between `gh pr create` and the merge step resumes correctly without creating a duplicate PR. The resume path relies solely on `gh pr view --json number,autoMergeRequest,state` (no new `drive.yaml` stage value is introduced) — when the drive resumes at stage review-pr and the review file already carries APPROVE (§3.2 idempotency), it advances to §Completion, where the merge step inspects `gh pr view`; if the PR exists and `autoMergeRequest` is null, the drive re-invokes `gh pr merge --auto` on the existing PR rather than re-running `gh pr create`. Verification — drive SKILL.md §Completion prose describes the `gh pr view` inspection before `gh pr create` and the conditional skip-to-merge-step shape; the existing §Resumption table is unchanged (no new stage value added).
+  gate: false
+  checked: true
+  ac_type: doc
+- id: ac-08
+  description: The drive SKILL.md autonomy table (L26-28) is updated. The `full` mode row no longer says "Pauses only for PR merge"; it is rewritten to name the new merge-on-APPROVE behaviour (suggested phrasing — "All stages run without human interaction. APPROVE auto-merges via `gh pr merge --auto`. Requires ≥3 card scenarios."). The `guided` and `supervised` rows are unchanged.
+  gate: false
+  checked: true
+  ac_type: doc
+- id: ac-09
+  description: First 5 auto-merged drives under this spec capture a one-line entry indicating whether the author would have intervened at the merge step — captured either as a spec note on each drive's spec or as memo entries keyed `auto-merge-observation-<spec-id>`. After 5 drives, the entries are summarised in a brief memo evaluating the K1 (forked-review-trust) kill condition from the tabletop. If ≥2 of 5 drives merged code the author would have caught manually, K1's pivot path fires. This AC also captures the first-real-world verification that `gh pr merge --auto` configures auto-merge as expected (`gh pr view --json autoMergeRequest` returns non-null on a queued PR).
+  gate: false
+  checked: false
+  ac_type: observation
+memories_considered:
+- key: review-pr-medium-findings-default-policy
+  disposition: not-applicable
+  reason: memory governs the implementing-agent's behaviour when review-pr returns APPROVE with MEDIUM findings during a drive's spec implementation phase; this spec governs the post-APPROVE merge action itself, a distinct contract layer downstream of the review-pr verdict

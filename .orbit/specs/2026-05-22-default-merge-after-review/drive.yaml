@@ -1,0 +1,10 @@
+spec_id: 2026-05-22-default-merge-after-review
+card_path: .orbit/cards/0014-default-merge-after-review.yaml
+autonomy: guided
+iteration: 1
+stage: complete
+review_spec_cycle: 1
+review_spec_date: 2026-05-24
+review_pr_cycle: 0
+review_pr_date: 2026-05-24
+iteration_history: []
