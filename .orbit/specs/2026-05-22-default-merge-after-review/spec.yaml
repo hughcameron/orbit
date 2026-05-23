@@ -2,7 +2,7 @@ id: 2026-05-22-default-merge-after-review
 goal: at /orb:drive full autonomy, an APPROVE verdict from the forked review-pr triggers an automatic merge with notification; guided and supervised retain today's author-confirms-merge behaviour; REQUEST_CHANGES and BLOCK route through existing NO-GO paths unchanged
 cards:
 - 0014-default-merge-after-review
-status: open
+status: closed
 labels: []
 acceptance_criteria:
 - id: ac-01
