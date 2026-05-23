@@ -4,7 +4,7 @@ as_a: author
 i_want: the agent to merge a PR automatically once review-pr returns APPROVE, while still notifying me and preserving my override
 so_that: the substantive review (cold-fork, context-separated) is the actual quality gate, not a rubber-stamp ceremony I have to perform after it
 goal: review-pr's verdict is the merge gate; APPROVE merges by default with notification, REQUEST_CHANGES and BLOCK do not
-maturity: planned
+maturity: emerging
 scenarios:
 - name: Cold-fork APPROVE auto-merges
   given: a PR has been opened and review-pr has run as a forked context-separated agent
@@ -31,7 +31,8 @@ scenarios:
   when: the cold-fork reviewer approves
   then: drive merges and continues without pausing for a "merge it" handshake — the only operator-bottleneck step in full-autonomy drive is removed
   gate: false
-specs: []
+specs:
+- .orbit/specs/2026-05-22-default-merge-after-review/spec.yaml
 relations:
 - card: 0007-drive-forked-reviews
   type: depends-on
