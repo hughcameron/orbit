@@ -8,32 +8,48 @@ acceptance_criteria:
 - id: ac-01
   description: Agent reads conformance and gets actionable findings — the envelope contains two findings, each with subject, state, severity, evidence, and remediation.verb (`orbit setup` and `/orb:tabletop <id>` respectively)
   gate: true
-  checked: false
+  checked: true
 - id: ac-02
   description: Aggregates over existing audits — the findings envelope includes the audit_drift and audit_topology results as part of the unified output — the agent does not need to call them separately
   gate: true
-  checked: false
+  checked: true
 - id: ac-03
   description: Memo staleness fires on time-based threshold — a finding fires with subject = the memo path, state = stale, remediation.verb = `/orb:distill <memo-path>`, severity = medium
   gate: true
-  checked: false
+  checked: true
 - id: ac-04
   description: Card-state finding fires on planned + empty specs — a finding fires with subject = the card id, state = ready_for_tabletop, remediation.verb = `/orb:tabletop <id>`, severity = medium
   gate: true
-  checked: false
+  checked: true
 - id: ac-05
   description: Plugin-canonical-file drift via byte-compare — a finding fires per drifted file with state = byte_drift, evidence naming the canonical path, remediation.verb = `orbit setup`
   gate: true
-  checked: false
+  checked: true
 - id: ac-06
   description: Pin-behind state collapses per-file findings — a single finding fires with state = pin_behind, evidence = {pinned, current}, remediation.verb = `orbit setup --bump-pin` — per-new-file findings under the newer plugin are suppressed under pin-behind state
   gate: false
-  checked: false
+  checked: true
 - id: ac-07
   description: Clean repo returns zero findings — zero findings; exits 0 cleanly; idempotent on re-run
   gate: false
-  checked: false
+  checked: true
 - id: ac-08
   description: Agent acts; operator reads on escalation — the agent decides which to remediate (e.g. propose /orb:distill on a stale memo) and which to surface to the operator (e.g. widespread plugin-canonical drift warranting a pin bump); zero-finding case is silent
   gate: false
-  checked: false
+  checked: true
+- id: ac-09
+  description: undotted_substrate finding fires on the predicate — any of `orbit/{cards,choices,specs,memos}/` exists AND `.orbit/cards/` does not (subdir-level positive signal + canonical-substrate negative guard per decisions.md §1). Helper at `orbit-state/crates/core/src/verbs.rs::undotted_substrate_finding`
+  gate: true
+  checked: true
+- id: ac-10
+  description: undotted_substrate finding is HIGH-severity with subject `orbit/`, state `undotted_substrate`, subsystem `setup`, remediation.verb `orbit setup`; evidence carries the four `<subdir>_count` integers (per decisions.md §3, §4, §5)
+  gate: false
+  checked: true
+- id: ac-11
+  description: Layout-dominance suppresses every `.orbit/`-dependent finding family — when undotted_substrate fires, audit.conformance emits ONLY that single finding; canonical-files-missing / card-state / memo-staleness / pin-state / decisions-md-unmigrated are all suppressed in the same branch. Routine-findings + aggregated drift/topology continue (they don't read `.orbit/` substrate). Per decisions.md §2, §6
+  gate: true
+  checked: true
+- id: ac-12
+  description: CLI + MCP parity test covers the undotted_substrate envelope — `orbit-state/crates/cli/tests/parity.rs` and `orbit-state/crates/mcp/tests/parity.rs` each include `audit_conformance_*_wrapped_undotted_envelope` asserting byte-equality against `common::expected_envelope_for_audit_conformance_wrapped_undotted` (single library reference, both surfaces)
+  gate: false
+  checked: true

@@ -835,3 +835,24 @@ fn substrate_classify_mcp_brownfield_bare_envelope() {
         "MCP substrate.classify envelope diverged for brownfield-bare shape"
     );
 }
+
+// ----- undotted_substrate finding MCP parity (spec 2026-05-24-workflow-conformance) -----
+
+#[test]
+fn audit_conformance_mcp_wrapped_undotted_envelope() {
+    let dir = tempfile::tempdir().unwrap();
+    common::populate_substrate_wrapped_undotted_fixture(dir.path());
+
+    let inner = run_mcp_tools_call(
+        dir.path(),
+        json!({ "name": "audit.conformance", "arguments": {} }),
+    );
+    let envelope = inner_envelope_text(&inner);
+
+    let expected =
+        common::expected_envelope_for_audit_conformance_wrapped_undotted(dir.path());
+    assert_eq!(
+        envelope, expected,
+        "MCP undotted_substrate envelope diverged from library reference"
+    );
+}

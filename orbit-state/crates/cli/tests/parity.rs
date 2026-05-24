@@ -1682,6 +1682,44 @@ fn substrate_classify_cli_brownfield_bare_envelope() {
     );
 }
 
+// ----- undotted_substrate finding CLI parity (spec 2026-05-24-workflow-conformance) -----
+
+#[test]
+fn audit_conformance_cli_wrapped_undotted_envelope() {
+    // Wrapped-undotted shape — orbit/cards/ exists, .orbit/cards/ absent.
+    // The conformance envelope MUST contain exactly one finding
+    // (undotted_substrate, HIGH, subject orbit/, evidence carrying the
+    // four per-subdir counts). All .orbit/-dependent finding families
+    // suppressed.
+    let dir = tempfile::tempdir().unwrap();
+    common::populate_substrate_wrapped_undotted_fixture(dir.path());
+
+    let cli_bin = env!("CARGO_BIN_EXE_orbit");
+    let output = Command::new(cli_bin)
+        .args([
+            "--root", dir.path().to_str().unwrap(),
+            "--json", "audit", "conformance",
+        ])
+        .stdin(Stdio::null())
+        .output()
+        .expect("run orbit cli");
+    assert!(
+        output.status.success(),
+        "CLI exited non-zero: stdout={} stderr={}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr),
+    );
+
+    let stdout = String::from_utf8(output.stdout).expect("stdout is utf-8");
+    let actual = stdout.trim_end_matches('\n');
+    let expected =
+        common::expected_envelope_for_audit_conformance_wrapped_undotted(dir.path());
+    assert_eq!(
+        actual, expected,
+        "CLI undotted_substrate envelope diverged from library reference"
+    );
+}
+
 // Helper visible to ensure the test binary depends on the CLI binary.
 #[allow(dead_code)]
 fn _binary_dep_anchor(_p: &Path) {}
