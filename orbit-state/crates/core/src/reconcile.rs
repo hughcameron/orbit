@@ -269,6 +269,21 @@ pub const FIELD_RULES: &[(EntityType, &str, Disposition)] = &[
         "acceptance_criteria[].criterion",
         Disposition::Map("description"),
     ),
+    // Card `maturity` — pre-orbit-state corpora used a richer free-text
+    // vocabulary (`active`, `in_design`, ...) that the canonical
+    // `CardMaturity` enum (Planned/Emerging/Established) rejects. Maps
+    // the two known brownfield values onto canonical equivalents,
+    // passes canonical values through (no-op rewrite with a
+    // "canonical pass-through" detail), quarantines anything else.
+    // Mirrors `reconcile_ac_type`'s shape exactly — value-level routing
+    // on a scalar enum with quarantine fallback. Per spec
+    // 2026-05-24-brownfield-spec-migration ac-08 and decisions.md
+    // D1+D2+D3+D4.
+    (
+        EntityType::Card,
+        "maturity",
+        Disposition::Transform(reconcile_card_maturity),
+    ),
 ];
 
 /// Synthesise a `Spec.id` from the parent folder's stem when the field
@@ -416,6 +431,61 @@ fn reconcile_ac_type(
     }
 
     TransformResult::Quarantine(format!("unknown ac_type value: {s:?}"))
+}
+
+/// Transform handler for `Card.maturity` — spec
+/// 2026-05-24-brownfield-spec-migration ac-08, decisions.md D1+D2+D3+D4.
+/// Maps the two known legacy values (`active`, `in_design`) onto the
+/// canonical `CardMaturity` enum, passes canonical values through
+/// (no-op rewrite with a `canonical pass-through` detail line so the
+/// run summary acknowledges every Card), and quarantines anything else.
+///
+/// The `_surrounding` parameter is unused — maturity is routed purely on
+/// its own scalar value, not on sibling fields. Signature matches the
+/// `TransformFn` contract.
+///
+/// Hard-coded mapping table per D3 (defer project-local registry to a
+/// future spec). If a third maturity-rename emerges, lift the two-arm
+/// match to a `&[(&str, &str)]` constant at that point.
+fn reconcile_card_maturity(
+    value: &serde_yaml::Value,
+    _surrounding: &serde_yaml::Mapping,
+) -> TransformResult {
+    let s = match value.as_str() {
+        Some(s) => s,
+        None => {
+            return TransformResult::Quarantine(format!(
+                "maturity expected a string, got {value:?}"
+            ));
+        }
+    };
+
+    // Canonical pass-through — surfaces a "transform" disposition
+    // record so the run summary acknowledges every Card.
+    if matches!(s, "planned" | "emerging" | "established") {
+        return TransformResult::Replace {
+            value: serde_yaml::Value::String(s.into()),
+            sibling_writes: vec![],
+            detail: Some(format!("canonical pass-through: {s}")),
+        };
+    }
+
+    // Legacy rename — the two values observed in older orbit corpora.
+    match s {
+        "active" => TransformResult::Replace {
+            value: serde_yaml::Value::String("established".into()),
+            sibling_writes: vec![],
+            detail: Some("legacy rename: active -> established".into()),
+        },
+        "in_design" => TransformResult::Replace {
+            value: serde_yaml::Value::String("emerging".into()),
+            sibling_writes: vec![],
+            detail: Some("legacy rename: in_design -> emerging".into()),
+        },
+        other => TransformResult::Quarantine(format!(
+            "unknown maturity value: {other:?}"
+        )),
+    }
 }
 
 /// Whole-word substring match — `needle` matches inside `haystack` only
@@ -712,9 +782,36 @@ fn walk_and_classify(
 
     for key in keys {
         if top_fields.contains(&key.as_str()) {
-            // Known canonical field. Recurse into list-of-struct inner
-            // shapes; leave scalar / other fields alone.
+            // Known canonical field. Two affordances:
+            //
+            // 1. List-of-struct fields (acceptance_criteria, scenarios,
+            //    relations) → recurse into per-element registry rules.
+            // 2. Top-level Transform — mirrors recurse_inner's
+            //    `acceptance_criteria[].ac_type` pattern (per spec
+            //    2026-05-16-ac-taxonomy ac-06) at the top level. A
+            //    canonical scalar field with an explicit Transform rule
+            //    fires it even though the field name is in FIELDS —
+            //    Transform rules route brownfield values onto the
+            //    canonical enum and surface a no-op pass-through
+            //    disposition record for the run summary. Used by
+            //    `(EntityType::Card, "maturity", Transform(...))` per
+            //    spec 2026-05-24-brownfield-spec-migration ac-08.
+            //
+            // Order: list-recursion first (idempotent on scalars),
+            // then the optional top-level Transform. Each is independent.
             recurse_inner(mapping, kind, &key, display_path, out)?;
+            if let Some(Disposition::Transform(handler)) =
+                lookup_disposition_explicit(kind, &key)
+            {
+                apply_top_level_transform(
+                    mapping,
+                    &key,
+                    handler,
+                    display_path,
+                    kind,
+                    out,
+                );
+            }
             continue;
         }
 
@@ -988,6 +1085,61 @@ fn apply_inner(
             let payload = inner_map.remove(&key_value);
             record.action = "quarantine".into();
             (record, payload)
+        }
+    }
+}
+
+/// Apply a Transform rule to a known canonical top-level field. Mirror of
+/// `apply_inner`'s Transform branch — value is read, surrounding mapping
+/// is cloned for the handler, the rule's Replace or Quarantine outcome
+/// flows through to the disposition record + sidecar payload.
+///
+/// Distinct from `apply_top_level` which only handles unknown top-level
+/// keys: this helper is invoked from `walk_and_classify` when a key is
+/// in `FIELDS` AND has an explicit Transform rule registered. The
+/// disposition record's `field` is the bare key (no list-index prefix)
+/// since top-level fields don't have one. Per spec
+/// 2026-05-24-brownfield-spec-migration ac-08.
+fn apply_top_level_transform(
+    mapping: &mut serde_yaml::Mapping,
+    key: &str,
+    transform_fn: TransformFn,
+    display_path: &str,
+    kind: EntityType,
+    out: &mut Vec<(DispositionRecord, serde_yaml::Value)>,
+) {
+    let key_value = serde_yaml::Value::String(key.to_string());
+    let current = match mapping.get(&key_value).cloned() {
+        Some(v) => v,
+        None => return,
+    };
+    let mut surrounding = mapping.clone();
+    surrounding.remove(&key_value);
+    let mut record = DispositionRecord {
+        path: display_path.to_string(),
+        kind: kind.as_str().to_string(),
+        field: key.to_string(),
+        action: "transform".into(),
+        transform_detail: None,
+    };
+    match transform_fn(&current, &surrounding) {
+        TransformResult::Replace {
+            value,
+            sibling_writes,
+            detail,
+        } => {
+            mapping.insert(key_value, value);
+            for (sib_key, sib_val) in sibling_writes {
+                mapping.insert(serde_yaml::Value::String(sib_key.into()), sib_val);
+            }
+            record.transform_detail = detail;
+            out.push((record, serde_yaml::Value::Null));
+        }
+        TransformResult::Quarantine(reason) => {
+            let payload = mapping.remove(&key_value);
+            record.action = "quarantine".into();
+            record.transform_detail = Some(reason);
+            out.push((record, payload.unwrap_or(serde_yaml::Value::Null)));
         }
     }
 }
@@ -1342,11 +1494,29 @@ mod tests {
 
         let report = reconcile_all(&layout, false);
         assert_eq!(report.rewrote, 1);
-        assert_eq!(report.dispositions.len(), 1);
-        let d = &report.dispositions[0];
-        assert_eq!(d.action, "quarantine");
-        assert_eq!(d.field, "scenarios[0].legacy_marker");
-        assert_eq!(d.kind, "card");
+        // Two dispositions: the scenarios inner legacy_marker quarantine,
+        // and the maturity canonical pass-through (added by spec
+        // 2026-05-24-brownfield-spec-migration's top-level Transform
+        // rule on Card.maturity).
+        assert_eq!(report.dispositions.len(), 2);
+        let legacy_marker = report
+            .dispositions
+            .iter()
+            .find(|d| d.field == "scenarios[0].legacy_marker")
+            .expect("legacy_marker disposition must be present");
+        assert_eq!(legacy_marker.action, "quarantine");
+        assert_eq!(legacy_marker.kind, "card");
+        let maturity = report
+            .dispositions
+            .iter()
+            .find(|d| d.field == "maturity")
+            .expect("maturity pass-through disposition must be present");
+        assert_eq!(maturity.action, "transform");
+        assert_eq!(maturity.kind, "card");
+        assert_eq!(
+            maturity.transform_detail.as_deref(),
+            Some("canonical pass-through: planned")
+        );
     }
 
     #[test]
@@ -1963,6 +2133,127 @@ mod tests {
                 "every Transform disposition should carry a transform_detail; got {:?}",
                 d
             );
+        }
+    }
+
+    // -----------------------------------------------------------------
+    // Card.maturity — spec 2026-05-24-brownfield-spec-migration
+    // -----------------------------------------------------------------
+
+    fn write_card(layout: &OrbitLayout, slug: &str, body: &str) -> PathBuf {
+        let path = layout.card_file(slug);
+        std::fs::write(&path, body).unwrap();
+        path
+    }
+
+    fn card_with_maturity(slug: &str, maturity: &str) -> String {
+        format!(
+            "id: {slug}\nfeature: f\ngoal: g\nmaturity: {maturity}\nscenarios: []\nspecs: []\n"
+        )
+    }
+
+    #[test]
+    fn card_maturity_legacy_active_maps_to_established() {
+        let (_dir, layout) = fresh_layout();
+        write_card(&layout, "0099-test", &card_with_maturity("0099-test", "active"));
+
+        let report = reconcile_all(&layout, false);
+        let card_dispositions: Vec<_> = report
+            .dispositions
+            .iter()
+            .filter(|d| d.path.ends_with("0099-test.yaml") && d.field == "maturity")
+            .collect();
+        assert_eq!(card_dispositions.len(), 1, "got: {:?}", report.dispositions);
+        let d = card_dispositions[0];
+        assert_eq!(d.action, "transform");
+        assert_eq!(
+            d.transform_detail.as_deref(),
+            Some("legacy rename: active -> established")
+        );
+
+        let after = std::fs::read_to_string(layout.card_file("0099-test")).unwrap();
+        assert!(after.contains("maturity: established"));
+        assert!(!after.contains("maturity: active"));
+    }
+
+    #[test]
+    fn card_maturity_legacy_in_design_maps_to_emerging() {
+        let (_dir, layout) = fresh_layout();
+        write_card(&layout, "0099-test", &card_with_maturity("0099-test", "in_design"));
+
+        let report = reconcile_all(&layout, false);
+        let card_dispositions: Vec<_> = report
+            .dispositions
+            .iter()
+            .filter(|d| d.path.ends_with("0099-test.yaml") && d.field == "maturity")
+            .collect();
+        assert_eq!(card_dispositions.len(), 1, "got: {:?}", report.dispositions);
+        assert_eq!(
+            card_dispositions[0].transform_detail.as_deref(),
+            Some("legacy rename: in_design -> emerging")
+        );
+
+        let after = std::fs::read_to_string(layout.card_file("0099-test")).unwrap();
+        assert!(after.contains("maturity: emerging"));
+    }
+
+    #[test]
+    fn card_maturity_canonical_value_passes_through() {
+        let (_dir, layout) = fresh_layout();
+        write_card(
+            &layout,
+            "0099-test",
+            &card_with_maturity("0099-test", "established"),
+        );
+
+        let report = reconcile_all(&layout, false);
+        let card_dispositions: Vec<_> = report
+            .dispositions
+            .iter()
+            .filter(|d| d.path.ends_with("0099-test.yaml") && d.field == "maturity")
+            .collect();
+        assert_eq!(card_dispositions.len(), 1);
+        assert_eq!(card_dispositions[0].action, "transform");
+        assert_eq!(
+            card_dispositions[0].transform_detail.as_deref(),
+            Some("canonical pass-through: established")
+        );
+    }
+
+    #[test]
+    fn card_maturity_unknown_value_quarantines_at_handler_level() {
+        // Direct test of reconcile_card_maturity — the unknown-value
+        // branch returns Quarantine with a reason string. End-to-end
+        // through reconcile_all, quarantining the (required) maturity
+        // field invalidates the canonical Card schema, landing the file
+        // in `parse_failed` instead of `dispositions` (per the
+        // 2026-05-21-reconcile-dispositions-on-parse-fail memo — a
+        // separate hardening). The handler-level test captures the
+        // contract precisely without depending on that mechanism.
+        let value = serde_yaml::Value::String("shipped".into());
+        let surrounding = serde_yaml::Mapping::new();
+        match reconcile_card_maturity(&value, &surrounding) {
+            TransformResult::Quarantine(reason) => {
+                assert!(
+                    reason.contains("unknown maturity value") && reason.contains("shipped"),
+                    "quarantine reason must name the unknown value, got: {reason}"
+                );
+            }
+            other => panic!("expected Quarantine, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn card_maturity_non_string_value_quarantines() {
+        // Defensive shape: maturity authored as a non-string (number,
+        // list) falls through to the quarantine branch.
+        let value = serde_yaml::Value::Number(42i64.into());
+        let surrounding = serde_yaml::Mapping::new();
+        match reconcile_card_maturity(&value, &surrounding) {
+            TransformResult::Quarantine(reason) => {
+                assert!(reason.contains("expected a string"));
+            }
+            other => panic!("expected Quarantine, got {other:?}"),
         }
     }
 }
