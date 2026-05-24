@@ -323,6 +323,42 @@ pub fn expected_envelope_for_audit_conformance_park_signal_fixture(root: &Path) 
     orbit_state_core::envelope_ok_string(&response).expect("infallible")
 }
 
+/// Populate `<root>/` to land the substrate-layout classifier in the
+/// `idempotent` state — `.orbit/` directory present, no `orbit/`, no
+/// bare artefact dirs. Per spec 2026-05-24-setup-is-orbit-state-aware
+/// ac-18.
+pub fn populate_substrate_idempotent_fixture(root: &Path) {
+    std::fs::create_dir_all(root.join(".orbit")).unwrap();
+}
+
+/// Populate `<root>/` to land the classifier in the `wrapped-undotted`
+/// state — `orbit/` directory present, no `.orbit/`, no bare dirs at
+/// the root. Per spec 2026-05-24-setup-is-orbit-state-aware ac-18.
+pub fn populate_substrate_wrapped_undotted_fixture(root: &Path) {
+    std::fs::create_dir_all(root.join("orbit/cards")).unwrap();
+}
+
+/// Populate `<root>/` to land the classifier in the `brownfield-bare`
+/// state — bare `cards/` and `specs/` at the root, no `.orbit/`, no
+/// `orbit/`. Per spec 2026-05-24-setup-is-orbit-state-aware ac-18.
+pub fn populate_substrate_brownfield_bare_fixture(root: &Path) {
+    std::fs::create_dir_all(root.join("cards")).unwrap();
+    std::fs::create_dir_all(root.join("specs")).unwrap();
+}
+
+/// Expected canonical envelope for `substrate classify` with the named
+/// layout state. Single helper shared by CLI and MCP parity tests so
+/// the byte-equality contract is enforced against one reference. Per
+/// spec 2026-05-24-setup-is-orbit-state-aware ac-18.
+pub fn expected_envelope_for_substrate_classify(
+    state: orbit_state_core::SubstrateLayoutState,
+) -> String {
+    use orbit_state_core::{SubstrateClassifyResult, VerbResponse};
+    let response =
+        VerbResponse::SubstrateClassify(SubstrateClassifyResult { state });
+    orbit_state_core::envelope_ok_string(&response).expect("infallible")
+}
+
 /// Expected canonical envelope for `audit conformance` against the
 /// conformance-clean fixture (per `populate_conformance_clean_fixture`):
 /// empty findings, drift clean, topology unconfigured, pin unpinned.

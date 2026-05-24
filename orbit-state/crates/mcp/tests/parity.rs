@@ -725,10 +725,24 @@ fn memory_remember_mcp_no_nudge_arg_suppresses_envelope_nudge() {
 
 // ----- ac-05: topology.setup -----
 
+/// Set up a fixture that exercises the plugin-repo branch of
+/// topology.setup: writes `plugin_repo: true` in config and stubs the
+/// substrate-typed seeds' canonical_code path. Mirrors the CLI parity
+/// helper of the same shape — both surfaces test the same branch
+/// against the same fixture.
+fn populate_plugin_repo_topology_fixture(root: &std::path::Path) {
+    let orbit_dir = root.join(".orbit");
+    std::fs::create_dir_all(&orbit_dir).unwrap();
+    std::fs::write(orbit_dir.join("config.yaml"), "plugin_repo: true\n").unwrap();
+    let stub = root.join("orbit-state/crates/core/src");
+    std::fs::create_dir_all(&stub).unwrap();
+    std::fs::write(stub.join("schema.rs"), "// stub\n").unwrap();
+}
+
 #[test]
 fn topology_setup_mcp_greenfield_envelope() {
     let dir = tempfile::tempdir().unwrap();
-    std::fs::create_dir_all(dir.path().join(".orbit")).unwrap();
+    populate_plugin_repo_topology_fixture(dir.path());
     let inner = run_mcp_tools_call(
         dir.path(),
         json!({ "name": "topology.setup", "arguments": {} }),
@@ -738,6 +752,7 @@ fn topology_setup_mcp_greenfield_envelope() {
     let result = &envelope["data"]["result"];
     assert_eq!(result["dir_created"], true);
     assert_eq!(result["declined"], false);
+    assert_eq!(result["readme_created"], false);
     let seeds = result["seeds_created"].as_array().unwrap();
     assert_eq!(seeds.len(), 5, "five orbit-substrate seeds via MCP");
     for slug in &["cards", "choices", "memories", "specs-substrate", "topology"] {
@@ -767,4 +782,56 @@ fn topology_setup_mcp_brownfield_envelope() {
     assert_eq!(result["config_cleaned"], true);
     let config_text = std::fs::read_to_string(orbit_dir.join("config.yaml")).unwrap();
     assert!(!config_text.contains("topology: docs/topology.md"));
+}
+
+// ----- substrate.classify MCP parity (spec 2026-05-24-setup-is-orbit-state-aware ac-18) -----
+
+fn substrate_classify_mcp_envelope(root: &std::path::Path) -> String {
+    let inner = run_mcp_tools_call(
+        root,
+        json!({ "name": "substrate.classify", "arguments": {} }),
+    );
+    inner_envelope_text(&inner)
+}
+
+#[test]
+fn substrate_classify_mcp_idempotent_envelope() {
+    let dir = tempfile::tempdir().unwrap();
+    common::populate_substrate_idempotent_fixture(dir.path());
+    let actual = substrate_classify_mcp_envelope(dir.path());
+    let expected = common::expected_envelope_for_substrate_classify(
+        orbit_state_core::SubstrateLayoutState::Idempotent,
+    );
+    assert_eq!(
+        actual, expected,
+        "MCP substrate.classify envelope diverged for idempotent shape"
+    );
+}
+
+#[test]
+fn substrate_classify_mcp_wrapped_undotted_envelope() {
+    let dir = tempfile::tempdir().unwrap();
+    common::populate_substrate_wrapped_undotted_fixture(dir.path());
+    let actual = substrate_classify_mcp_envelope(dir.path());
+    let expected = common::expected_envelope_for_substrate_classify(
+        orbit_state_core::SubstrateLayoutState::WrappedUndotted,
+    );
+    assert_eq!(
+        actual, expected,
+        "MCP substrate.classify envelope diverged for wrapped-undotted shape"
+    );
+}
+
+#[test]
+fn substrate_classify_mcp_brownfield_bare_envelope() {
+    let dir = tempfile::tempdir().unwrap();
+    common::populate_substrate_brownfield_bare_fixture(dir.path());
+    let actual = substrate_classify_mcp_envelope(dir.path());
+    let expected = common::expected_envelope_for_substrate_classify(
+        orbit_state_core::SubstrateLayoutState::BrownfieldBare,
+    );
+    assert_eq!(
+        actual, expected,
+        "MCP substrate.classify envelope diverged for brownfield-bare shape"
+    );
 }

@@ -1363,6 +1363,7 @@ unknown_field: oops
                 topology: Some("docs/topology.md".into()),
             }),
             plugin_version: Some("0.4.20".into()),
+            plugin_repo: Some(true),
         };
         let value = serde_yaml::to_value(&config).unwrap();
         let got = top_level_keys(&value);
@@ -1453,6 +1454,7 @@ unknown_inner: nope
                 topology: Some("docs/topology.md".into()),
             }),
             plugin_version: Some("0.4.20".into()),
+            plugin_repo: Some(false),
         };
         let yaml = serde_yaml::to_string(&config).unwrap();
         let parsed: Config = serde_yaml::from_str(&yaml).unwrap();

@@ -17,6 +17,32 @@ Workflow artefacts live under a single top-level `orbit/` folder — `.orbit/car
 
 ## Instructions
 
+### 0. Preconditions
+
+Before classifying the repo state, run two refuse-or-proceed checks. Both exit non-zero **without** mutating the working tree (no `mkdir`, no `git mv`, no file copy).
+
+**0a. orbit-state binary present.** Run `command -v orbit-state`. If it returns nothing:
+
+```
+orbit: orbit-state binary not found on $PATH.
+orbit IS the orbit-state-native workflow — there is no useful degradation without it.
+Install: brew tap hughcameron/orbit && brew install orbit-state
+```
+
+Exit non-zero. No fallback. The setup pathway depends on orbit-state primitives (classifier helper, conformance audit, topology setup) — without the binary every subsequent step would fail downstream, so refuse up front.
+
+**0b. orbit-state version sanity.** This skill's new pathway depends on primitives that landed in **orbit-state 0.4.33** (substrate-layout classifier, `plugin_repo` config field, decisions-md-unmigrated conformance finding). Run `orbit --version` and parse the leading semver. If the installed version is below the minimum, refuse:
+
+```
+orbit: orbit-state X.Y.Z is below the minimum required for /orb:setup (0.4.33).
+This setup pathway depends on the substrate-layout classifier and plugin_repo gating
+shipped in 0.4.33. Upgrade: brew upgrade orbit-state
+```
+
+Exit non-zero. No partial-run; the missing primitives would break §1's classifier call and §6d's topology gating.
+
+Both checks are read-only — they touch no filesystem state. A repo with a clean working tree pre-invocation has the same `git status --porcelain` output post-refusal.
+
 ### 1. Detect the Repo State
 
 Before creating or moving anything, classify the repo into one of six mutually exclusive states by inspecting the working tree at the project root:
@@ -64,7 +90,7 @@ The repo has one or more bare artefact directories at the root from a pre-`orbit
 orbit: detected legacy layout. Ready to migrate:
   cards/       → .orbit/cards/
   specs/       → .orbit/specs/
-  decisions/   → .orbit/choices/
+  decisions/   → .orbit/decisions/  (MADR files; manual MD→YAML conversion needed)
   discovery/   → .orbit/discovery/
 
 Untracked files inside these dirs (will remain at the old path after git mv):
@@ -73,6 +99,8 @@ Untracked files inside these dirs (will remain at the old path after git mv):
 Migrate now? (y/N)
 ```
 
+The `decisions/ → .orbit/decisions/` line is a folder rename only. MADR markdown content is preserved verbatim under the new path; `.orbit/decisions/<slug>.md` does NOT become `.orbit/choices/<slug>.yaml` automatically. Once migrated, `orbit audit conformance` surfaces a `decisions_md_unmigrated` finding per file, pointing the operator at the documented manual MD→YAML conversion task. Per rally lockdown 2026-05-24-brownfield-migration-hardening (no auto-conversion).
+
 If no untracked files are present, omit that section. One prompt covers all detected dirs — no per-directory confirmation. A single "y" migrates everything in one transaction; anything else aborts with no filesystem changes.
 
 **Dirty-tree handling is deliberate: setup does NOT refuse on a dirty working tree.** `git mv` preserves tracked-but-modified files' modifications, so there is no correctness risk. The author may have reasons for mid-work migrations; respect that. If `git status --porcelain` reports uncommitted changes outside the migration scope, proceed regardless.
@@ -80,10 +108,10 @@ If no untracked files are present, omit that section. One prompt covers all dete
 **3d. On confirm — run `git mv` in one transaction.**
 
 ```bash
-mkdir -p orbit
+mkdir -p .orbit
 git mv cards .orbit/cards
 git mv specs .orbit/specs
-git mv decisions .orbit/choices
+git mv decisions .orbit/decisions   # folder rename only — MADR content preserved verbatim
 git mv discovery .orbit/discovery
 ```
 
@@ -95,12 +123,24 @@ Run only the `git mv` lines for directories that were actually detected in 3a. I
 
 ```
 orbit: migration complete.
-  Moved: 4 directories under orbit/
+  Moved: 4 directories under .orbit/
   Untracked residue: cards/scratch.md (file remains at old path)
     Consider: git add .orbit/cards/ or move manually
 ```
 
 When no residue exists, the completion message is quiet about it.
+
+**3f.1 If `decisions/` was migrated — print the MADR conversion warning.** Emit a single paragraph naming the unmigrated content:
+
+```
+orbit: .orbit/decisions/ contains MADR markdown (renamed verbatim from decisions/).
+  The canonical surface for architectural choices is .orbit/choices/<slug>.yaml.
+  Each .md file needs a manual MD→YAML pass — see `orbit choice` and the existing
+  .orbit/choices/ examples for the target shape. `orbit audit conformance` will
+  surface a decisions_md_unmigrated finding for each unconverted file.
+```
+
+This warning fires once per migration, regardless of how many `.md` files are present. No auto-conversion is performed — the format gap requires human judgment on each file. Per rally lockdown 2026-05-24-brownfield-migration-hardening.
 
 **3g. Reconcile legacy field shapes (after the layout migration).** With the substrate now under `.orbit/`, run `orbit audit drift` to detect spec/card/choice/memory files whose top-level or inner field shape pre-dates the canonical schema. If the drift report is empty, skip the rest of §3g.
 
@@ -125,31 +165,76 @@ Reconcile is **only** offered from this brownfield path. It is never invoked by 
 
 Then proceed to §6 (CLAUDE.md snippet) and §7 (first card tutorial).
 
+### 3.W. Wrapped-Undotted: Single `git mv orbit .orbit`
+
+When the classifier (§1) returns `wrapped-undotted` — `orbit/` exists, `.orbit/` is absent, no bare artefact dirs — the migration is a single rename. The pre-`.orbit/` plugin versions placed substrate under `orbit/`; the canonical layout is `.orbit/`. `git mv orbit .orbit` preserves history (`git log --follow` traces any moved file to its `orbit/` ancestor) and moves the entire wrapped tree (including `orbit/decisions/` → `.orbit/decisions/`) in one shot.
+
+**3W-a. Prompt before mutating.** The classifier surfaces both the rename and any `orbit/decisions/` content the operator should know about:
+
+```
+orbit: detected wrapped-undotted layout (orbit/ present, .orbit/ absent).
+Migration is a single rename:
+  orbit/  →  .orbit/  (full history preserved via `git mv`)
+
+  orbit/decisions/ → .orbit/decisions/  (MADR files; manual MD→YAML conversion needed)
+
+Migrate now? (y/N)
+```
+
+If `orbit/decisions/` is absent, the second line is omitted.
+
+**3W-b. On confirm — single transaction.**
+
+```bash
+git mv orbit .orbit
+```
+
+`git mv` on the parent folder moves every tracked file, preserving history at the per-file level. Untracked files inside `orbit/` are left behind (same residue mechanics as §3); report any to the operator post-migration.
+
+**3W-c. On decline — abort cleanly.** No filesystem changes. `git status --porcelain` compares equal to pre-invocation.
+
+**3W-d. After migration — print MADR warning if applicable.** If `.orbit/decisions/` exists post-rename, emit the same one-paragraph warning as §3f.1.
+
+Then proceed to §6 and §7. Reconcile (§3g) applies to wrapped-undotted as well — the substrate is now under `.orbit/` and `orbit audit drift` can run.
+
 ### 4. Mixed State: Refuse With Clear Error
 
-If both `orbit/` and any bare artefact dir exist, the repo is in a transitional state setup cannot safely resolve automatically. Do not attempt silent reconciliation — the all-or-nothing migration model depends on clean pre- and post-states.
+If both `.orbit/` and any bare artefact dir exist (`mixed-bare`), OR if both `.orbit/` and `orbit/` exist (`mixed-undotted`), the repo is in a transitional state setup cannot safely resolve automatically. Do not attempt silent reconciliation — the all-or-nothing migration model depends on clean pre- and post-states. The `mixed-undotted` case is particularly load-bearing: `git mv orbit .orbit` would otherwise blow up with an opaque "destination exists" error part-way through, leaving the working tree in a half-migrated state.
 
-Refuse with a message naming each collision:
+Snapshot the working tree first so the post-refusal no-mutation invariant is verifiable:
+
+```bash
+git status --porcelain > /tmp/orbit-setup-pre.txt
+```
+
+Refuse with a message naming each collision by path:
 
 ```
 orbit: cannot migrate — inconsistent layout detected.
-  .orbit/cards/ exists AND bare cards/ also exists at root
-  .orbit/specs/ exists AND bare specs/ also exists at root
+  mixed-bare:
+    .orbit/cards/ exists AND bare cards/ also exists at root
+    .orbit/specs/ exists AND bare specs/ also exists at root
+  mixed-undotted:
+    .orbit/ exists AND orbit/ also exists at root (substrate wrapped twice)
 
 Resolve manually before re-running /orb:setup. Typical causes: an aborted prior migration,
 a manually-created orbit/ directory, or a partial downstream pull.
 ```
 
-No filesystem changes. Exit with a non-zero status so the author sees it as a refusal, not a completion.
+The message names only the collisions actually present (mixed-bare lists colliding bare dirs; mixed-undotted lists the `.orbit/` + `orbit/` pair). Exit with a non-zero status so the author sees it as a refusal, not a completion.
+
+**No-mutation invariant.** Re-run `git status --porcelain` post-refusal. It must compare byte-equal to the pre-snapshot. If a difference appears, the refusal path has a bug — surface the diff and halt. The fixtures in `orbit-state/crates/cli/tests/parity.rs` assert this equality on every refusal-shape fixture.
 
 ### 5. Idempotent State: No-Op on Filesystem
 
-The orbit/ layout is already in place. The filesystem needs no changes:
+The `.orbit/` layout is already in place. The filesystem needs no changes:
 
-- Do not recreate `orbit/` or any subdir
+- Do not recreate `.orbit/` or any subdir
 - Do not run the first-card tutorial unless the author explicitly asks
 
 **Still run §6's CLAUDE.md check** — an author on a newer plugin version may have an older snippet that lacks the vocabulary glossary. §6 detects this and offers a targeted migration. If no migration is needed (or the author declines), tell the author setup is already complete and offer `/orb:card`.
+
+**Preserve `plugin_repo` on idempotent re-run.** If `.orbit/config.yaml` already contains a `plugin_repo: true` line, setup does NOT modify it (no read-rewrite-write cycle, no flag flip). The flag is load-bearing for §6d's topology seed choice: flipping it to false on idempotent re-run would silently drop the substrate-typed seeds on the next `orbit topology setup` invocation. Grep-verifiable invariant: `grep -F 'plugin_repo: true' .orbit/config.yaml` returns the same line pre- and post-setup on an idempotent run.
 
 ### 6. Canonical files (METHOD.md + STYLE.md): Copy and Import
 
@@ -214,6 +299,15 @@ If `@.orbit/METHOD.md` and `@.orbit/STYLE.md` are already present, no-op (idempo
 
 **6d. Topology capability scaffolding.** Scaffold the `.orbit/topology/` substrate folder and write the self-describing seed entries. The byte-compare-and-prompt voice of §6b applies — the prompt fires when the substrate is absent or empty; idempotent on a populated repo. Per choice 0025 (`topology-substrate-folder`).
 
+**Plugin-repo gate.** The seed-content branch is gated on the `plugin_repo` field of `.orbit/config.yaml`:
+
+- **`plugin_repo: true`** (the orbit-plugin source repo itself) — `orbit topology setup` seeds the 5 substrate-typed entries (`cards`, `choices`, `memories`, `specs-substrate`, `topology`) that describe orbit's own substrate types. These pointers (e.g. `orbit-state/crates/core/src/schema.rs`) are load-bearing for *this repo* and would be a category error in any downstream project that doesn't contain that tree.
+- **Unset / `plugin_repo: false`** (every other repo) — `orbit topology setup` creates an empty `.orbit/topology/` directory plus a one-line `.orbit/topology/README.md` pointing the operator at `/orb:topology` to author the first entry. No substrate-typed seeds are written.
+
+This gate is the fix for the "topology seeds point at orbit-plugin paths" failure mode observed in the brownfield-migration-hardening rally: a previous setup pass seeded substrate-typed entries into a downstream project, generating 21 stale-pointer drift entries on the immediate next audit pass. Per spec 2026-05-24-setup-is-orbit-state-aware ac-12.
+
+**Canonical_code path validation.** When seeding fires (`plugin_repo: true` branch), every seed entry's `canonical_code` paths are verified to exist in the working tree before the seed is written. If any path is missing, `orbit topology setup` errors out cleanly naming the offending entry+path — better than silently writing a seed that `orbit audit topology` will then flag as drift on the next audit. Per spec 2026-05-24-setup-is-orbit-state-aware ac-13.
+
 The operation is implemented as a Rust verb (per choice 0020 — `shell-scripts-to-rust-verbs`):
 
 ```
@@ -268,6 +362,8 @@ Walk the author through writing their first feature card using `/orb:card`. Expl
 - Cards are the intake layer — they survive context loss and ground future interviews
 
 Then invoke `/orb:card` to interactively write the first card.
+
+**Setup does NOT auto-run a drive.** Validation is a separate operator concern — once setup completes, the author chooses when to invoke `/orb:drive` against a real card. A future `/orb:smoke-test` skill may earn its keep if a hands-off smoke pass becomes a recurring need, but setup itself stays focused on layout + canonical-file shaping. Per spec 2026-05-24-setup-is-orbit-state-aware ac-09.
 
 ## Idempotency
 

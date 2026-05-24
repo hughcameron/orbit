@@ -1313,10 +1313,24 @@ fn memory_remember_cli_human_mode_renders_nudge_to_stderr() {
 
 // ----- topology setup CLI parity (spec 2026-05-18-topology-substrate-migration ac-05) -----
 
+/// Set up a fixture that exercises the plugin-repo branch of
+/// topology.setup: writes `plugin_repo: true` in config and stubs the
+/// substrate-typed seeds' canonical_code path. Used by the parity tests
+/// that pre-date plugin_repo gating; the README-only branch has its own
+/// targeted parity tests.
+fn populate_plugin_repo_topology_fixture(root: &std::path::Path) {
+    let orbit_dir = root.join(".orbit");
+    std::fs::create_dir_all(&orbit_dir).unwrap();
+    std::fs::write(orbit_dir.join("config.yaml"), "plugin_repo: true\n").unwrap();
+    let stub = root.join("orbit-state/crates/core/src");
+    std::fs::create_dir_all(&stub).unwrap();
+    std::fs::write(stub.join("schema.rs"), "// stub\n").unwrap();
+}
+
 #[test]
 fn topology_setup_cli_greenfield_envelope() {
     let dir = tempfile::tempdir().unwrap();
-    std::fs::create_dir_all(dir.path().join(".orbit")).unwrap();
+    populate_plugin_repo_topology_fixture(dir.path());
 
     let cli_bin = env!("CARGO_BIN_EXE_orbit");
     let output = Command::new(cli_bin)
@@ -1334,6 +1348,7 @@ fn topology_setup_cli_greenfield_envelope() {
     assert_eq!(result["dir_created"], true);
     assert_eq!(result["config_cleaned"], false);
     assert_eq!(result["declined"], false);
+    assert_eq!(result["readme_created"], false);
     let seeds = result["seeds_created"].as_array().unwrap();
     assert_eq!(seeds.len(), 5, "five orbit-substrate seeds");
     // Each seed file landed on disk.
@@ -1347,7 +1362,7 @@ fn topology_setup_cli_greenfield_envelope() {
 fn topology_setup_cli_idempotent() {
     // Two-stage idempotency per spec ac-05.
     let dir = tempfile::tempdir().unwrap();
-    std::fs::create_dir_all(dir.path().join(".orbit")).unwrap();
+    populate_plugin_repo_topology_fixture(dir.path());
 
     let cli_bin = env!("CARGO_BIN_EXE_orbit");
     // First invocation mutates.
@@ -1597,6 +1612,73 @@ fn ac_04_reconcile_human_emits_breadcrumb_on_parse_failures() {
     assert!(
         stderr.contains("run \"orbit audit conformance --json\" for structured findings"),
         "reconcile stderr breadcrumb missing: {stderr}"
+    );
+}
+
+// ----- substrate.classify CLI parity (spec 2026-05-24-setup-is-orbit-state-aware ac-18) -----
+
+fn substrate_classify_cli_envelope(root: &Path) -> String {
+    let cli_bin = env!("CARGO_BIN_EXE_orbit");
+    let output = Command::new(cli_bin)
+        .args([
+            "--root",
+            root.to_str().unwrap(),
+            "--json",
+            "substrate",
+            "classify",
+        ])
+        .stdin(Stdio::null())
+        .output()
+        .expect("run orbit cli");
+    assert!(
+        output.status.success(),
+        "CLI exited non-zero: stdout={} stderr={}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr),
+    );
+    let stdout = String::from_utf8(output.stdout).expect("stdout is utf-8");
+    stdout.trim_end_matches('\n').to_string()
+}
+
+#[test]
+fn substrate_classify_cli_idempotent_envelope() {
+    let dir = tempfile::tempdir().unwrap();
+    common::populate_substrate_idempotent_fixture(dir.path());
+    let actual = substrate_classify_cli_envelope(dir.path());
+    let expected = common::expected_envelope_for_substrate_classify(
+        orbit_state_core::SubstrateLayoutState::Idempotent,
+    );
+    assert_eq!(
+        actual, expected,
+        "CLI substrate.classify envelope diverged for idempotent shape"
+    );
+}
+
+#[test]
+fn substrate_classify_cli_wrapped_undotted_envelope() {
+    let dir = tempfile::tempdir().unwrap();
+    common::populate_substrate_wrapped_undotted_fixture(dir.path());
+    let actual = substrate_classify_cli_envelope(dir.path());
+    let expected = common::expected_envelope_for_substrate_classify(
+        orbit_state_core::SubstrateLayoutState::WrappedUndotted,
+    );
+    assert_eq!(
+        actual, expected,
+        "CLI substrate.classify envelope diverged for wrapped-undotted shape"
+    );
+}
+
+#[test]
+fn substrate_classify_cli_brownfield_bare_envelope() {
+    let dir = tempfile::tempdir().unwrap();
+    common::populate_substrate_brownfield_bare_fixture(dir.path());
+    let actual = substrate_classify_cli_envelope(dir.path());
+    let expected = common::expected_envelope_for_substrate_classify(
+        orbit_state_core::SubstrateLayoutState::BrownfieldBare,
+    );
+    assert_eq!(
+        actual, expected,
+        "CLI substrate.classify envelope diverged for brownfield-bare shape"
     );
 }
 

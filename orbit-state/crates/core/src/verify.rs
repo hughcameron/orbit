@@ -484,6 +484,7 @@ mystery_field: ohno
                 topology: Some("docs/topology.md".into()),
             }),
             plugin_version: None,
+            plugin_repo: None,
         };
         let yaml = serialise_yaml(&config).unwrap();
         write_atomic(layout.config_file(), yaml.as_bytes()).unwrap();
