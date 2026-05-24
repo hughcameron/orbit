@@ -360,6 +360,41 @@ pub fn expected_envelope_for_substrate_classify(
 }
 
 /// Expected canonical envelope for `audit conformance` against the
+/// wrapped-undotted fixture (per `populate_substrate_wrapped_undotted_fixture`):
+/// exactly one finding (the `undotted_substrate` finding, HIGH severity,
+/// subject `orbit/`, evidence carrying the four per-subdir counts),
+/// every `.orbit/`-dependent finding family suppressed. Per spec
+/// 2026-05-24-workflow-conformance.
+///
+/// Derived via `execute(...)` against the live fixture so the expected
+/// reference tracks the library's serialisation contract — CLI / MCP
+/// parity is "both surfaces produce what core would produce."
+pub fn expected_envelope_for_audit_conformance_wrapped_undotted(root: &Path) -> String {
+    use orbit_state_core::layout::OrbitLayout;
+    use orbit_state_core::{execute, AuditConformanceArgs, VerbRequest, VerbResponse};
+    let layout = OrbitLayout::at_orbit_dir(&root.join(".orbit"));
+    let request = VerbRequest::AuditConformance(AuditConformanceArgs::default());
+    let response =
+        execute(&layout, &request).expect("audit conformance must succeed on fixture");
+    match response {
+        VerbResponse::AuditConformance(ref r) => {
+            assert_eq!(
+                r.findings.len(),
+                1,
+                "wrapped-undotted fixture: expected exactly 1 finding \
+                 (undotted_substrate), got {}",
+                r.findings.len(),
+            );
+            assert_eq!(r.findings[0].state, "undotted_substrate");
+            assert_eq!(r.findings[0].severity, "high");
+            assert_eq!(r.findings[0].subject, "orbit/");
+        }
+        _ => panic!("unexpected response shape"),
+    }
+    orbit_state_core::envelope_ok_string(&response).expect("infallible")
+}
+
+/// Expected canonical envelope for `audit conformance` against the
 /// conformance-clean fixture (per `populate_conformance_clean_fixture`):
 /// empty findings, drift clean, topology unconfigured, pin unpinned.
 pub fn expected_envelope_for_audit_conformance_clean() -> String {

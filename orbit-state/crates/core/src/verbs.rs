@@ -3952,54 +3952,66 @@ fn audit_conformance_at(
 
     let mut findings: Vec<ConformanceFinding> = Vec::new();
 
+    // Layout-dominance check — per spec 2026-05-24-workflow-conformance
+    // decisions doc §2 + §6. When `orbit/` substrate is present but
+    // `.orbit/cards/` is absent, every other finding family that reads
+    // from `.orbit/` is structurally misleading (would fire on missing
+    // files that are actually present at the wrong path). Mirror the
+    // existing `pin_dominates` pattern: compute once, gate every
+    // `.orbit/`-dependent emission. The new `undotted_substrate` finding
+    // is the one finding the agent sees in this state — its
+    // remediation (`orbit setup`) is the prerequisite for the rest of
+    // the audit being meaningful.
+    let undotted_finding = undotted_substrate_finding(layout);
+    let layout_dominates = undotted_finding.is_some();
+
     // ac-05: pin_behind / pin_ahead each fire a SINGLE finding AND
     // suppress per-file (ac-04) findings. Single-finding dominance:
-    // the pin issue is upstream of file drift.
-    let pin_dominates = matches!(pin.status.as_str(), "pin_behind" | "pin_ahead");
-    if pin_dominates {
-        findings.push(pin_finding(&pin));
+    // the pin issue is upstream of file drift. Layout-dominance is
+    // upstream of pin (the pin file lives at `.orbit/config.yaml` —
+    // when the layout is wrong, the pin state read is meaningless).
+    let pin_dominates =
+        !layout_dominates && matches!(pin.status.as_str(), "pin_behind" | "pin_ahead");
+
+    if layout_dominates {
+        // Single-finding emission — `undotted_substrate` is the only
+        // finding the agent sees. The remediation `orbit setup` is the
+        // prerequisite; re-running the audit after layout migration
+        // surfaces the real state.
+        findings.push(undotted_finding.unwrap());
+    } else {
+        if pin_dominates {
+            findings.push(pin_finding(&pin));
+        }
+
+        // ac-02: card-state findings.
+        findings.extend(card_state_findings(layout)?);
+
+        // ac-03: memo-staleness findings.
+        findings.extend(memo_staleness_findings(layout, today)?);
+
+        // ac-04: plugin-canonical-file drift findings (suppressed when
+        // pin_dominates).
+        if !pin_dominates {
+            findings.extend(canonical_file_findings(layout)?);
+        }
+
+        // decisions-md-unmigrated findings — per spec
+        // 2026-05-24-setup-is-orbit-state-aware ac-15. Brownfield
+        // migration renames `decisions/ → .orbit/decisions/` verbatim
+        // (no MD→YAML conversion). This finding family surfaces each
+        // unconverted .md file so the operator can drive the conversion
+        // themselves.
+        findings.extend(decisions_md_unmigrated_findings(layout)?);
     }
-
-    // ac-02: card-state findings.
-    findings.extend(card_state_findings(layout)?);
-
-    // ac-03: memo-staleness findings.
-    findings.extend(memo_staleness_findings(layout, today)?);
-
-    // ac-04: plugin-canonical-file drift findings (suppressed when
-    // pin_dominates OR when the substrate layout is non-canonical:
-    // wrapped-undotted means the operator hasn't yet run /orb:setup's
-    // single-rename migration, and the missing .orbit/METHOD.md /
-    // .orbit/STYLE.md are derivative of that, not separate problems.
-    // Surfacing both would mislead the agent toward `orbit setup` to
-    // create canonical files when the real remediation is `orbit setup`
-    // to migrate the layout. The undotted_substrate finding family
-    // (sister drive 2026-05-24-workflow-conformance) is the
-    // higher-fidelity surface for the layout issue itself; this
-    // suppression keeps the conformance envelope from double-counting.
-    // Per spec 2026-05-24-setup-is-orbit-state-aware ac-20 and the
-    // rally lockdown ("undotted-substrate finding suppresses
-    // canonical-files-missing findings until layout is fixed").
-    let layout_state = classify_substrate_layout(layout);
-    let layout_non_canonical = matches!(
-        layout_state,
-        SubstrateLayoutState::WrappedUndotted
-    );
-    if !pin_dominates && !layout_non_canonical {
-        findings.extend(canonical_file_findings(layout)?);
-    }
-
-    // decisions-md-unmigrated findings — per spec
-    // 2026-05-24-setup-is-orbit-state-aware ac-15. Brownfield migration
-    // renames `decisions/ → .orbit/decisions/` verbatim (no MD→YAML
-    // conversion). This finding family surfaces each unconverted .md
-    // file so the operator can drive the conversion themselves.
-    findings.extend(decisions_md_unmigrated_findings(layout)?);
 
     // Routine findings (per spec 2026-05-22-routine-proposals ac-07).
     // Two state slugs — `stale` (last_verified > 30d) and `broken_refs`
     // (one or more /orb:<verb> refs no longer resolve). Read-only — the
-    // audit aggregator never mutates routines (ac-06 split).
+    // audit aggregator never mutates routines (ac-06 split). Routine
+    // files live under `.claude/skills/`, NOT `.orbit/`, so they remain
+    // meaningful regardless of the substrate layout state — emitted on
+    // every branch.
     findings.extend(routine_findings(layout, today)?);
 
     Ok(AuditConformanceResult {
@@ -4199,6 +4211,79 @@ fn canonical_file_findings(layout: &OrbitLayout) -> Result<Vec<ConformanceFindin
         });
     }
     Ok(findings)
+}
+
+/// `undotted_substrate`: HIGH-severity finding that fires when substrate
+/// content lives at `orbit/` (no dot) and canonical `.orbit/cards/` is
+/// absent. The remediation `orbit setup` runs the wrapped-undotted
+/// single-rename migration (see `/orb:setup` §3.W).
+///
+/// Predicate (per spec 2026-05-24-workflow-conformance decisions §1):
+/// - any of `orbit/{cards,choices,specs,memos}/` exists (positive signal
+///   that substrate is wrapped at the wrong path), AND
+/// - `.orbit/cards/` does NOT exist (negative guard — once canonical
+///   substrate is in place, the finding stops firing regardless of
+///   leftover `orbit/` content).
+///
+/// Evidence carries per-subdir item counts so consumers (e.g.
+/// `/orb:prioritise`) can surface the scale of the migration — a
+/// 22-card brownfield repo is materially different from an empty
+/// scaffold even though both trigger HIGH equally.
+///
+/// Returns `None` when the predicate doesn't hold. Caller in
+/// `audit_conformance_at` treats `Some` as "layout dominates" — the
+/// single emitted finding replaces the suppressed `.orbit/`-dependent
+/// families (canonical-files-missing, card-state, memo-staleness,
+/// pin-state).
+///
+/// Per spec 2026-05-24-workflow-conformance ac-09 / ac-10.
+fn undotted_substrate_finding(layout: &OrbitLayout) -> Option<ConformanceFinding> {
+    let repo_root = layout.repo_root();
+    // Negative guard — canonical substrate already in place.
+    if repo_root.join(".orbit/cards").is_dir() {
+        return None;
+    }
+    // Positive predicate — any of orbit/{cards,choices,specs,memos}/.
+    let subdirs = ["cards", "choices", "specs", "memos"];
+    if !subdirs
+        .iter()
+        .any(|s| repo_root.join("orbit").join(s).is_dir())
+    {
+        return None;
+    }
+    // Volume counts for evidence — bounded read_dir on each existing
+    // subdir; missing subdirs contribute 0.
+    let mut evidence = serde_yaml::Mapping::new();
+    for subdir in &subdirs {
+        let path = repo_root.join("orbit").join(subdir);
+        let count: i64 = if path.is_dir() {
+            std::fs::read_dir(&path)
+                .map(|entries| entries.flatten().count() as i64)
+                .unwrap_or(0)
+        } else {
+            0
+        };
+        evidence.insert(
+            serde_yaml::Value::String(format!("{subdir}_count")),
+            serde_yaml::Value::Number(count.into()),
+        );
+    }
+    Some(ConformanceFinding {
+        severity: "high".into(),
+        subsystem: "setup".into(),
+        subject: "orbit/".into(),
+        state: "undotted_substrate".into(),
+        evidence: Some(serde_yaml::Value::Mapping(evidence)),
+        remediation: Remediation {
+            verb: "orbit setup".into(),
+            rationale: Some(
+                "substrate lives at orbit/ but canonical layout is .orbit/ — \
+                 run setup's wrapped-undotted migration before anything else \
+                 (downstream findings against .orbit/ are misleading until the rename lands)"
+                    .into(),
+            ),
+        },
+    })
 }
 
 /// `decisions_md_unmigrated`: walk `.orbit/decisions/*.md`; for each
@@ -12406,5 +12491,96 @@ mystery_field: surprise
             "canonical-files-missing must be suppressed on a wrapped-undotted repo \
              (sister drive contract), got: {canonical_missing:?}"
         );
+    }
+
+    // -----------------------------------------------------------------
+    // undotted_substrate_finding — spec 2026-05-24-workflow-conformance
+    // -----------------------------------------------------------------
+
+    #[test]
+    fn undotted_finding_fires_when_orbit_present_and_dotted_absent() {
+        let dir = tempdir().unwrap();
+        std::fs::create_dir_all(dir.path().join("orbit/cards")).unwrap();
+        std::fs::create_dir_all(dir.path().join("orbit/specs")).unwrap();
+        std::fs::write(dir.path().join("orbit/cards/0001-x.yaml"), "id: 0001-x\n").unwrap();
+        std::fs::write(dir.path().join("orbit/cards/0002-y.yaml"), "id: 0002-y\n").unwrap();
+        let layout = OrbitLayout::at(dir.path());
+        let f = undotted_substrate_finding(&layout)
+            .expect("finding must fire when orbit/ present and .orbit/cards/ absent");
+        assert_eq!(f.severity, "high");
+        assert_eq!(f.subsystem, "setup");
+        assert_eq!(f.state, "undotted_substrate");
+        assert_eq!(f.subject, "orbit/");
+        assert_eq!(f.remediation.verb, "orbit setup");
+        // Evidence carries the four per-subdir counts.
+        let evidence = f.evidence.as_ref().expect("evidence map");
+        let map = evidence.as_mapping().expect("evidence is a mapping");
+        let cards_count = map
+            .get(serde_yaml::Value::String("cards_count".into()))
+            .and_then(|v| v.as_i64())
+            .unwrap();
+        assert_eq!(cards_count, 2, "two card files seeded in orbit/cards/");
+    }
+
+    #[test]
+    fn undotted_finding_suppressed_when_canonical_substrate_present() {
+        let dir = tempdir().unwrap();
+        // Both orbit/cards/ AND .orbit/cards/ — the negative guard wins.
+        std::fs::create_dir_all(dir.path().join("orbit/cards")).unwrap();
+        std::fs::create_dir_all(dir.path().join(".orbit/cards")).unwrap();
+        let layout = OrbitLayout::at(dir.path());
+        assert!(
+            undotted_substrate_finding(&layout).is_none(),
+            "negative guard: .orbit/cards/ presence suppresses the finding"
+        );
+    }
+
+    #[test]
+    fn undotted_finding_absent_on_greenfield() {
+        let dir = tempdir().unwrap();
+        let layout = OrbitLayout::at(dir.path());
+        assert!(undotted_substrate_finding(&layout).is_none());
+    }
+
+    #[test]
+    fn undotted_finding_absent_when_only_orbit_dir_with_no_substrate_subdirs() {
+        let dir = tempdir().unwrap();
+        // orbit/ exists but no substrate subdirs — could be a build artefact,
+        // a workspace member, anything. Don't false-positive.
+        std::fs::create_dir_all(dir.path().join("orbit")).unwrap();
+        let layout = OrbitLayout::at(dir.path());
+        assert!(
+            undotted_substrate_finding(&layout).is_none(),
+            "bare orbit/ dir without substrate subdirs must not fire"
+        );
+    }
+
+    #[test]
+    fn audit_conformance_emits_undotted_substrate_and_suppresses_others_on_wrapped_undotted() {
+        let dir = tempdir().unwrap();
+        std::fs::create_dir_all(dir.path().join("orbit/cards")).unwrap();
+        let layout = OrbitLayout::at(dir.path());
+        let response = execute(
+            &layout,
+            &VerbRequest::AuditConformance(AuditConformanceArgs::default()),
+        )
+        .unwrap();
+        let result = match response {
+            VerbResponse::AuditConformance(r) => r,
+            other => panic!("unexpected response: {other:?}"),
+        };
+        // Exactly one conformance finding: undotted_substrate.
+        assert_eq!(result.findings.len(), 1);
+        assert_eq!(result.findings[0].state, "undotted_substrate");
+        assert_eq!(result.findings[0].severity, "high");
+        // All other .orbit/-dependent families suppressed.
+        for f in &result.findings {
+            assert_ne!(f.state, "missing");
+            assert_ne!(f.state, "ready_for_tabletop");
+            assert_ne!(f.state, "stale");
+            assert_ne!(f.state, "pin_behind");
+            assert_ne!(f.state, "pin_ahead");
+            assert_ne!(f.state, "decisions_md_unmigrated");
+        }
     }
 }

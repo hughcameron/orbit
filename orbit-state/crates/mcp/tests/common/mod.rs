@@ -332,6 +332,29 @@ pub fn expected_envelope_for_substrate_classify(
     orbit_state_core::envelope_ok_string(&response).expect("infallible")
 }
 
+/// Expected canonical envelope for `audit conformance` against the
+/// wrapped-undotted fixture: exactly one finding (undotted_substrate,
+/// HIGH, subject `orbit/`), every `.orbit/`-dependent family suppressed.
+/// Per spec 2026-05-24-workflow-conformance.
+pub fn expected_envelope_for_audit_conformance_wrapped_undotted(root: &Path) -> String {
+    use orbit_state_core::layout::OrbitLayout;
+    use orbit_state_core::{execute, AuditConformanceArgs, VerbRequest, VerbResponse};
+    let layout = OrbitLayout::at_orbit_dir(&root.join(".orbit"));
+    let request = VerbRequest::AuditConformance(AuditConformanceArgs::default());
+    let response =
+        execute(&layout, &request).expect("audit conformance must succeed on fixture");
+    match response {
+        VerbResponse::AuditConformance(ref r) => {
+            assert_eq!(r.findings.len(), 1);
+            assert_eq!(r.findings[0].state, "undotted_substrate");
+            assert_eq!(r.findings[0].severity, "high");
+            assert_eq!(r.findings[0].subject, "orbit/");
+        }
+        _ => panic!("unexpected response shape"),
+    }
+    orbit_state_core::envelope_ok_string(&response).expect("infallible")
+}
+
 /// Expected canonical envelope for `audit.conformance` against the
 /// conformance-clean fixture: empty findings, drift clean, topology
 /// unconfigured, pin unpinned.
