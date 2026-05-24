@@ -2,7 +2,7 @@ id: 2026-05-24-workflow-conformance
 goal: '`orbit audit conformance` returns a structured findings envelope (severity / subject / state / evidence / remediation.verb per finding) covering three families — plugin-canonical-file drift, card-state findings (planned + empty specs), memo staleness (>7d) — aggregated alongside existing audit_drift and audit_topology results; clean repo returns zero findings'
 cards:
 - 0039-workflow-conformance
-status: open
+status: closed
 labels: []
 acceptance_criteria:
 - id: ac-01
