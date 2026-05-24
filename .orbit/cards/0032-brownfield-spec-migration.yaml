@@ -45,6 +45,7 @@ specs:
 - .orbit/specs/2026-05-12-reconcile-mode/spec.yaml
 - .orbit/specs/2026-05-16-ac-taxonomy/spec.yaml
 - .orbit/specs/2026-05-21-richer-reconcile-rules/spec.yaml
+- .orbit/specs/2026-05-24-brownfield-spec-migration/spec.yaml
 relations:
 - card: 0020-orbit-state
   type: feeds
