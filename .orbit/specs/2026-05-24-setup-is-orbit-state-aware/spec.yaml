@@ -1,0 +1,43 @@
+id: 2026-05-24-setup-is-orbit-state-aware
+goal: /orb:setup is the canonical orbit-state-init gate — running it on any project (greenfield or brownfield) leaves the .orbit/ workflow layout, the gitignore, and the SQLite index in a working state, with no manual orbit init step required by the operator
+cards:
+- 0017-setup-is-orbit-state-aware
+status: open
+labels: []
+acceptance_criteria:
+- id: ac-01
+  description: orbit-state precondition check refuses without orbit-state binary — setup refuses with a one-line install instruction and exits without mutating the repo — orbit IS the orbit-state-native workflow, there is no useful orbit-without-state degradation
+  gate: true
+  checked: false
+- id: ac-02
+  description: Plugin version sanity requires orbit-state-compatible release — setup refuses with a message naming the missing minimum version, since the new setup pathway depends on orbit-state primitives
+  gate: false
+  checked: false
+- id: ac-03
+  description: Greenfield setup creates .orbit/ layout and initialises state in one pass — setup creates .orbit/cards/, .orbit/choices/, .orbit/specs/, .orbit/memos/; runs orbit init to scaffold the SQLite index and ship .orbit/.gitignore; writes `.orbit/METHOD.md` (canonical orbit method overview) and ensures CLAUDE.md @-imports it — all in a single idempotent pass
+  gate: false
+  checked: false
+- id: ac-04
+  description: METHOD.md drift triggers prompt on re-run, never silent overwrite — setup compares byte-for-byte (including the top-of-file 'How to update' line); on mismatch it prompts before overwriting; on match it no-ops silently — the project copy is never replaced without explicit consent
+  gate: false
+  checked: false
+- id: ac-05
+  description: Legacy CLAUDE.md blocks trigger atomic migrate-or-refuse prompt — setup detects the legacy markers, prompts to remove them in the same transaction as adding the @-import; on accept both edits land atomically; on decline setup REFUSES the entire operation (no METHOD.md copy, no @-import added) with a recovery message — there is no path to dual-source drift
+  gate: false
+  checked: false
+- id: ac-06
+  description: Brownfield with orbit/ but no .orbit/ prompts before migrating — setup detects the gap and prompts before mutating; the prompt names what will move (orbit/ → .orbit/, decisions/ → choices/, MD → YAML); on yes, the migration runs idempotently
+  gate: false
+  checked: false
+- id: ac-07
+  description: Brownfield with both .orbit/ and initialised state is a clean no-op — setup verifies the layout, reports what is in place, and exits without mutating anything — running setup on a fully-initialised project is safe and emits no warnings
+  gate: false
+  checked: false
+- id: ac-08
+  description: Drive's input contract surfaces "run setup first" when state is uninitialised — drive halts at its input contract with a message naming /orb:setup as the prerequisite — rather than failing downstream when orbit commands fail mid-pipeline
+  gate: false
+  checked: false
+- id: ac-09
+  description: Smoke-test stays out of setup — setup does not auto-run a drive — validation is a separate operator concern (manual /orb:drive on an existing card, or a future /orb:smoke-test skill if it earns its keep)
+  gate: false
+  checked: false

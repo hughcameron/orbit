@@ -1,0 +1,35 @@
+id: 2026-05-24-brownfield-spec-migration
+goal: a project with N legacy spec.yaml files reaches `orbit verify` clean in one verb invocation; unknown fields are mapped onto canonical equivalents, dropped with a recorded migration disposition, or quarantined into a sidecar so semantic content isn't silently lost; the canonical strict-parse invariant (ac-01) is preserved unchanged
+cards:
+- 0032-brownfield-spec-migration
+status: open
+labels: []
+acceptance_criteria:
+- id: ac-01
+  description: Verb reports planned changes before rewriting any file — every unknown field is listed with file path and proposed disposition (map / drop / quarantine), no file is rewritten, and the exit code signals whether a non-dry-run would change anything
+  gate: true
+  checked: false
+- id: ac-02
+  description: Unknown fields default to quarantine, not silent drop — the field's content lands in a sidecar (e.g. `spec.legacy.yaml` adjacent to spec.yaml) so a contributor can map it onto a canonical equivalent later — the substrate never silently destroys content
+  gate: true
+  checked: false
+- id: ac-03
+  description: Known-mapping fields migrate cleanly — the field is dropped or remapped per the registry rule, the disposition is recorded in the run summary, and the resulting spec.yaml parses canonically
+  gate: false
+  checked: false
+- id: ac-04
+  description: ac-01 strict parse is preserved — every spec.yaml parses against the canonical schema, no permissive-mode escape hatch persists in the substrate, and the strict-parse invariant from `orbit-state/crates/core/src/schema.rs` is intact
+  gate: true
+  checked: false
+- id: ac-05
+  description: Migration is brownfield-only, not part of routine verify — `orbit canonicalise --reconcile` is not invoked by `orbit verify`, not part of pre-commit hooks, and not part of /orb:setup's greenfield path — it is a mode invoked deliberately by the author or agent
+  gate: false
+  checked: false
+- id: ac-06
+  description: Mapping registry is extensible without re-shipping orbit-state — future `orbit canonicalise --reconcile` invocations apply the rule, and the registry's location and shape are discoverable from the verb's `--help` output
+  gate: false
+  checked: false
+- id: ac-07
+  description: Wired into the framework — orbit-state ships `orbit canonicalise --reconcile` alongside the existing routine `orbit canonicalise` pass, the /orb:setup skill's brownfield path invokes (or instructs the agent to invoke) this mode when legacy spec content is detected, and the canonical schema doc (card 0030) names this mode as the on-ramp from legacy field shapes — without these wires the card describes intent but the framework does not surface it
+  gate: true
+  checked: false

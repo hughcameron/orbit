@@ -1,0 +1,39 @@
+id: 2026-05-24-workflow-conformance
+goal: '`orbit audit conformance` returns a structured findings envelope (severity / subject / state / evidence / remediation.verb per finding) covering three families — plugin-canonical-file drift, card-state findings (planned + empty specs), memo staleness (>7d) — aggregated alongside existing audit_drift and audit_topology results; clean repo returns zero findings'
+cards:
+- 0039-workflow-conformance
+status: open
+labels: []
+acceptance_criteria:
+- id: ac-01
+  description: Agent reads conformance and gets actionable findings — the envelope contains two findings, each with subject, state, severity, evidence, and remediation.verb (`orbit setup` and `/orb:tabletop <id>` respectively)
+  gate: true
+  checked: false
+- id: ac-02
+  description: Aggregates over existing audits — the findings envelope includes the audit_drift and audit_topology results as part of the unified output — the agent does not need to call them separately
+  gate: true
+  checked: false
+- id: ac-03
+  description: Memo staleness fires on time-based threshold — a finding fires with subject = the memo path, state = stale, remediation.verb = `/orb:distill <memo-path>`, severity = medium
+  gate: true
+  checked: false
+- id: ac-04
+  description: Card-state finding fires on planned + empty specs — a finding fires with subject = the card id, state = ready_for_tabletop, remediation.verb = `/orb:tabletop <id>`, severity = medium
+  gate: true
+  checked: false
+- id: ac-05
+  description: Plugin-canonical-file drift via byte-compare — a finding fires per drifted file with state = byte_drift, evidence naming the canonical path, remediation.verb = `orbit setup`
+  gate: true
+  checked: false
+- id: ac-06
+  description: Pin-behind state collapses per-file findings — a single finding fires with state = pin_behind, evidence = {pinned, current}, remediation.verb = `orbit setup --bump-pin` — per-new-file findings under the newer plugin are suppressed under pin-behind state
+  gate: false
+  checked: false
+- id: ac-07
+  description: Clean repo returns zero findings — zero findings; exits 0 cleanly; idempotent on re-run
+  gate: false
+  checked: false
+- id: ac-08
+  description: Agent acts; operator reads on escalation — the agent decides which to remediate (e.g. propose /orb:distill on a stale memo) and which to surface to the operator (e.g. widespread plugin-canonical drift warranting a pin bump); zero-finding case is silent
+  gate: false
+  checked: false
