@@ -1,29 +1,29 @@
 rally_id: 2026-05-24-brownfield-migration-hardening-rally
 goal: brownfield migration hardening — next brownfield migration just works
 autonomy: guided
-phase: approved
+phase: implementing
 started: 2026-05-24T13:29:51+10:00
 completed: null
 children:
   - card_path: .orbit/cards/0017-setup-is-orbit-state-aware.yaml
     spec_id: 2026-05-24-setup-is-orbit-state-aware
     branch: rally/setup-is-orbit-state-aware
-    card_phase: proposed
+    card_phase: designed
     dep_predecessors: []
     worktree: null
     rally_id: 2026-05-24-brownfield-migration-hardening-rally
   - card_path: .orbit/cards/0032-brownfield-spec-migration.yaml
     spec_id: 2026-05-24-brownfield-spec-migration
     branch: rally/brownfield-spec-migration
-    card_phase: proposed
+    card_phase: designed
     dep_predecessors: []
     worktree: null
     rally_id: 2026-05-24-brownfield-migration-hardening-rally
   - card_path: .orbit/cards/0039-workflow-conformance.yaml
     spec_id: 2026-05-24-workflow-conformance
     branch: rally/workflow-conformance
-    card_phase: proposed
-    dep_predecessors: []
+    card_phase: designed
+    dep_predecessors: [2026-05-24-setup-is-orbit-state-aware]
     worktree: null
     rally_id: 2026-05-24-brownfield-migration-hardening-rally
 seed_memo: .orbit/memos/2026-05-24-brownfield-setup-friction.md
