@@ -2,6 +2,35 @@
 
 All notable changes to orbit are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.4.34] - 2026-05-24
+
+Ports `plugins/orb/scripts/orbit-acceptance.sh` — a 182-line python3-in-bash shim that wrapped `orbit spec show --json` with five AC-traversal subcommands — into native verbs on the `orbit spec` family. Five new verbs, internal-helper discipline that respects spec 2026-05-16-ac-taxonomy's two-axis traversal split, full CLI/MCP parity, and same-commit deletion of the shim and its dedicated test. First opportunistic migration under choice 0020 (shell-scripts-to-rust-verbs policy).
+
+### Added
+
+- **`spec.acs <id>` verb** — emits the full acceptance_criteria list. The CLI's default-mode output is byte-equal to the shim's `acs` subcommand (one tab-separated tuple per AC: `<ac-id>\t<status>\t<description>\t<is_gate>`). MCP returns the structured envelope.
+- **`spec.next-ac <id>` verb** — first unchecked AC not blocked by an unchecked gate. Gate-axis traversal helper `next_unblocked` lives as a pure function in `orbit-state/crates/core/src/verbs.rs`. CLI default-mode emits `<ac-id>\t<is_gate>` or empty stdout when blocked / all checked.
+- **`spec.blocking-gate <id>` verb** — first unchecked gate AC, if any. CLI default-mode emits `<ac-id>\t<description>` or empty stdout.
+- **`spec.has-unchecked <id>` verb** — exit 0 if any AC is unchecked, exit 1 otherwise (preserves the shim's exit-code-as-data contract that drive's implement-loop termination depends on). Applies in both `--json` and human modes — the exit code IS the data.
+- **`spec.check <id> <ac-id>` and `spec.uncheck <id> <ac-id>` verbs** — first-class core verbs (`spec_check`, `spec_uncheck` in `verbs.rs`) that own the per-AC read-mutate-write idempotency logic. Return `Ok(())` on first flip, `Error::not_found` for unknown AC, `Error::conflict` for already-in-target-state. The existing CLI `update --ac-check` / `--ac-uncheck` flags re-route through these verbs (preserved as sugar — combining them with `--goal` / `--cards` / `--labels` is now an error, since those concerns live on `spec_update`).
+- **CLI + MCP parity tests for all five verbs** — 15 new test cases asserting byte-equal envelopes against a shared mixed-AC fixture (`populate_spec_acs_mixed_fixture`) and an all-checked fixture (`populate_spec_acs_all_checked_fixture`).
+
+### Changed
+
+- **AC-traversal helpers split along their two predicates** per spec 2026-05-24-port-acceptance-shim ac-06. Gate-axis helpers (`next_unblocked`, `first_blocking_gate`) back `spec.next-ac` / `spec.blocking-gate`. Raw-axis helper (`any_unchecked`) backs `spec.has-unchecked` (drive's implement-loop termination). The taxonomy-axis pre-flight inside `spec_close` (over `ac_type.blocks_close()`) is unchanged — no unifier helper, no shared-source claim, no behaviour change to close.
+- **SKILL.md rewrites across all consumers** — 31 call sites in `plugins/orb/skills/{implement,drive,audit,review-spec,review-pr}/SKILL.md` rewritten from `plugins/orb/scripts/orbit-acceptance.sh <subcmd>` to `orbit spec <subcmd>`. AC-09's grep gate (`rg --no-heading 'orbit-acceptance\.sh' plugins/orb/skills/ | wc -l == 0`) passes.
+- **Choice 0020's "in-scope migration candidates" table** updated — the `orbit-acceptance.sh` row marked migrated with this spec id cited; `promote.sh` and `setup-method.sh` rows untouched (next opportunistic specs).
+
+### Removed
+
+- **`plugins/orb/scripts/orbit-acceptance.sh`** (182 lines) — the shim. Deleted same-commit as the last SKILL.md call-site rewrite per AC-10's invariant.
+- **`plugins/orb/scripts/tests/test-gate-ac-verification.sh`** — the shim's dedicated test. Its coverage moves to the Rust parity suite per choice 0020's test-vs-prod parity clause.
+
+### Notes
+
+- Tests: 509 → 524 (+15 across `spec_acs` / `spec_next_ac` / `spec_blocking_gate` / `spec_has_unchecked` true+false / `spec_check` happy+missing-AC+already-checked + the seven MCP mirrors).
+- Driven from a fresh top-level session — first execution of the closed-mode tabletop → spec → drive flow against the spec's own substrate.
+
 ## [0.4.33] - 2026-05-24
 
 Ships the brownfield-migration-hardening rally end-to-end — three drives covering the layout-classifier substrate, the conformance audit's new `undotted_substrate` finding family, and the reconcile-mode auto-mapping for legacy `Card.maturity` values. Closes the failure-modes the prior session-prime envelope surfaced: conformance findings that recommended actions which made things worse, topology seeds pointing at orbit-plugin paths in downstream projects, and reconcile-mode aborts on common brownfield maturity values.

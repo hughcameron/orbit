@@ -31,7 +31,7 @@ AC state lives in the spec's `acceptance_criteria` field.
 
 **Substrate-initialised pre-check.** Before any branch below runs, verify
 the working tree carries an initialised `.orbit/` substrate. The drive
-pipeline depends on `orbit spec resolve`, `orbit-acceptance.sh acs`, and
+pipeline depends on `orbit spec resolve`, `orbit spec acs`, and
 the broader `orbit` verb surface — all of which require the SQLite index
 and canonical layout `/orb:setup` puts in place. If neither
 `.orbit/state.db` nor a populated `.orbit/cards/` exists, halt with:
@@ -159,7 +159,7 @@ CronDelete with ID `drive-checkin-<spec-id>` and emit:
 
 Then stop. Do not emit a heartbeat line.
 
-Otherwise: run `plugins/orb/scripts/orbit-acceptance.sh next-ac
+Otherwise: run `orbit spec next-ac
 <spec-id>` to find the current AC (if it returns nothing or stage is
 not `implement`, use `-`). Compute elapsed as mm:ss since the drive
 sidecar's `started_at` field (set on the first heartbeat tick if
@@ -272,7 +272,7 @@ Invoke the Agent tool with:
   - The absolute path where the review must be written (§1.1)
   - The instruction to read the spec via `orbit --json spec show
     <spec-id>`, parse ACs via
-    `plugins/orb/scripts/orbit-acceptance.sh acs <spec-id>`, follow
+    `orbit spec acs <spec-id>`, follow
     the `/orb:review-spec` skill, and write the verdict to the
     specified path using the canonical verdict line format
 
@@ -281,7 +281,7 @@ Example brief:
 ```
 Run /orb:review-spec on spec <spec-id>. Read the spec via `orbit --json
 spec show <spec-id>` and parse ACs via
-`plugins/orb/scripts/orbit-acceptance.sh acs <spec-id>` — the spec's
+`orbit spec acs <spec-id>` — the spec's
 acceptance_criteria field is the authoritative spec for this review.
 Write the review to exactly <absolute output path> (this path takes
 precedence over the default path in the skill). Use the canonical
@@ -395,7 +395,7 @@ Drive sets `stage: implement` in `drive.yaml` and delegates entirely to
 Drive does NOT inline AC tracking, detour escalation, or progress
 emission — those are owned by `/orb:implement`. When implement returns
 (the spec's acceptance_criteria field has no unchecked ACs — verifiable
-via `orbit-acceptance.sh has-unchecked <spec-id>` exiting 1), drive
+via `orbit spec has-unchecked <spec-id>` exiting 1), drive
 sets `stage: review-pr` in `drive.yaml` and proceeds to Stage 3.
 
 ### AC routing by `ac_type`
@@ -437,7 +437,7 @@ If NO-GO → §NO-GO Handling.
 
 Mirrors Stage 1 mechanics with the diff brief. The forked reviewer
 reads the post-implement spec state directly via `orbit --json spec
-show <spec-id>` and `orbit-acceptance.sh acs <spec-id>` — the
+show <spec-id>` and `orbit spec acs <spec-id>` — the
 acceptance_criteria field may have been edited during implement, and
 the live `orbit` query gives the reviewer the up-to-date state with no
 intermediate artefact.
@@ -458,7 +458,7 @@ As §1.2 / §1.3 / §1.4, with these differences:
 - The Agent brief includes the diff reference (`git diff main...HEAD`
   on the current branch) PLUS the spec-id for AC cross-reference (the
   reviewer reads the live acceptance_criteria field via `orbit spec
-  show` and `orbit-acceptance.sh`).
+  show` and `orbit spec acs`).
 - Output path uses `review-pr` in place of `review-spec`.
 - Counter / date fields use `review_pr_*`.
 - Retry escalation message: `review could not be completed after 2
@@ -470,7 +470,7 @@ Example brief:
 Run /orb:review-pr against the current branch. Implementation diff is
 `git diff main...HEAD` on <branch_name>. Spec acceptance is on spec-id
 <spec-id>; read via `orbit --json spec show <spec-id>` and
-`plugins/orb/scripts/orbit-acceptance.sh acs <spec-id>`. Write the
+`orbit spec acs <spec-id>`. Write the
 review to exactly <absolute output path> (this path takes precedence
 over the default path in the skill). Use the canonical verdict line
 format `**Verdict:** APPROVE | REQUEST_CHANGES | BLOCK`.
@@ -673,7 +673,7 @@ Handling unchanged.
    `"3 unchecked AC(s) in spec '<id>': ac-04, ac-07, ac-15 (gate: ac-04)"`.
 
    - **Reconcile first.** If `spec.close` reports unchecked ACs, the
-     default move is to go back, tick the missing AC(s) (`orbit-acceptance.sh
+     default move is to go back, tick the missing AC(s) (`orbit spec
      check <spec-id> <ac-id>`), and re-invoke `spec close`. Forgot-to-tick
      is the most common cause and reconciliation is the right answer.
    - **`--force` is the deliberate escape.** When ACs are genuinely

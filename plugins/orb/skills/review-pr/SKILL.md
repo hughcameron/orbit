@@ -46,7 +46,7 @@ The skill takes an orbit-state spec id — the spec's `acceptance_criteria` are 
 
 1. Run `git diff main...HEAD` to see all changes.
 2. Read the spec via `orbit --json spec show <spec-id>` to understand what was intended — the `goal` field carries the goal and the `acceptance_criteria` array enumerates the contract.
-3. Run `plugins/orb/scripts/orbit-acceptance.sh acs <spec-id>` to enumerate the AC list with current check status. The spec's `acceptance_criteria` field replaces the earlier `progress.md` tracker — `[x]` marks are the implementer's self-reported AC completions, set by `/orb:implement` via `orbit-acceptance.sh check` (which calls `orbit spec update --ac-check`).
+3. Run `orbit spec acs <spec-id>` to enumerate the AC list with current check status. The spec's `acceptance_criteria` field replaces the earlier `progress.md` tracker — `[x]` marks are the implementer's self-reported AC completions, set by `/orb:implement` via `orbit spec check <spec-id> <ac-id>`.
 4. Identify which acceptance criteria this implementation claims to satisfy from the parsed `[x]` rows.
 5. Run a keyword scan (see `/orb:keyword-scan`) against `.orbit/choices/` using terms from the spec's `goal` and any prose in the linked card files (`orbit card show <id>`). If relevant decisions exist, verify the implementation respects them. Flag violations as findings.
 
