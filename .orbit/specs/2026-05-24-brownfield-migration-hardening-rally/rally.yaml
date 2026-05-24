@@ -5,11 +5,12 @@ phase: complete
 started: 2026-05-24T13:29:51+10:00
 completed: 2026-05-24T14:26:00+10:00
 parked_reason: harness-incompatibility — Agent tool unavailable inside Agent-spawned sub-agents; rally's parallel-worktree implementation pattern cannot complete in this harness. Designs are landed; specs stay open for resumption via individual /orb:drive in fresh top-level sessions.
+unparked_2026-05-24: all three children shipped sequentially from a fresh top-level session (A=PR#29, C=PR#30, B=PR#31). The parking was harness-shaped (nested Agent spawning blocked), not design-shaped — cold-fork Agent invocations work from a top-level session. Rally choreography (A→C dependency, B independent) honoured.
 children:
   - card_path: .orbit/cards/0017-setup-is-orbit-state-aware.yaml
     spec_id: 2026-05-24-setup-is-orbit-state-aware
     branch: rally/setup-is-orbit-state-aware
-    card_phase: parked
+    card_phase: complete
     park_reason: "PARKED: [tool_surface_incomplete] Sub-agent could not spawn nested forked Agents for /orb:drive's cold-fork reviews. Drive sidecar left at stage: review-spec. Spec stays open; resume via /orb:drive in fresh top-level session."
     dep_predecessors: []
     worktree: null
@@ -17,7 +18,7 @@ children:
   - card_path: .orbit/cards/0032-brownfield-spec-migration.yaml
     spec_id: 2026-05-24-brownfield-spec-migration
     branch: rally/brownfield-spec-migration
-    card_phase: parked
+    card_phase: complete
     park_reason: "PARKED: [tool_surface_incomplete] Stopped before spending tokens on the same Agent-tool-unavailable wall Drive A hit. Design fully laid down; resume via /orb:drive in fresh top-level session."
     dep_predecessors: []
     worktree: null
@@ -25,7 +26,7 @@ children:
   - card_path: .orbit/cards/0039-workflow-conformance.yaml
     spec_id: 2026-05-24-workflow-conformance
     branch: rally/workflow-conformance
-    card_phase: parked
+    card_phase: complete
     park_reason: "PARKED: [tool_surface_incomplete] Predecessor (Drive A) parked before this could claim. Resume via /orb:drive after Drive A's spec ships (consumes A's classifier helper)."
     dep_predecessors: [2026-05-24-setup-is-orbit-state-aware]
     worktree: null
