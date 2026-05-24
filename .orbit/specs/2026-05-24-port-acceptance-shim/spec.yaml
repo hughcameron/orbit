@@ -1,0 +1,57 @@
+id: 2026-05-24-port-acceptance-shim
+goal: Port orbit-acceptance.sh into native orbit spec verbs per choice 0020 — five thin sub-verbs (acs, next-ac, blocking-gate, has-unchecked, check) on the orbit spec family with CLI/MCP parity, then decommission the shim and its dedicated test once SKILL.md call sites are clean
+cards:
+- 0005-drive
+- 0003-implement
+- 0020-orbit-state
+status: open
+labels: []
+acceptance_criteria:
+- id: ac-01
+  description: '`orbit spec acs <id>` ships as a verb on the orbit spec family — for a fixture spec with mixed checked/unchecked + gated ACs, stdout is byte-equal to the shim''s `acs` subcommand (one tab-separated tuple per AC: `<ac-id>\t<status>\t<description>\t<is_gate>`, status is `[ ]` or `[x]`, is_gate is `0` or `1`). Empty acceptance_criteria → empty stdout exit 0'
+  gate: true
+  checked: false
+- id: ac-02
+  description: '`orbit spec next-ac <id>` ships — emits the first unchecked AC that is not blocked by an unchecked gate as `<ac-id>\t<is_gate>`; emits nothing and exits 0 when all checked or when blocked by a gate (matches shim contract)'
+  gate: false
+  checked: false
+- id: ac-03
+  description: '`orbit spec blocking-gate <id>` ships — emits the first unchecked gate AC as `<ac-id>\t<description>`; emits nothing and exits 0 when no unchecked gate exists'
+  gate: false
+  checked: false
+- id: ac-04
+  description: '`orbit spec has-unchecked <id>` ships — exit 0 if any AC is unchecked, exit 1 otherwise; no stdout (matches shim contract used by drive''s implement-loop termination check)'
+  gate: false
+  checked: false
+- id: ac-05
+  description: '`orbit spec check <id> <ac-id>` ships as an alias or rewrap of the existing `orbit spec update --ac-check` verb body — same idempotency: returns ok on first check, `Error::not_found` for unknown AC, `Error::conflict` for already-checked AC'
+  gate: false
+  checked: false
+- id: ac-06
+  description: AC-traversal helpers (`next_unblocked`, `blocking_gate`, `has_unchecked`) live as pure functions in the orbit-state core crate and are reused by `spec_close`'s AC pre-flight — single source of truth, no duplication between the close-time check and the new verbs
+  gate: true
+  checked: false
+- id: ac-07
+  description: CLI/MCP parity tests added per existing precedent — `orbit-state/crates/cli/tests/parity.rs` and `orbit-state/crates/mcp/tests/parity.rs` each include byte-equal envelope assertions for the five new verbs against a shared fixture spec
+  gate: true
+  checked: false
+- id: ac-08
+  description: '`plugins/orb/scripts/orbit-acceptance.sh` collapses to a thin compat wrapper that shells into the new verbs — preserves the existing CLI signature (subcommand + spec-id args, exit codes, stdout format) so any not-yet-rewritten call site keeps working through the migration window'
+  gate: false
+  checked: false
+- id: ac-09
+  description: Every SKILL.md call site under `plugins/orb/skills/` rewritten from `plugins/orb/scripts/orbit-acceptance.sh <subcmd>` to `orbit spec <subcmd>` — verified by `rg --no-heading 'orbit-acceptance\.sh' plugins/orb/skills/ | wc -l` returning 0
+  gate: true
+  checked: false
+- id: ac-10
+  description: The shim (`plugins/orb/scripts/orbit-acceptance.sh`) and its dedicated test (`plugins/orb/scripts/tests/test-gate-ac-verification.sh`) delete in the same commit as the last SKILL.md call-site rewrite — no orphaned wrapper, no partial decommission
+  gate: false
+  checked: false
+- id: ac-11
+  description: Choice 0020's "in-scope migration candidates" table updated — the `orbit-acceptance.sh` row is marked migrated (or removed) with the spec id cited; choice file otherwise untouched
+  gate: false
+  checked: false
+- id: ac-12
+  description: '`cargo test -p orbit-state-core -p orbit-state-cli -p orbit-state-mcp` passes; `orbit verify` returns zero drift on the orbit substrate after canonicalise; CHANGELOG.md entry under the bumped version names the five verb additions and the shim removal'
+  gate: false
+  checked: false
