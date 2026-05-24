@@ -29,6 +29,24 @@ AC state lives in the spec's `acceptance_criteria` field.
 
 ## Input contract
 
+**Substrate-initialised pre-check.** Before any branch below runs, verify
+the working tree carries an initialised `.orbit/` substrate. The drive
+pipeline depends on `orbit spec resolve`, `orbit-acceptance.sh acs`, and
+the broader `orbit` verb surface — all of which require the SQLite index
+and canonical layout `/orb:setup` puts in place. If neither
+`.orbit/state.db` nor a populated `.orbit/cards/` exists, halt with:
+
+```
+BLOCKED: drive requires an initialised .orbit/ substrate.
+Run /orb:setup first to create the canonical layout, scaffold the SQLite
+index, and seed CLAUDE.md @-imports. Then retry /orb:drive.
+```
+
+Do not proceed. The downstream `orbit` calls would fail mid-pipeline with
+opaque "no such file" errors otherwise — surfacing the prerequisite at
+the input contract is the higher-fidelity failure mode. Per spec
+2026-05-24-setup-is-orbit-state-aware ac-08.
+
 The skill operates on exactly one drive per session. Resolution proceeds
 in three branches:
 

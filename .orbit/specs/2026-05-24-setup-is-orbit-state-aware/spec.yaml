@@ -1,5 +1,5 @@
 id: 2026-05-24-setup-is-orbit-state-aware
-goal: /orb:setup is the canonical orbit-state-init gate — running it on any project (greenfield or brownfield) leaves the .orbit/ workflow layout, the gitignore, and the SQLite index in a working state, with no manual orbit init step required by the operator
+goal: /orb:setup is the canonical orbit-state-init gate — running it on any project (greenfield or brownfield, including the `wrapped-undotted` shape where substrate lives at `orbit/` without the dot) leaves the canonical `.orbit/` workflow layout, the gitignore, and the SQLite index in a working state, with no manual orbit init step required by the operator
 cards:
 - 0017-setup-is-orbit-state-aware
 status: open
@@ -8,36 +8,87 @@ acceptance_criteria:
 - id: ac-01
   description: orbit-state precondition check refuses without orbit-state binary — setup refuses with a one-line install instruction and exits without mutating the repo — orbit IS the orbit-state-native workflow, there is no useful orbit-without-state degradation
   gate: true
-  checked: false
+  checked: true
 - id: ac-02
   description: Plugin version sanity requires orbit-state-compatible release — setup refuses with a message naming the missing minimum version, since the new setup pathway depends on orbit-state primitives
   gate: false
-  checked: false
+  checked: true
 - id: ac-03
-  description: Greenfield setup creates .orbit/ layout and initialises state in one pass — setup creates .orbit/cards/, .orbit/choices/, .orbit/specs/, .orbit/memos/; runs orbit init to scaffold the SQLite index and ship .orbit/.gitignore; writes `.orbit/METHOD.md` (canonical orbit method overview) and ensures CLAUDE.md @-imports it — all in a single idempotent pass
+  description: Greenfield setup creates .orbit/ layout and initialises state in one pass — setup creates .orbit/cards/, .orbit/choices/, .orbit/specs/, .orbit/memos/; runs orbit init to scaffold the SQLite index and ship .orbit/.gitignore; writes `.orbit/METHOD.md` (canonical orbit method overview) and ensures CLAUDE.md @-imports it — all in a single idempotent pass. Topology scaffolding follows the plugin_repo gate (ac-12)
   gate: false
-  checked: false
+  checked: true
 - id: ac-04
   description: METHOD.md drift triggers prompt on re-run, never silent overwrite — setup compares byte-for-byte (including the top-of-file 'How to update' line); on mismatch it prompts before overwriting; on match it no-ops silently — the project copy is never replaced without explicit consent
   gate: false
-  checked: false
+  checked: true
 - id: ac-05
   description: Legacy CLAUDE.md blocks trigger atomic migrate-or-refuse prompt — setup detects the legacy markers, prompts to remove them in the same transaction as adding the @-import; on accept both edits land atomically; on decline setup REFUSES the entire operation (no METHOD.md copy, no @-import added) with a recovery message — there is no path to dual-source drift
   gate: false
-  checked: false
+  checked: true
 - id: ac-06
-  description: Brownfield with orbit/ but no .orbit/ prompts before migrating — setup detects the gap and prompts before mutating; the prompt names what will move (orbit/ → .orbit/, decisions/ → choices/, MD → YAML); on yes, the migration runs idempotently
-  gate: false
-  checked: false
+  description: Brownfield with `wrapped-undotted` layout (`orbit/` present, `.orbit/` absent) prompts before migrating — setup detects the gap and prompts before mutating; the prompt names the single-rename mechanism (`orbit/ → .orbit/`) and any `orbit/decisions/` folder rename (to `.orbit/decisions/`, MADR content preserved verbatim); on yes, the migration runs via `git mv orbit .orbit` with full history preservation (`git log --follow` traces any moved file to its `orbit/` ancestor)
+  gate: true
+  checked: true
 - id: ac-07
-  description: Brownfield with both .orbit/ and initialised state is a clean no-op — setup verifies the layout, reports what is in place, and exits without mutating anything — running setup on a fully-initialised project is safe and emits no warnings
+  description: Brownfield with both .orbit/ and initialised state is a clean no-op — setup verifies the layout, reports what is in place, and exits without mutating anything — running setup on a fully-initialised project is safe and emits no warnings; if `.orbit/config.yaml` already contains the `plugin_repo` true setting, setup does not modify the file (idempotency safety for the load-bearing flag)
   gate: false
-  checked: false
+  checked: true
 - id: ac-08
   description: Drive's input contract surfaces "run setup first" when state is uninitialised — drive halts at its input contract with a message naming /orb:setup as the prerequisite — rather than failing downstream when orbit commands fail mid-pipeline
   gate: false
-  checked: false
+  checked: true
 - id: ac-09
   description: Smoke-test stays out of setup — setup does not auto-run a drive — validation is a separate operator concern (manual /orb:drive on an existing card, or a future /orb:smoke-test skill if it earns its keep)
   gate: false
-  checked: false
+  checked: true
+- id: ac-10
+  description: Setup state machine is a flat 6-row table — `plugins/orb/skills/setup/SKILL.md` §1 lists exactly six states (`greenfield`, `idempotent`, `brownfield-bare`, `wrapped-undotted`, `mixed-bare`, `mixed-undotted`); conditions are non-overlapping and exhaust the reachable state space; the existing `brownfield` row is renamed to `brownfield-bare` and `mixed` to `mixed-bare` for parallelism
+  gate: true
+  checked: true
+- id: ac-11
+  description: Substrate-layout classifier helper lives in orbit-state as shared substrate — a new Rust function in `orbit-state/crates/core/src/verbs.rs` returns a 6-variant `SubstrateLayoutState` enum from an `OrbitLayout`; the setup skill's classification step and the sister drive (2026-05-24-workflow-conformance) `undotted_substrate_finding` both call the same helper (single source of truth, no skill-vs-audit drift)
+  gate: true
+  checked: true
+- id: ac-12
+  description: Topology auto-seed is gated on the plugin_repo flag — `OrbitConfig` schema gains an optional `plugin_repo` boolean field defaulting to false; setup in a project without `plugin_repo=true` set scaffolds an empty `.orbit/topology/` directory plus a one-line README pointing at /orb:topology; setup in the orbit-plugin repo (where the flag is set) seeds the existing 5 substrate-typed entries (`cards`, `choices`, `memories`, `specs-substrate`, `topology`)
+  gate: true
+  checked: true
+- id: ac-13
+  description: Topology seed validation refuses non-existent canonical_code paths — when seeding fires (plugin_repo true), each seed entry's `canonical_code` path is verified to exist in the working tree; missing paths produce a clean error rather than silent drift in `orbit audit topology`
+  gate: false
+  checked: true
+- id: ac-14
+  description: decisions/ migration is folder-rename only with an inline warning — when brownfield migration encounters `orbit/decisions/` (or root `decisions/` in the `brownfield-bare` case), the migration `git mv`s the directory to `.orbit/decisions/` (no content conversion, MADR markdown preserved verbatim); setup prints a one-paragraph warning naming the unmigrated content and the MD→YAML conversion task; the SKILL.md migration-prompt example reads `decisions/   → .orbit/decisions/  (MADR files; manual MD→YAML conversion needed)`
+  gate: true
+  checked: true
+- id: ac-15
+  description: decisions-md-unmigrated conformance finding family fires on unconverted content — `orbit audit conformance` emits a finding when `.orbit/decisions/` contains `.md` files without matching `.orbit/choices/<slug>.yaml` entries; the finding's subsystem is `setup`, state slug is `decisions_md_unmigrated`, subject is the offending `.md` path, and `remediation.verb` points at the documented manual-conversion task (no auto-conversion implemented per rally lockdown)
+  gate: true
+  checked: true
+- id: ac-16
+  description: SKILL.md description-line reflects the canonical .orbit/ layout — `plugins/orb/skills/setup/SKILL.md:3` reads `creates .orbit/ directory` (was `creates orbit/ directory`)
+  gate: false
+  checked: true
+  ac_type: doc
+- id: ac-17
+  description: This (orbit-plugin) repo's .orbit/config.yaml has plugin_repo true — the orbit-plugin repo itself sets `plugin_repo` to true in `.orbit/config.yaml` as part of this drive's implementation so its own setup continues to seed the substrate-typed topology entries; verifiable by grepping the config file for the literal `plugin_repo` true line
+  gate: false
+  checked: true
+  ac_type: config
+- id: ac-18
+  description: Parity test covers the classifier helper across surfaces — `orbit-state/crates/cli/tests/parity.rs` and `orbit-state/crates/mcp/tests/parity.rs` each include a fixture-based test demonstrating the classifier helper produces byte-identical output across CLI and MCP surfaces for the `wrapped-undotted`, `brownfield-bare`, and `idempotent` shapes
+  gate: false
+  checked: true
+- id: ac-19
+  description: Setup refuses on `mixed-bare` and `mixed-undotted` states with a message naming both substrate paths and the collision; no filesystem mutation occurs (`git status --porcelain` compares equal pre- and post-invocation); setup exits non-zero. Verifiable by integration test fixtures for each shape; `mixed-undotted` is the failure mode `git mv orbit .orbit` would otherwise blow up on with an opaque git error
+  gate: true
+  checked: true
+- id: ac-20
+  description: Cross-drive suppression post-condition — `orbit audit conformance` does not fire `canonical-files-missing` against a `wrapped-undotted` repo during or after migration; relies on the sister drive (2026-05-24-workflow-conformance) `undotted_substrate` finding suppression at `orbit-state/crates/core/src/verbs.rs::audit_conformance_at`. Verifiable by integration test fixture that classifies a `wrapped-undotted` shape, runs `orbit audit conformance --json`, and asserts no `canonical-files-missing` finding in the envelope
+  gate: true
+  checked: true
+- id: ac-21
+  description: Existing `brownfield-bare` migration runtime is preserved — the SKILL.md §3 block (currently at `plugins/orb/skills/setup/SKILL.md:48-98`) is preserved structurally (prompt text, per-subdir `git mv` enumeration, residue scan, dirty-tree tolerance); only the state slug rename (`brownfield` → `brownfield-bare`) and the `decisions/` migration-target update (ac-14) apply. Verifiable by diff inspection on the §3 block
+  gate: false
+  checked: true
+  ac_type: doc

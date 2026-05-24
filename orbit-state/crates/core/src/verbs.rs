@@ -118,6 +118,8 @@ pub enum VerbRequest {
     AuditConformance(AuditConformanceArgs),
     #[serde(rename = "topology.setup")]
     TopologySetup(TopologySetupArgs),
+    #[serde(rename = "substrate.classify")]
+    SubstrateClassify(SubstrateClassifyArgs),
     #[serde(rename = "choice.show")]
     ChoiceShow(ChoiceShowArgs),
     #[serde(rename = "choice.list")]
@@ -545,6 +547,14 @@ pub struct TopologySetupArgs {
     pub answer_wire: Option<String>,
 }
 
+/// Args for `substrate.classify` — pure-read classifier that inspects
+/// the working tree at `layout.repo_root()` and returns one of the six
+/// [`SubstrateLayoutState`] variants. No public fields in v1. Per spec
+/// 2026-05-24-setup-is-orbit-state-aware ac-11.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct SubstrateClassifyArgs {}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct ChoiceShowArgs {
@@ -829,6 +839,8 @@ pub enum VerbResponse {
     AuditConformance(AuditConformanceResult),
     #[serde(rename = "topology.setup")]
     TopologySetup(TopologySetupResult),
+    #[serde(rename = "substrate.classify")]
+    SubstrateClassify(SubstrateClassifyResult),
     #[serde(rename = "choice.show")]
     ChoiceShow(ChoiceShowResult),
     #[serde(rename = "choice.list")]
@@ -1281,7 +1293,11 @@ pub struct TopologySetupResult {
     /// False on idempotent re-runs.
     pub dir_created: bool,
     /// Subsystem slugs whose seed entries were newly written. Empty on
-    /// idempotent re-runs.
+    /// idempotent re-runs AND on non-plugin-repo projects (the
+    /// substrate-typed seeds describe orbit's own substrate types and
+    /// are a category error in any other project — see `readme_created`
+    /// for the gating side). Per spec
+    /// 2026-05-24-setup-is-orbit-state-aware ac-12.
     pub seeds_created: Vec<String>,
     /// Subsystem slugs whose seed entries already existed and were
     /// skipped (operator edits preserved — no overwrite).
@@ -1289,6 +1305,25 @@ pub struct TopologySetupResult {
     /// True if the prompt fired and was declined (operator chose not to
     /// scaffold). Mutually exclusive with the other create/skip fields.
     pub declined: bool,
+    /// True if a `.orbit/topology/README.md` was newly written. The
+    /// README is the non-plugin-repo seed: a one-line pointer at
+    /// `/orb:topology` that primes the operator on how to author the
+    /// first topology entry, replacing the substrate-typed seeds that
+    /// only make sense inside the orbit-plugin source repo. Idempotent
+    /// (false on re-run when the file already exists). Per spec
+    /// 2026-05-24-setup-is-orbit-state-aware ac-12.
+    #[serde(default)]
+    pub readme_created: bool,
+}
+
+/// Result for `substrate.classify` — names the current layout state of
+/// the working tree at `layout.repo_root()`. Per spec
+/// 2026-05-24-setup-is-orbit-state-aware ac-11.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct SubstrateClassifyResult {
+    /// One of the six mutually-exclusive layout states.
+    pub state: SubstrateLayoutState,
 }
 
 /// A single drift entry from `audit.topology`.
@@ -1598,6 +1633,9 @@ pub fn execute(layout: &OrbitLayout, request: &VerbRequest) -> Result<VerbRespon
         VerbRequest::Graph(args) => graph(layout, args).map(VerbResponse::Graph),
         VerbRequest::AuditDrift(args) => audit_drift(layout, args).map(VerbResponse::AuditDrift),
         VerbRequest::TopologySetup(args) => topology_setup(layout, args).map(VerbResponse::TopologySetup),
+        VerbRequest::SubstrateClassify(args) => {
+            substrate_classify(layout, args).map(VerbResponse::SubstrateClassify)
+        }
         VerbRequest::AuditTopology(args) => {
             audit_topology(layout, args).map(VerbResponse::AuditTopology)
         }
@@ -3929,10 +3967,34 @@ fn audit_conformance_at(
     findings.extend(memo_staleness_findings(layout, today)?);
 
     // ac-04: plugin-canonical-file drift findings (suppressed when
-    // pin_dominates).
-    if !pin_dominates {
+    // pin_dominates OR when the substrate layout is non-canonical:
+    // wrapped-undotted means the operator hasn't yet run /orb:setup's
+    // single-rename migration, and the missing .orbit/METHOD.md /
+    // .orbit/STYLE.md are derivative of that, not separate problems.
+    // Surfacing both would mislead the agent toward `orbit setup` to
+    // create canonical files when the real remediation is `orbit setup`
+    // to migrate the layout. The undotted_substrate finding family
+    // (sister drive 2026-05-24-workflow-conformance) is the
+    // higher-fidelity surface for the layout issue itself; this
+    // suppression keeps the conformance envelope from double-counting.
+    // Per spec 2026-05-24-setup-is-orbit-state-aware ac-20 and the
+    // rally lockdown ("undotted-substrate finding suppresses
+    // canonical-files-missing findings until layout is fixed").
+    let layout_state = classify_substrate_layout(layout);
+    let layout_non_canonical = matches!(
+        layout_state,
+        SubstrateLayoutState::WrappedUndotted
+    );
+    if !pin_dominates && !layout_non_canonical {
         findings.extend(canonical_file_findings(layout)?);
     }
+
+    // decisions-md-unmigrated findings — per spec
+    // 2026-05-24-setup-is-orbit-state-aware ac-15. Brownfield migration
+    // renames `decisions/ → .orbit/decisions/` verbatim (no MD→YAML
+    // conversion). This finding family surfaces each unconverted .md
+    // file so the operator can drive the conversion themselves.
+    findings.extend(decisions_md_unmigrated_findings(layout)?);
 
     // Routine findings (per spec 2026-05-22-routine-proposals ac-07).
     // Two state slugs — `stale` (last_verified > 30d) and `broken_refs`
@@ -4139,6 +4201,90 @@ fn canonical_file_findings(layout: &OrbitLayout) -> Result<Vec<ConformanceFindin
     Ok(findings)
 }
 
+/// `decisions_md_unmigrated`: walk `.orbit/decisions/*.md`; for each
+/// markdown file lacking a matching `.orbit/choices/<slug>.yaml`, emit
+/// a finding pointing the operator at the manual MD→YAML conversion.
+///
+/// Brownfield migration renames `decisions/ → .orbit/decisions/` verbatim
+/// (no auto-conversion) — the format gap requires human judgment per
+/// file. The finding family makes the residue visible on every audit
+/// pass; closing each finding means hand-rewriting the MADR markdown as
+/// a Choice yaml and removing the source `.md`.
+///
+/// Returns an empty vec when `.orbit/decisions/` is absent or empty.
+/// The slug match is filename-stem to filename-stem (the conventional
+/// shape under both folders); no semantic-content comparison.
+///
+/// Per spec 2026-05-24-setup-is-orbit-state-aware ac-15.
+fn decisions_md_unmigrated_findings(
+    layout: &OrbitLayout,
+) -> Result<Vec<ConformanceFinding>> {
+    let mut findings = Vec::new();
+    let decisions_dir = layout.root.join("decisions");
+    if !decisions_dir.is_dir() {
+        return Ok(findings);
+    }
+    let entries = match std::fs::read_dir(&decisions_dir) {
+        Ok(e) => e,
+        Err(_) => return Ok(findings),
+    };
+    let mut md_paths: Vec<std::path::PathBuf> = Vec::new();
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.extension().and_then(|e| e.to_str()) != Some("md") {
+            continue;
+        }
+        md_paths.push(path);
+    }
+    md_paths.sort();
+    for md_path in md_paths {
+        let stem = match md_path.file_stem().and_then(|s| s.to_str()) {
+            Some(s) => s,
+            None => continue,
+        };
+        let choice_path = layout.choice_file(stem);
+        if choice_path.exists() {
+            // Operator already converted this one. Don't flag.
+            continue;
+        }
+        let rel_subject = md_path
+            .strip_prefix(layout.repo_root())
+            .map(|p| p.to_string_lossy().into_owned())
+            .unwrap_or_else(|_| md_path.to_string_lossy().into_owned());
+        let target_rel = choice_path
+            .strip_prefix(layout.repo_root())
+            .map(|p| p.to_string_lossy().into_owned())
+            .unwrap_or_else(|_| choice_path.to_string_lossy().into_owned());
+        let mut evidence = serde_yaml::Mapping::new();
+        evidence.insert(
+            serde_yaml::Value::String("source_md".into()),
+            serde_yaml::Value::String(rel_subject.clone()),
+        );
+        evidence.insert(
+            serde_yaml::Value::String("target_yaml".into()),
+            serde_yaml::Value::String(target_rel.clone()),
+        );
+        findings.push(ConformanceFinding {
+            severity: "medium".into(),
+            subsystem: "setup".into(),
+            subject: rel_subject.clone(),
+            state: "decisions_md_unmigrated".into(),
+            evidence: Some(serde_yaml::Value::Mapping(evidence)),
+            remediation: Remediation {
+                verb: format!(
+                    "manual MD→YAML conversion needed: {rel_subject} → {target_rel}"
+                ),
+                rationale: Some(
+                    "brownfield migration renames decisions/ verbatim; the MADR markdown \
+                     needs hand-conversion to the canonical Choice yaml shape (no auto-converter)"
+                        .into(),
+                ),
+            },
+        });
+    }
+    Ok(findings)
+}
+
 /// Routine-conformance findings (per spec 2026-05-22-routine-proposals
 /// ac-07). Two state slugs:
 ///
@@ -4320,6 +4466,117 @@ fn read_pinned_version(layout: &OrbitLayout) -> Option<String> {
     config.plugin_version
 }
 
+/// Read `Config.plugin_repo` from `.orbit/config.yaml`. Returns `false`
+/// when the file is absent, the field is unset, or parsing fails — the
+/// substrate-typed seed branch is the dangerous default (writes pointers
+/// that only exist in the orbit-plugin source repo), so the safe default
+/// is "this is not the plugin repo". Per spec
+/// 2026-05-24-setup-is-orbit-state-aware ac-12.
+fn read_plugin_repo_flag(layout: &OrbitLayout) -> bool {
+    let config_path = layout.config_file();
+    let Ok(raw) = std::fs::read_to_string(&config_path) else {
+        return false;
+    };
+    let Ok(config): std::result::Result<crate::schema::Config, _> = serde_yaml::from_str(&raw)
+    else {
+        return false;
+    };
+    config.plugin_repo.unwrap_or(false)
+}
+
+/// Substrate-layout classifier: the six mutually-exclusive states a repo
+/// can be in with respect to the orbit substrate. The six variants exhaust
+/// the reachable combinations of three independent axes
+/// (`.orbit/` present?, `orbit/` present?, any bare artefact dir at root?).
+///
+/// Used by `/orb:setup`'s state-machine in §1 (the agent runs
+/// [`classify_substrate_layout`] before deciding which migration arm to
+/// enter) and by `audit.conformance` (the sister verb
+/// `2026-05-24-workflow-conformance` consumes the same classifier to
+/// suppress `canonical-files-missing` findings on a `wrapped-undotted`
+/// repo — fixing the layout is the prerequisite, not the canonical-file
+/// drift). Single source of truth: skill prose and audit logic call the
+/// same predicate.
+///
+/// Per spec 2026-05-24-setup-is-orbit-state-aware ac-11.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum SubstrateLayoutState {
+    /// None of `.orbit/`, `orbit/`, or bare artefact dirs present. Setup
+    /// creates `.orbit/` fresh.
+    Greenfield,
+    /// `.orbit/` present; neither `orbit/` nor any bare artefact dir.
+    /// Setup is a no-op on layout (still runs canonical-files check).
+    Idempotent,
+    /// Bare `cards/` / `specs/` / `decisions/` / `discovery/` at root;
+    /// neither `.orbit/` nor `orbit/`. Setup prompts then `git mv`s each
+    /// detected bare dir under `.orbit/`.
+    BrownfieldBare,
+    /// `orbit/` present (wrapped substrate from a pre-`.orbit/` plugin
+    /// version); `.orbit/` absent; no bare dirs. Setup prompts then runs
+    /// the single-rename `git mv orbit .orbit`.
+    WrappedUndotted,
+    /// `.orbit/` AND any bare artefact dir present. Refuses with a
+    /// collision message — auto-resolution would risk overwriting work.
+    MixedBare,
+    /// `.orbit/` AND `orbit/` both present. Refuses with the
+    /// `.orbit/`+`orbit/` collision message — `git mv orbit .orbit` would
+    /// otherwise blow up with an opaque "destination exists" error.
+    MixedUndotted,
+}
+
+const BARE_ARTEFACT_DIRS: &[&str] = &["cards", "specs", "decisions", "discovery"];
+
+/// Inspect the working tree at `layout.repo_root()` and classify it into
+/// one of the six [`SubstrateLayoutState`] variants.
+///
+/// The predicate is filesystem-only (no git index reads, no config
+/// parsing) — it answers the same question that `/orb:setup` §1's table
+/// describes, in code. The three axes are inspected once each:
+///
+/// 1. `.orbit/` directory present at the repo root?
+/// 2. `orbit/` directory present at the repo root?
+/// 3. Any of {`cards`, `specs`, `decisions`, `discovery`} present as a
+///    directory at the repo root?
+///
+/// The 8-way truth table collapses to 6 reachable states (the two with
+/// `orbit/` present AND bare dirs present are not classified separately —
+/// they fold into the `mixed-undotted` arm because `.orbit/` may or may
+/// not also be present, and the dominant failure mode is the
+/// `orbit/`/`.orbit/` collision).
+///
+/// Per spec 2026-05-24-setup-is-orbit-state-aware ac-11.
+pub fn classify_substrate_layout(layout: &OrbitLayout) -> SubstrateLayoutState {
+    let repo_root = layout.repo_root();
+    let dotted = layout.root.is_dir();
+    let undotted = repo_root.join("orbit").is_dir();
+    let bare_present = BARE_ARTEFACT_DIRS
+        .iter()
+        .any(|name| repo_root.join(name).is_dir());
+
+    match (dotted, undotted, bare_present) {
+        (true, true, _) => SubstrateLayoutState::MixedUndotted,
+        (true, false, true) => SubstrateLayoutState::MixedBare,
+        (true, false, false) => SubstrateLayoutState::Idempotent,
+        (false, true, _) => SubstrateLayoutState::WrappedUndotted,
+        (false, false, true) => SubstrateLayoutState::BrownfieldBare,
+        (false, false, false) => SubstrateLayoutState::Greenfield,
+    }
+}
+
+/// Verb impl for `substrate.classify`. Pure-read — no filesystem mutation,
+/// no config parsing, no Result error path. The classifier returns a
+/// state for every reachable repo shape, so the function is infallible.
+/// Per spec 2026-05-24-setup-is-orbit-state-aware ac-11 / ac-18.
+fn substrate_classify(
+    layout: &OrbitLayout,
+    _args: &SubstrateClassifyArgs,
+) -> Result<SubstrateClassifyResult> {
+    Ok(SubstrateClassifyResult {
+        state: classify_substrate_layout(layout),
+    })
+}
+
 /// Lexicographic semver-ish compare on dotted-numeric strings. Treats
 /// each dot-separated segment as a u64; non-numeric segments fall back
 /// to string compare. Adequate for `MAJOR.MINOR.PATCH` strings; not a
@@ -4407,6 +4664,7 @@ fn topology_setup(
             seeds_created: Vec::new(),
             seeds_skipped: Vec::new(),
             declined: true,
+            readme_created: false,
         });
     }
 
@@ -4457,25 +4715,75 @@ fn topology_setup(
         })?;
     }
 
-    // 3. Write self-describing seed entries. One TopologyEntry per
-    //    .orbit/ entity type, each pointing at the orbit-state schema
-    //    struct (canonical_code), the relevant choice (decision_record),
-    //    the writing SKILL.md (operational_doc), and the schema tests
-    //    (test_surface). Universal across any orbit-using repo.
+    // 3. Seed branch — substrate-typed seeds OR README-only.
+    //
+    // Per spec 2026-05-24-setup-is-orbit-state-aware ac-12: substrate-typed
+    // seeds (`cards` / `choices` / `memories` / `specs-substrate` /
+    // `topology`) describe orbit-state's own data types and the pointers
+    // in them reach into the orbit-plugin source tree
+    // (`orbit-state/crates/core/src/schema.rs`, `plugins/orb/skills/...`).
+    // Writing those seeds into a downstream project produces a topology
+    // populated with paths that don't exist in that tree — `orbit audit
+    // topology` fires stale-pointer drift on every one immediately after
+    // setup. The plugin_repo flag in `.orbit/config.yaml` gates the branch:
+    // true means "this IS the orbit-plugin source repo, the substrate-typed
+    // pointers are load-bearing here"; absent/false means "this is a
+    // downstream project, write a one-line README pointer instead".
+    let plugin_repo = read_plugin_repo_flag(layout);
     let mut seeds_created = Vec::new();
     let mut seeds_skipped = Vec::new();
-    for seed in topology_setup_seeds() {
-        let path = layout.topology_file(&seed.subsystem);
-        if path.exists() {
-            seeds_skipped.push(seed.subsystem.clone());
-            continue;
+    let mut readme_created = false;
+
+    if plugin_repo {
+        // Plugin-repo branch: validate canonical_code paths exist in the
+        // working tree before writing any seed. Per spec
+        // 2026-05-24-setup-is-orbit-state-aware ac-13. A missing path means
+        // the seed would be stale on its very first audit pass — far better
+        // to refuse loudly here than write a known-broken pointer.
+        let repo_root = layout.repo_root();
+        let seeds = topology_setup_seeds();
+        for seed in &seeds {
+            for code_path in &seed.canonical_code {
+                let full = repo_root.join(code_path);
+                if !full.exists() {
+                    return Err(Error::not_found(
+                        VERB,
+                        format!(
+                            "seed `{}` canonical_code path does not exist: {} \
+                             (plugin_repo: true seeds must point at extant code in the working tree)",
+                            seed.subsystem, code_path
+                        ),
+                    ));
+                }
+            }
         }
-        let yaml = serde_yaml::to_string(&seed).map_err(|e| {
-            Error::malformed(VERB, format!("serialise seed {}: {e}", seed.subsystem))
-        })?;
-        write_atomic(&path, yaml.as_bytes())
-            .map_err(|e| Error::unavailable(VERB, format!("write {}: {e}", path.display())))?;
-        seeds_created.push(seed.subsystem.clone());
+        for seed in seeds {
+            let path = layout.topology_file(&seed.subsystem);
+            if path.exists() {
+                seeds_skipped.push(seed.subsystem.clone());
+                continue;
+            }
+            let yaml = serde_yaml::to_string(&seed).map_err(|e| {
+                Error::malformed(VERB, format!("serialise seed {}: {e}", seed.subsystem))
+            })?;
+            write_atomic(&path, yaml.as_bytes()).map_err(|e| {
+                Error::unavailable(VERB, format!("write {}: {e}", path.display()))
+            })?;
+            seeds_created.push(seed.subsystem.clone());
+        }
+    } else {
+        // Non-plugin-repo branch: write a one-line README that primes the
+        // operator on how to author the first topology entry. Substrate-
+        // typed seeds are deliberately NOT written here — they describe
+        // orbit-state's own types and are a category error elsewhere.
+        let readme_path = topology_dir.join("README.md");
+        if !readme_path.exists() {
+            let body = TOPOLOGY_NON_PLUGIN_README;
+            write_atomic(&readme_path, body.as_bytes()).map_err(|e| {
+                Error::unavailable(VERB, format!("write {}: {e}", readme_path.display()))
+            })?;
+            readme_created = true;
+        }
     }
 
     Ok(TopologySetupResult {
@@ -4484,8 +4792,24 @@ fn topology_setup(
         seeds_created,
         seeds_skipped,
         declined: false,
+        readme_created,
     })
 }
+
+/// One-line README written into `.orbit/topology/` on non-plugin-repo
+/// setup runs. The substrate-typed seeds (`cards` / `choices` / ...)
+/// only make sense inside orbit-plugin's own source tree; downstream
+/// projects get this pointer instead so the operator knows the
+/// substrate exists but is intentionally unseeded. Per spec
+/// 2026-05-24-setup-is-orbit-state-aware ac-12.
+const TOPOLOGY_NON_PLUGIN_README: &str = "# .orbit/topology/
+
+This directory holds per-subsystem topology entries — pointer-only
+substrate that names each subsystem's canonical code, decision record,
+operational doc, and test surface.
+
+Run `/orb:topology` to author your first entry.
+";
 
 /// The self-describing seed templates written by `topology.setup`.
 /// One entry per `.orbit/` entity type — universal across any orbit-using
@@ -9837,6 +10161,21 @@ mod tests {
         let orbit_dir = dir.path().join(".orbit");
         std::fs::create_dir_all(&orbit_dir).unwrap();
         let layout = OrbitLayout::at_orbit_dir(&orbit_dir);
+        // Pre-spec-2026-05-24, topology_setup unconditionally wrote 5
+        // substrate-typed seeds. Since plugin_repo gating shipped, those
+        // seeds only fire when (a) config.yaml carries plugin_repo: true
+        // and (b) each seed's canonical_code path exists in the working
+        // tree. Stamp both prerequisites into the fixture so the existing
+        // tests continue to exercise the plugin-repo branch; the
+        // README-only branch has its own targeted tests.
+        std::fs::write(
+            layout.config_file(),
+            "plugin_repo: true\n",
+        )
+        .unwrap();
+        let stub_dir = dir.path().join("orbit-state/crates/core/src");
+        std::fs::create_dir_all(&stub_dir).unwrap();
+        std::fs::write(stub_dir.join("schema.rs"), "// stub for topology test\n").unwrap();
         (dir, layout)
     }
 
@@ -11771,5 +12110,301 @@ mystery_field: surprise
         assert!(!second.written, "rename must not break chain_id dedupe");
         assert_eq!(second.chain_id, first.chain_id);
         assert!(second.path.contains("renamed-by-author"));
+    }
+
+    // -----------------------------------------------------------------
+    // classify_substrate_layout — spec 2026-05-24-setup-is-orbit-state-aware
+    // -----------------------------------------------------------------
+
+    fn classify_at(root: &std::path::Path) -> SubstrateLayoutState {
+        classify_substrate_layout(&OrbitLayout::at(root))
+    }
+
+    #[test]
+    fn classifier_returns_greenfield_for_empty_tree() {
+        let dir = tempdir().unwrap();
+        assert_eq!(classify_at(dir.path()), SubstrateLayoutState::Greenfield);
+    }
+
+    #[test]
+    fn classifier_returns_idempotent_for_dotted_only() {
+        let dir = tempdir().unwrap();
+        std::fs::create_dir_all(dir.path().join(".orbit")).unwrap();
+        assert_eq!(classify_at(dir.path()), SubstrateLayoutState::Idempotent);
+    }
+
+    #[test]
+    fn classifier_returns_wrapped_undotted_for_bare_orbit_dir() {
+        let dir = tempdir().unwrap();
+        std::fs::create_dir_all(dir.path().join("orbit/cards")).unwrap();
+        assert_eq!(
+            classify_at(dir.path()),
+            SubstrateLayoutState::WrappedUndotted
+        );
+    }
+
+    #[test]
+    fn classifier_returns_brownfield_bare_for_root_bare_dirs() {
+        let dir = tempdir().unwrap();
+        std::fs::create_dir_all(dir.path().join("cards")).unwrap();
+        std::fs::create_dir_all(dir.path().join("specs")).unwrap();
+        assert_eq!(
+            classify_at(dir.path()),
+            SubstrateLayoutState::BrownfieldBare
+        );
+    }
+
+    #[test]
+    fn classifier_returns_mixed_bare_when_dotted_and_bare_coexist() {
+        let dir = tempdir().unwrap();
+        std::fs::create_dir_all(dir.path().join(".orbit")).unwrap();
+        std::fs::create_dir_all(dir.path().join("cards")).unwrap();
+        assert_eq!(classify_at(dir.path()), SubstrateLayoutState::MixedBare);
+    }
+
+    #[test]
+    fn classifier_returns_mixed_undotted_when_dotted_and_orbit_coexist() {
+        let dir = tempdir().unwrap();
+        std::fs::create_dir_all(dir.path().join(".orbit")).unwrap();
+        std::fs::create_dir_all(dir.path().join("orbit")).unwrap();
+        assert_eq!(
+            classify_at(dir.path()),
+            SubstrateLayoutState::MixedUndotted
+        );
+    }
+
+    #[test]
+    fn classifier_collision_orbit_present_dominates_bare() {
+        // wrapped-undotted dominates the bare-dir signal — when orbit/
+        // exists, the migration arm is the single-rename path and any
+        // root-level bare dirs are part of the wrapped tree the operator
+        // hasn't yet cleaned up. Classifier returns WrappedUndotted, not
+        // MixedBare.
+        let dir = tempdir().unwrap();
+        std::fs::create_dir_all(dir.path().join("orbit")).unwrap();
+        std::fs::create_dir_all(dir.path().join("cards")).unwrap();
+        assert_eq!(
+            classify_at(dir.path()),
+            SubstrateLayoutState::WrappedUndotted
+        );
+    }
+
+    // -----------------------------------------------------------------
+    // decisions_md_unmigrated_findings — spec 2026-05-24-setup-is-orbit-state-aware ac-15
+    // -----------------------------------------------------------------
+
+    #[test]
+    fn decisions_md_finding_fires_for_unconverted_file() {
+        let dir = tempdir().unwrap();
+        let layout = OrbitLayout::at(dir.path());
+        layout.ensure_dirs().unwrap();
+        let decisions = dir.path().join(".orbit/decisions");
+        std::fs::create_dir_all(&decisions).unwrap();
+        std::fs::write(
+            decisions.join("0001-some-choice.md"),
+            "# Title\n\nA legacy MADR.\n",
+        )
+        .unwrap();
+
+        let findings = decisions_md_unmigrated_findings(&layout).unwrap();
+        assert_eq!(findings.len(), 1);
+        let f = &findings[0];
+        assert_eq!(f.subsystem, "setup");
+        assert_eq!(f.state, "decisions_md_unmigrated");
+        assert!(
+            f.subject.ends_with(".orbit/decisions/0001-some-choice.md"),
+            "subject should be the relative md path, got {}",
+            f.subject
+        );
+        assert!(f.remediation.verb.contains("MD→YAML"));
+    }
+
+    #[test]
+    fn decisions_md_finding_suppressed_when_choice_yaml_exists() {
+        let dir = tempdir().unwrap();
+        let layout = OrbitLayout::at(dir.path());
+        layout.ensure_dirs().unwrap();
+        let decisions = dir.path().join(".orbit/decisions");
+        std::fs::create_dir_all(&decisions).unwrap();
+        std::fs::write(decisions.join("0001-x.md"), "legacy").unwrap();
+        // Operator already migrated this one to YAML.
+        std::fs::write(
+            layout.choice_file("0001-x"),
+            "id: 0001-x\ntitle: x\nstatus: accepted\ndate_created: 2026-05-24\nbody: ok\n",
+        )
+        .unwrap();
+
+        let findings = decisions_md_unmigrated_findings(&layout).unwrap();
+        assert!(
+            findings.is_empty(),
+            "matched .orbit/choices/<slug>.yaml suppresses the finding, got: {findings:?}"
+        );
+    }
+
+    #[test]
+    fn decisions_md_finding_empty_when_decisions_dir_absent() {
+        let dir = tempdir().unwrap();
+        let layout = OrbitLayout::at(dir.path());
+        layout.ensure_dirs().unwrap();
+        // No .orbit/decisions/ dir at all.
+        let findings = decisions_md_unmigrated_findings(&layout).unwrap();
+        assert!(findings.is_empty());
+    }
+
+    // -----------------------------------------------------------------
+    // topology_setup plugin_repo gating — spec 2026-05-24-setup-is-orbit-state-aware ac-12 / ac-13
+    // -----------------------------------------------------------------
+
+    #[test]
+    fn topology_setup_writes_readme_when_plugin_repo_unset() {
+        let dir = tempdir().unwrap();
+        let layout = OrbitLayout::at(dir.path());
+        layout.ensure_dirs().unwrap();
+        let result = topology_setup(&layout, &TopologySetupArgs::default()).unwrap();
+        assert!(
+            result.readme_created,
+            "non-plugin-repo branch must write README, got result={result:?}"
+        );
+        assert!(
+            result.seeds_created.is_empty(),
+            "non-plugin-repo branch must NOT write substrate-typed seeds"
+        );
+        assert!(
+            layout.topology_dir().join("README.md").exists(),
+            "README.md must land on disk"
+        );
+    }
+
+    #[test]
+    fn topology_setup_idempotent_readme_branch() {
+        let dir = tempdir().unwrap();
+        let layout = OrbitLayout::at(dir.path());
+        layout.ensure_dirs().unwrap();
+        let first = topology_setup(&layout, &TopologySetupArgs::default()).unwrap();
+        assert!(first.readme_created);
+        let second = topology_setup(&layout, &TopologySetupArgs::default()).unwrap();
+        assert!(!second.readme_created, "re-run must be a no-op");
+    }
+
+    #[test]
+    fn topology_setup_writes_seeds_when_plugin_repo_true_and_paths_exist() {
+        let dir = tempdir().unwrap();
+        let layout = OrbitLayout::at(dir.path());
+        layout.ensure_dirs().unwrap();
+        // Set plugin_repo: true.
+        std::fs::write(
+            layout.config_file(),
+            "plugin_repo: true\n",
+        )
+        .unwrap();
+        // Create the substrate-typed seeds' canonical_code path so
+        // validation passes.
+        let code_dir = dir.path().join("orbit-state/crates/core/src");
+        std::fs::create_dir_all(&code_dir).unwrap();
+        std::fs::write(code_dir.join("schema.rs"), "// stub").unwrap();
+
+        let result = topology_setup(&layout, &TopologySetupArgs::default()).unwrap();
+        assert!(
+            !result.readme_created,
+            "plugin-repo branch must NOT write README"
+        );
+        assert_eq!(
+            result.seeds_created.len(),
+            5,
+            "plugin-repo branch must write 5 substrate-typed seeds"
+        );
+    }
+
+    #[test]
+    fn topology_setup_rejects_when_plugin_repo_true_and_canonical_code_missing() {
+        let dir = tempdir().unwrap();
+        let layout = OrbitLayout::at(dir.path());
+        layout.ensure_dirs().unwrap();
+        std::fs::write(layout.config_file(), "plugin_repo: true\n").unwrap();
+        // Deliberately do NOT create orbit-state/crates/core/src/schema.rs —
+        // canonical_code validation must refuse.
+
+        let err = topology_setup(&layout, &TopologySetupArgs::default()).unwrap_err();
+        let msg = format!("{err:?}");
+        assert!(
+            msg.contains("canonical_code") && msg.contains("does not exist"),
+            "error must name the missing canonical_code path, got: {msg}"
+        );
+    }
+
+    // -----------------------------------------------------------------
+    // substrate.classify verb dispatch — ac-11 + ac-18
+    // -----------------------------------------------------------------
+
+    #[test]
+    fn substrate_classify_verb_returns_greenfield_for_empty_tree() {
+        let dir = tempdir().unwrap();
+        let layout = OrbitLayout::at(dir.path());
+        let response = execute(
+            &layout,
+            &VerbRequest::SubstrateClassify(SubstrateClassifyArgs::default()),
+        )
+        .unwrap();
+        let result = match response {
+            VerbResponse::SubstrateClassify(r) => r,
+            other => panic!("unexpected response: {other:?}"),
+        };
+        assert_eq!(result.state, SubstrateLayoutState::Greenfield);
+    }
+
+    #[test]
+    fn substrate_classify_verb_returns_wrapped_undotted() {
+        let dir = tempdir().unwrap();
+        std::fs::create_dir_all(dir.path().join("orbit/cards")).unwrap();
+        let layout = OrbitLayout::at(dir.path());
+        let response = execute(
+            &layout,
+            &VerbRequest::SubstrateClassify(SubstrateClassifyArgs::default()),
+        )
+        .unwrap();
+        let result = match response {
+            VerbResponse::SubstrateClassify(r) => r,
+            other => panic!("unexpected response: {other:?}"),
+        };
+        assert_eq!(result.state, SubstrateLayoutState::WrappedUndotted);
+    }
+
+    // -----------------------------------------------------------------
+    // ac-20: cross-drive canonical-files-missing suppression on
+    // wrapped-undotted. This drive ships the suppression mechanism using
+    // its own classifier — when the layout is wrapped-undotted, the
+    // missing canonical files are derivative of the layout problem, not
+    // separate findings. Sister drive 2026-05-24-workflow-conformance
+    // ships the undotted_substrate finding family that surfaces the
+    // layout issue itself.
+    // -----------------------------------------------------------------
+
+    #[test]
+    fn audit_conformance_suppresses_canonical_files_missing_on_wrapped_undotted() {
+        let dir = tempdir().unwrap();
+        // Wrapped-undotted shape: orbit/ exists, no .orbit/.
+        std::fs::create_dir_all(dir.path().join("orbit/cards")).unwrap();
+        let layout = OrbitLayout::at(dir.path());
+        // No .orbit/METHOD.md or .orbit/STYLE.md exist — without the
+        // suppression, canonical_file_findings fires "missing" for both.
+        let response = execute(
+            &layout,
+            &VerbRequest::AuditConformance(AuditConformanceArgs::default()),
+        )
+        .unwrap();
+        let result = match response {
+            VerbResponse::AuditConformance(r) => r,
+            other => panic!("unexpected response: {other:?}"),
+        };
+        let canonical_missing: Vec<&ConformanceFinding> = result
+            .findings
+            .iter()
+            .filter(|f| f.subsystem == "setup" && f.state == "missing")
+            .collect();
+        assert!(
+            canonical_missing.is_empty(),
+            "canonical-files-missing must be suppressed on a wrapped-undotted repo \
+             (sister drive contract), got: {canonical_missing:?}"
+        );
     }
 }

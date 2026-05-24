@@ -3,8 +3,8 @@ feature: /orb:setup is orbit-state-aware
 as_a: orbit user setting up a new project or migrating an existing one
 i_want: /orb:setup to handle orbit-state initialisation and the .orbit/ layout in one atomic pass — not as a separate manual step
 so_that: the .orbit/ layout, gitignore, and orbit-state initialisation land together — there is no half-set-up state where the workflow vocabulary exists but state initialisation is missing, and pilot rollouts to downstream projects can be a single command per project
-goal: /orb:setup is the canonical orbit-state-init gate — running it on any project (greenfield or brownfield) leaves the .orbit/ workflow layout, the gitignore, and the SQLite index in a working state, with no manual orbit init step required by the operator
-maturity: planned
+goal: /orb:setup is the canonical orbit-state-init gate — running it on any project (greenfield or brownfield, including the wrapped-undotted shape where substrate lives at `orbit/` without the dot) leaves the .orbit/ workflow layout, the gitignore, and the SQLite index in a working state, with no manual orbit init step required by the operator
+maturity: emerging
 scenarios:
 - name: orbit-state precondition check refuses without orbit-state binary
   given: a project where orbit-state is not installed

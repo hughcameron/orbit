@@ -25,7 +25,8 @@ use orbit_state_core::{
     canonicalise_all, envelope_err_string, envelope_ok_string, execute, reconcile_all,
     CanonicaliseReport, ReconcileReport,
     AuditConformanceArgs, AuditConformanceResult, AuditDriftArgs, AuditDriftResult,
-    AuditTopologyArgs, AuditTopologyResult, TopologySetupArgs, TopologySetupResult,
+    AuditTopologyArgs, AuditTopologyResult, SubstrateClassifyArgs, SubstrateClassifyResult,
+    TopologySetupArgs, TopologySetupResult,
     CardListArgs, CardSearchArgs, CardShowArgs, CardShowResult,
     CardSpecsArgs, CardSpecsResult, CardTreeArgs, CardTreeEdge, CardTreeResult, ChoiceListArgs,
     ChoiceListResult, GraphArgs, GraphFormat, GraphResult, OverviewArgs, OverviewResult,
@@ -142,6 +143,13 @@ enum Command {
     Topology {
         #[command(subcommand)]
         action: TopologyAction,
+    },
+    /// Substrate-layout verbs (classify) — read-only inspection of the working
+    /// tree shape against the six setup-classifier states. Per spec
+    /// 2026-05-24-setup-is-orbit-state-aware.
+    Substrate {
+        #[command(subcommand)]
+        action: SubstrateAction,
     },
     /// Substrate hygiene check — round-trip every canonical file (ac-16) and
     /// rebuild the index from files (ac-17). Exits non-zero on any drift.
@@ -360,6 +368,16 @@ enum CardAction {
     /// Surfaces drift where the card's `specs:` and the spec's `cards:`
     /// arrays disagree.
     Specs { slug: String },
+}
+
+#[derive(Debug, Subcommand)]
+enum SubstrateAction {
+    /// Inspect the working tree at the repo root and classify it into one
+    /// of the six layout states (`greenfield`, `idempotent`,
+    /// `brownfield-bare`, `wrapped-undotted`, `mixed-bare`,
+    /// `mixed-undotted`). Read-only; no filesystem mutation. The /orb:setup
+    /// skill calls this verb to decide which migration arm to enter.
+    Classify,
 }
 
 #[derive(Debug, Subcommand)]
@@ -1293,6 +1311,11 @@ fn build_request(layout: &OrbitLayout, command: &Command) -> Result<VerbRequest,
                 })
             }
         },
+        Command::Substrate { action } => match action {
+            SubstrateAction::Classify => {
+                VerbRequest::SubstrateClassify(SubstrateClassifyArgs::default())
+            }
+        },
         Command::Graph { card, depth, format } => {
             let parsed_format = match format.as_str() {
                 "mermaid" => GraphFormat::Mermaid,
@@ -1355,6 +1378,7 @@ fn render_human(response: &VerbResponse) {
         VerbResponse::AuditTopology(result) => render_audit_topology(result),
         VerbResponse::AuditConformance(result) => render_audit_conformance(result),
         VerbResponse::TopologySetup(result) => render_topology_setup(result),
+        VerbResponse::SubstrateClassify(result) => render_substrate_classify(result),
         VerbResponse::ChoiceShow(result) => render_choice_show(result),
         VerbResponse::ChoiceList(result) | VerbResponse::ChoiceSearch(result) => {
             render_choice_list(result)
@@ -1707,6 +1731,18 @@ fn render_audit_conformance(result: &AuditConformanceResult) {
     }
 }
 
+fn render_substrate_classify(result: &SubstrateClassifyResult) {
+    let kebab = match result.state {
+        orbit_state_core::SubstrateLayoutState::Greenfield => "greenfield",
+        orbit_state_core::SubstrateLayoutState::Idempotent => "idempotent",
+        orbit_state_core::SubstrateLayoutState::BrownfieldBare => "brownfield-bare",
+        orbit_state_core::SubstrateLayoutState::WrappedUndotted => "wrapped-undotted",
+        orbit_state_core::SubstrateLayoutState::MixedBare => "mixed-bare",
+        orbit_state_core::SubstrateLayoutState::MixedUndotted => "mixed-undotted",
+    };
+    println!("substrate.classify: {kebab}");
+}
+
 fn render_topology_setup(result: &TopologySetupResult) {
     if result.declined {
         println!("topology.setup: declined (no changes)");
@@ -1738,10 +1774,17 @@ fn render_topology_setup(result: &TopologySetupResult) {
             println!("  = {slug}");
         }
     }
+    if result.readme_created {
+        println!(
+            "topology.setup: wrote .orbit/topology/README.md \
+             (this project is not the orbit-plugin source repo — no substrate-typed seeds)"
+        );
+    }
     if !result.config_cleaned
         && !result.dir_created
         && result.seeds_created.is_empty()
         && result.seeds_skipped.is_empty()
+        && !result.readme_created
     {
         println!("topology.setup: nothing to do (substrate already configured)");
     }
