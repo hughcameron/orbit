@@ -2,6 +2,27 @@
 
 All notable changes to orbit are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.4.32] - 2026-05-24
+
+Adds an automatic merge step to `/orb:drive` §Completion scoped to **full autonomy**. APPROVE from the forked review-pr now triggers `gh pr merge --auto` without operator intervention; non-APPROVE verdicts and non-full autonomy modes behave exactly as before. Removes the last operator-bottleneck in full-autonomy drive pipelines.
+
+### Added
+
+- **`/orb:drive` auto-merge step** at §Completion step 5, scoped to `autonomy == full`. APPROVE invokes `gh pr merge --auto` (queue-merge — defers to required checks / branch protection automatically). REQUEST_CHANGES and BLOCK route through §NO-GO unchanged; `guided` and `supervised` keep today's four-option prompt. Per spec 2026-05-22-default-merge-after-review (card 0014).
+- **Graceful degradation on merge failure** — when `gh pr merge --auto` returns non-zero (auto-merge disabled, branch protection, draft PR, auth/network error), drive logs the exit code, writes a `merge deferred — <reason>` spec note with a canonical token (`auto-merge-disabled` / `branch-protection` / `draft-pr` / `auth-failure` / `network-error` / `unknown`), and closes the spec without halting. Author handles merge manually on next look; the close-comment carries PR url + verdict + merge state for visibility.
+- **Idempotent PR-create on resume** — §Completion step 4 inspects `gh pr view --json number,autoMergeRequest,state` before invoking `gh pr create`; if a PR already exists for the branch (prior drive crashed between create and merge), the existing PR is carried forward to step 5. No new `drive.yaml` stage value required; §Resumption table unchanged.
+
+### Changed
+
+- **`/orb:drive` §Completion** reordered to six numbered steps (commit-impl → commit-cards → push → gh pr create → gh pr merge --auto → spec close). Push surfaced as its own explicit step (was implicit inside "Create the PR" today); runs at all autonomy levels because `gh pr create` requires it. Heartbeat cleanup moves to a post-close admin block.
+- **Autonomy table `full` row** description updated — "Pauses only for PR merge" replaced with "APPROVE auto-merges via `gh pr merge --auto`". `guided` and `supervised` rows unchanged.
+- **Card 0014** maturity `planned → emerging` on first spec close.
+
+### Notes
+
+- ac-09 (observation window — K1 forked-review-trust kill condition) deferred by design. First five auto-merged drives capture a one-line entry indicating whether the author would have intervened; if ≥2 of 5 surface author-catchable misses, K1's pivot path fires (revert to manual merge, tighten cold-fork reviewer prompt, or invest in pre-merge hold window).
+- Follow-up memo `.orbit/memos/2026-05-22-drive-autonomy-mode-names.md` carries forward to card 0005 — the `guided` vs `supervised` naming axis question surfaced mid-tabletop; not in this release's scope.
+
 ## [0.4.31] - 2026-05-22
 
 Ships v1 of the routine-authoring substrate (card 0013, spec 2026-05-22-routine-proposals). Agents observing recurring chains of skill invocations now author named routine SKILL.md files directly to `.claude/skills/<name>/`, with audit-driven freshness via a dedicated `orbit routine verify` verb. Pillar-2 (agent self-learning) sibling to card 0022 (single-skill authoring) — sequential chains in v1 (DAGs deferred), content-addressed via `chain_id` (SHA-256 of the canonical-JSON-encoded skill sequence) so author renames don't break archive-state lookups.
