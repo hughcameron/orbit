@@ -856,3 +856,101 @@ fn audit_conformance_mcp_wrapped_undotted_envelope() {
         "MCP undotted_substrate envelope diverged from library reference"
     );
 }
+
+// ---------------------------------------------------------------------------
+// spec.acs / next-ac / blocking-gate / has-unchecked / check parity
+// (per spec 2026-05-24-port-acceptance-shim ac-07).
+// ---------------------------------------------------------------------------
+
+#[test]
+fn spec_acs_mcp_envelope_matches_canonical_envelope() {
+    let dir = tempfile::tempdir().unwrap();
+    common::populate_spec_acs_mixed_fixture(dir.path());
+    let inner = run_mcp_tools_call(
+        dir.path(),
+        json!({ "name": "spec.acs", "arguments": { "id": "0010" } }),
+    );
+    let envelope = inner_envelope_text(&inner);
+    assert_eq!(envelope, common::expected_envelope_for_spec_acs_mixed());
+}
+
+#[test]
+fn spec_next_ac_mcp_envelope_matches_canonical_envelope() {
+    let dir = tempfile::tempdir().unwrap();
+    common::populate_spec_acs_mixed_fixture(dir.path());
+    let inner = run_mcp_tools_call(
+        dir.path(),
+        json!({ "name": "spec.next-ac", "arguments": { "id": "0010" } }),
+    );
+    let envelope = inner_envelope_text(&inner);
+    assert_eq!(envelope, common::expected_envelope_for_spec_next_ac_mixed());
+}
+
+#[test]
+fn spec_blocking_gate_mcp_envelope_matches_canonical_envelope() {
+    let dir = tempfile::tempdir().unwrap();
+    common::populate_spec_acs_mixed_fixture(dir.path());
+    let inner = run_mcp_tools_call(
+        dir.path(),
+        json!({ "name": "spec.blocking-gate", "arguments": { "id": "0010" } }),
+    );
+    let envelope = inner_envelope_text(&inner);
+    assert_eq!(
+        envelope,
+        common::expected_envelope_for_spec_blocking_gate_mixed()
+    );
+}
+
+#[test]
+fn spec_has_unchecked_mcp_true_envelope_matches() {
+    let dir = tempfile::tempdir().unwrap();
+    common::populate_spec_acs_mixed_fixture(dir.path());
+    let inner = run_mcp_tools_call(
+        dir.path(),
+        json!({ "name": "spec.has-unchecked", "arguments": { "id": "0010" } }),
+    );
+    let envelope = inner_envelope_text(&inner);
+    assert_eq!(
+        envelope,
+        common::expected_envelope_for_spec_has_unchecked_true()
+    );
+}
+
+#[test]
+fn spec_has_unchecked_mcp_false_envelope_matches() {
+    let dir = tempfile::tempdir().unwrap();
+    common::populate_spec_acs_all_checked_fixture(dir.path());
+    let inner = run_mcp_tools_call(
+        dir.path(),
+        json!({ "name": "spec.has-unchecked", "arguments": { "id": "0011" } }),
+    );
+    let envelope = inner_envelope_text(&inner);
+    assert_eq!(
+        envelope,
+        common::expected_envelope_for_spec_has_unchecked_false()
+    );
+}
+
+#[test]
+fn spec_check_mcp_envelope_matches_canonical_envelope() {
+    let dir = tempfile::tempdir().unwrap();
+    common::populate_spec_acs_mixed_fixture(dir.path());
+    let inner = run_mcp_tools_call(
+        dir.path(),
+        json!({ "name": "spec.check", "arguments": { "id": "0010", "ac_id": "ac-02" } }),
+    );
+    let envelope = inner_envelope_text(&inner);
+    assert_eq!(envelope, common::expected_envelope_for_spec_check_ac02());
+}
+
+#[test]
+fn spec_check_mcp_missing_ac_returns_not_found() {
+    let dir = tempfile::tempdir().unwrap();
+    common::populate_spec_acs_mixed_fixture(dir.path());
+    let inner = run_mcp_tools_call(
+        dir.path(),
+        json!({ "name": "spec.check", "arguments": { "id": "0010", "ac_id": "ac-99" } }),
+    );
+    let envelope = inner_envelope_text(&inner);
+    assert_eq!(envelope, common::expected_envelope_for_spec_check_missing());
+}

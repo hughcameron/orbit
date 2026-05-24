@@ -209,6 +209,72 @@ fn tool_descriptors() -> Vec<Value> {
             }
         }),
         json!({
+            "name": "spec.acs",
+            "description": "Return a spec's full acceptance_criteria list. Native port of the orbit-acceptance.sh acs subcommand per spec 2026-05-24-port-acceptance-shim.",
+            "inputSchema": {
+                "type": "object",
+                "required": ["id"],
+                "properties": { "id": { "type": "string" } },
+                "additionalProperties": false
+            }
+        }),
+        json!({
+            "name": "spec.next-ac",
+            "description": "Return the first unchecked AC that is not blocked by an unchecked gate (gate-axis traversal). Native port of the orbit-acceptance.sh next-ac subcommand.",
+            "inputSchema": {
+                "type": "object",
+                "required": ["id"],
+                "properties": { "id": { "type": "string" } },
+                "additionalProperties": false
+            }
+        }),
+        json!({
+            "name": "spec.blocking-gate",
+            "description": "Return the first unchecked gate AC, if any. Native port of the orbit-acceptance.sh blocking-gate subcommand.",
+            "inputSchema": {
+                "type": "object",
+                "required": ["id"],
+                "properties": { "id": { "type": "string" } },
+                "additionalProperties": false
+            }
+        }),
+        json!({
+            "name": "spec.has-unchecked",
+            "description": "Return true if any AC is unchecked (raw-axis traversal — distinct from spec.close's taxonomy-axis pre-flight). Native port of the orbit-acceptance.sh has-unchecked subcommand.",
+            "inputSchema": {
+                "type": "object",
+                "required": ["id"],
+                "properties": { "id": { "type": "string" } },
+                "additionalProperties": false
+            }
+        }),
+        json!({
+            "name": "spec.check",
+            "description": "Flip an AC's checked flag from false to true. Error::not_found for unknown AC, Error::conflict for already-checked AC. Native port of the orbit-acceptance.sh check subcommand.",
+            "inputSchema": {
+                "type": "object",
+                "required": ["id", "ac_id"],
+                "properties": {
+                    "id":    { "type": "string" },
+                    "ac_id": { "type": "string" }
+                },
+                "additionalProperties": false
+            }
+        }),
+        json!({
+            "name": "spec.uncheck",
+            "description": "Flip an AC's checked flag from true to false. Symmetric to spec.check.",
+            "inputSchema": {
+                "type": "object",
+                "required": ["id", "ac_id"],
+                "properties": {
+                    "id":    { "type": "string" },
+                    "ac_id": { "type": "string" }
+                },
+                "additionalProperties": false
+            }
+        }),
+        json!({
             "name": "task.open",
             "description": "Open a new task under a spec.",
             "inputSchema": {

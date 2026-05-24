@@ -1723,3 +1723,126 @@ fn audit_conformance_cli_wrapped_undotted_envelope() {
 // Helper visible to ensure the test binary depends on the CLI binary.
 #[allow(dead_code)]
 fn _binary_dep_anchor(_p: &Path) {}
+
+// ---------------------------------------------------------------------------
+// spec.acs / next-ac / blocking-gate / has-unchecked / check parity
+// (per spec 2026-05-24-port-acceptance-shim ac-07).
+// ---------------------------------------------------------------------------
+
+fn run_cli_json(root: &Path, args: &[&str]) -> std::process::Output {
+    let cli_bin = env!("CARGO_BIN_EXE_orbit");
+    let mut full_args: Vec<&str> = vec!["--root", root.to_str().unwrap(), "--json"];
+    full_args.extend(args);
+    Command::new(cli_bin)
+        .args(&full_args)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .output()
+        .expect("run cli")
+}
+
+#[test]
+fn spec_acs_cli_json_matches_canonical_envelope() {
+    let dir = tempfile::tempdir().unwrap();
+    common::populate_spec_acs_mixed_fixture(dir.path());
+    let output = run_cli_json(dir.path(), &["spec", "acs", "0010"]);
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert_eq!(
+        stdout.trim_end_matches('\n'),
+        common::expected_envelope_for_spec_acs_mixed()
+    );
+}
+
+#[test]
+fn spec_next_ac_cli_json_matches_canonical_envelope() {
+    let dir = tempfile::tempdir().unwrap();
+    common::populate_spec_acs_mixed_fixture(dir.path());
+    let output = run_cli_json(dir.path(), &["spec", "next-ac", "0010"]);
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert_eq!(
+        stdout.trim_end_matches('\n'),
+        common::expected_envelope_for_spec_next_ac_mixed()
+    );
+}
+
+#[test]
+fn spec_blocking_gate_cli_json_matches_canonical_envelope() {
+    let dir = tempfile::tempdir().unwrap();
+    common::populate_spec_acs_mixed_fixture(dir.path());
+    let output = run_cli_json(dir.path(), &["spec", "blocking-gate", "0010"]);
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert_eq!(
+        stdout.trim_end_matches('\n'),
+        common::expected_envelope_for_spec_blocking_gate_mixed()
+    );
+}
+
+#[test]
+fn spec_has_unchecked_cli_true_emits_envelope_and_exits_zero() {
+    let dir = tempfile::tempdir().unwrap();
+    common::populate_spec_acs_mixed_fixture(dir.path());
+    let output = run_cli_json(dir.path(), &["spec", "has-unchecked", "0010"]);
+    assert!(output.status.success(), "exit 0 = unchecked exists (shim parity)");
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert_eq!(
+        stdout.trim_end_matches('\n'),
+        common::expected_envelope_for_spec_has_unchecked_true()
+    );
+}
+
+#[test]
+fn spec_has_unchecked_cli_false_emits_envelope_and_exits_one() {
+    let dir = tempfile::tempdir().unwrap();
+    common::populate_spec_acs_all_checked_fixture(dir.path());
+    let output = run_cli_json(dir.path(), &["spec", "has-unchecked", "0011"]);
+    // Shim contract: exit 1 = no unchecked. Envelope is still ok-shaped.
+    assert_eq!(output.status.code(), Some(1));
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert_eq!(
+        stdout.trim_end_matches('\n'),
+        common::expected_envelope_for_spec_has_unchecked_false()
+    );
+}
+
+#[test]
+fn spec_check_cli_json_matches_canonical_envelope() {
+    let dir = tempfile::tempdir().unwrap();
+    common::populate_spec_acs_mixed_fixture(dir.path());
+    let output = run_cli_json(dir.path(), &["spec", "check", "0010", "ac-02"]);
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert_eq!(
+        stdout.trim_end_matches('\n'),
+        common::expected_envelope_for_spec_check_ac02()
+    );
+}
+
+#[test]
+fn spec_check_cli_missing_ac_returns_not_found() {
+    let dir = tempfile::tempdir().unwrap();
+    common::populate_spec_acs_mixed_fixture(dir.path());
+    let output = run_cli_json(dir.path(), &["spec", "check", "0010", "ac-99"]);
+    assert!(!output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert_eq!(
+        stdout.trim_end_matches('\n'),
+        common::expected_envelope_for_spec_check_missing()
+    );
+}
+
+#[test]
+fn spec_check_cli_already_checked_returns_conflict() {
+    let dir = tempfile::tempdir().unwrap();
+    common::populate_spec_acs_mixed_fixture(dir.path());
+    let output = run_cli_json(dir.path(), &["spec", "check", "0010", "ac-03"]);
+    assert!(!output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert_eq!(
+        stdout.trim_end_matches('\n'),
+        common::expected_envelope_for_spec_check_already_checked()
+    );
+}

@@ -10,31 +10,31 @@ acceptance_criteria:
 - id: ac-01
   description: '`orbit spec acs <id>` ships as a verb on the orbit spec family — for a fixture spec with mixed checked/unchecked + gated ACs, stdout is byte-equal to the shim''s `acs` subcommand (one tab-separated tuple per AC: `<ac-id>\t<status>\t<description>\t<is_gate>`, status is `[ ]` or `[x]`, is_gate is `0` or `1`). Empty acceptance_criteria → empty stdout exit 0. Missing spec id returns `Error::not_found` (same shape as `spec_show`)'
   gate: true
-  checked: false
+  checked: true
 - id: ac-02
   description: '`orbit spec next-ac <id>` ships — emits the first unchecked AC that is not blocked by an unchecked gate as `<ac-id>\t<is_gate>`; emits nothing and exits 0 when all checked or when blocked by a gate (matches shim contract)'
   gate: false
-  checked: false
+  checked: true
 - id: ac-03
   description: '`orbit spec blocking-gate <id>` ships — emits the first unchecked gate AC as `<ac-id>\t<description>`; emits nothing and exits 0 when no unchecked gate exists'
   gate: false
-  checked: false
+  checked: true
 - id: ac-04
   description: '`orbit spec has-unchecked <id>` ships — exit 0 if any AC is unchecked, exit 1 otherwise; no stdout (matches shim contract used by drive''s implement-loop termination check)'
   gate: false
-  checked: false
+  checked: true
 - id: ac-05
   description: '`orbit spec check <id> <ac-id>` ships as a first-class core verb (`spec_check` in `orbit-state/crates/core/src/verbs.rs`) — owns the read-mutate-write + idempotency logic that today lives in the CLI''s `--ac-check` flag (`crates/cli/src/main.rs:1037-1080`). Returns `Ok(())` on first check, `Error::not_found` for unknown AC, `Error::conflict` for already-checked AC. The CLI `--ac-check` flag re-routes through the new verb (preserved as sugar); `--ac-uncheck` ships a symmetric `spec_uncheck` core verb in the same change so MCP callers get both halves of the per-AC flip'
   gate: false
-  checked: false
+  checked: true
 - id: ac-06
   description: 'AC-traversal helpers split along their two predicates and do NOT force-share with `spec_close`. Gate-axis helpers (`next_unblocked`, `blocking_gate`) traverse on `gate: bool` and back AC-02 + AC-03 only; they are NOT shared with `spec_close`''s pre-flight, which traverses on `ac_type.blocks_close()` (a different, taxonomy-axis predicate per spec 2026-05-16-ac-taxonomy). Raw-axis helper `has_unchecked` over `!checked` backs AC-04 (drive''s implement-loop termination). The close-time pre-flight at `verbs.rs:1980-1990` keeps its existing `ac_type.blocks_close()` filter unchanged — no unifier helper, no shared-source claim, no behaviour change to close'
   gate: true
-  checked: false
+  checked: true
 - id: ac-07
   description: CLI/MCP parity tests added per existing precedent — `orbit-state/crates/cli/tests/parity.rs` and `orbit-state/crates/mcp/tests/parity.rs` each include byte-equal envelope assertions for the five new verbs against a shared fixture spec
   gate: true
-  checked: false
+  checked: true
 - id: ac-08
   description: '`plugins/orb/scripts/orbit-acceptance.sh` collapses to a thin compat wrapper that shells into the new verbs — preserves the existing CLI signature (subcommand + spec-id args, exit codes, stdout format) so any not-yet-rewritten call site keeps working through the migration window. AC-08''s wrapper step MAY be skipped (verbs ship + SKILL.md sites rewrite + shim deletes in one commit) at implementer discretion — AC-10''s invariant (no orphaned wrapper, no partial decommission) holds either way'
   gate: false

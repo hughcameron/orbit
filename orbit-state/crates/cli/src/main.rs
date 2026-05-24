@@ -39,10 +39,13 @@ use orbit_state_core::{
     SkillRecurrenceArgs, SkillRecurrenceResult,
     RoutineAuthorArgs, RoutineAuthorResult, RoutineChainsArgs, RoutineChainsResult,
     RoutineDetectArgs, RoutineDetectResult, RoutineVerifyArgs, RoutineVerifyResult,
-    SpecCloseArgs, SpecCloseResult, SpecCreateArgs,
-    SpecCreateResult, SpecListArgs, SpecListResult, SpecNoteArgs, SpecNoteResult,
+    SpecAcsArgs, SpecAcsResult, SpecBlockingGateArgs, SpecBlockingGateResult,
+    SpecCheckArgs, SpecCheckResult, SpecCloseArgs, SpecCloseResult, SpecCreateArgs,
+    SpecCreateResult, SpecHasUncheckedArgs, SpecListArgs,
+    SpecListResult, SpecNextAcArgs, SpecNextAcResult, SpecNoteArgs, SpecNoteResult,
     SpecResolveArgs, SpecResolveResult, SpecShowArgs,
-    SpecShowResult, SpecUpdateArgs, SpecUpdateResult, TaskClaimArgs, TaskDoneArgs,
+    SpecShowResult, SpecUncheckArgs, SpecUncheckResult, SpecUpdateArgs, SpecUpdateResult,
+    TaskClaimArgs, TaskDoneArgs,
     TaskEventResult, TaskListArgs, TaskListResult, TaskOpenArgs, TaskOpenResult, TaskReadyArgs,
     TaskShowArgs, TaskShowResult, TaskUpdateArgs, VerbRequest, VerbResponse,
 };
@@ -595,6 +598,58 @@ enum SpecAction {
         #[arg(long)]
         dry_run: bool,
     },
+    /// Emit the spec's acceptance_criteria as tab-separated tuples:
+    /// `<ac-id>\t<status>\t<description>\t<is_gate>` (one line per AC).
+    /// Native port of the `orbit-acceptance.sh acs` shim subcommand per
+    /// spec 2026-05-24-port-acceptance-shim.
+    Acs {
+        /// Spec identifier.
+        id: String,
+    },
+    /// Emit the first unchecked AC not blocked by an unchecked gate as
+    /// `<ac-id>\t<is_gate>` (one line). Empty stdout when all checked or
+    /// when a gate blocks. Native port of the `orbit-acceptance.sh next-ac`
+    /// shim subcommand per spec 2026-05-24-port-acceptance-shim.
+    NextAc {
+        /// Spec identifier.
+        id: String,
+    },
+    /// Emit the first unchecked gate AC as `<ac-id>\t<description>` (one
+    /// line). Empty stdout when no unchecked gate exists. Native port of
+    /// the `orbit-acceptance.sh blocking-gate` shim subcommand per spec
+    /// 2026-05-24-port-acceptance-shim.
+    BlockingGate {
+        /// Spec identifier.
+        id: String,
+    },
+    /// Exit 0 if any AC is unchecked, exit 1 otherwise. No stdout. Native
+    /// port of the `orbit-acceptance.sh has-unchecked` shim subcommand per
+    /// spec 2026-05-24-port-acceptance-shim — used by drive's implement-
+    /// loop termination check.
+    HasUnchecked {
+        /// Spec identifier.
+        id: String,
+    },
+    /// Flip an AC's `checked` flag from false to true. `Error::not_found`
+    /// for unknown AC, `Error::conflict` for already-checked AC. Native
+    /// port of the `orbit-acceptance.sh check` shim subcommand per spec
+    /// 2026-05-24-port-acceptance-shim. The existing `update --ac-check`
+    /// flag re-routes through this verb (preserved as sugar).
+    Check {
+        /// Spec identifier.
+        id: String,
+        /// AC identifier (e.g. `ac-05`).
+        ac_id: String,
+    },
+    /// Flip an AC's `checked` flag from true to false. Symmetric to
+    /// `check`; same error contract. The existing `update --ac-uncheck`
+    /// flag re-routes through this verb (preserved as sugar).
+    Uncheck {
+        /// Spec identifier.
+        id: String,
+        /// AC identifier (e.g. `ac-05`).
+        ac_id: String,
+    },
 }
 
 fn main() -> ExitCode {
@@ -659,6 +714,18 @@ fn main() -> ExitCode {
                 }
             } else {
                 render_human(&response);
+            }
+            // Special case: `spec has-unchecked` uses the exit code as the
+            // data channel (per spec 2026-05-24-port-acceptance-shim ac-04,
+            // matching the shim's contract drive's implement-loop relies on).
+            // Exit 0 = at least one AC unchecked; exit 1 = all checked. Applies
+            // in both --json and human modes — the contract is the contract.
+            if let VerbResponse::SpecHasUnchecked(r) = &response {
+                return if r.has_unchecked {
+                    ExitCode::SUCCESS
+                } else {
+                    ExitCode::FAILURE
+                };
             }
             ExitCode::SUCCESS
         }
@@ -993,7 +1060,7 @@ fn run_migrate_layout(layout: &OrbitLayout, dry_run: bool, json: bool) -> ExitCo
 /// layer's "two independent parsers, same dispatch" property still holds:
 /// the AC mutation lives entirely on the CLI side and emits a normal
 /// SpecUpdate request that MCP could equivalently produce.
-fn build_request(layout: &OrbitLayout, command: &Command) -> Result<VerbRequest, OrbitError> {
+fn build_request(_layout: &OrbitLayout, command: &Command) -> Result<VerbRequest, OrbitError> {
     Ok(match command {
         Command::Spec { action } => match action {
             SpecAction::List { status } => VerbRequest::SpecList(SpecListArgs {
@@ -1036,63 +1103,75 @@ fn build_request(layout: &OrbitLayout, command: &Command) -> Result<VerbRequest,
                 labels,
                 ac_check,
                 ac_uncheck,
-            } => {
-                let acceptance_criteria = match (ac_check.as_deref(), ac_uncheck.as_deref()) {
-                    (None, None) => None,
-                    (Some(_), Some(_)) => {
+            } => match (ac_check.as_deref(), ac_uncheck.as_deref()) {
+                (Some(_), Some(_)) => {
+                    return Err(OrbitError::malformed(
+                        "spec.update",
+                        "--ac-check and --ac-uncheck are mutually exclusive",
+                    ));
+                }
+                (Some(ac_id), None) => {
+                    if goal.is_some() || cards.is_some() || labels.is_some() {
                         return Err(OrbitError::malformed(
                             "spec.update",
-                            "--ac-check and --ac-uncheck are mutually exclusive",
+                            "--ac-check cannot be combined with --goal / --cards / --labels; \
+                             call them in separate invocations",
                         ));
                     }
-                    (target, uncheck_target) => {
-                        // Read current spec, flip the named AC, return the full list.
-                        let resp = execute(layout, &VerbRequest::SpecShow(SpecShowArgs {
-                            id: id.clone(),
-                        }))?;
-                        let VerbResponse::SpecShow(show) = resp else {
-                            return Err(OrbitError::malformed(
-                                "spec.update",
-                                "spec.show returned unexpected response",
-                            ));
-                        };
-                        let mut acs = show.spec.acceptance_criteria.clone();
-                        let (ac_id, want_checked) = match (target, uncheck_target) {
-                            (Some(a), None) => (a, true),
-                            (None, Some(a)) => (a, false),
-                            _ => unreachable!(),
-                        };
-                        let pos = acs.iter().position(|c| c.id == ac_id).ok_or_else(|| {
-                            OrbitError::not_found(
-                                "spec.update",
-                                format!("AC {ac_id} not found on spec {id}"),
-                            )
-                        })?;
-                        if acs[pos].checked == want_checked {
-                            let state = if want_checked { "checked" } else { "unchecked" };
-                            return Err(OrbitError::conflict(
-                                "spec.update",
-                                format!("AC {ac_id} is already {state}"),
-                            ));
-                        }
-                        acs[pos].checked = want_checked;
-                        Some(acs)
+                    // Sugar over the spec.check verb (per spec
+                    // 2026-05-24-port-acceptance-shim ac-05).
+                    VerbRequest::SpecCheck(SpecCheckArgs {
+                        id: id.clone(),
+                        ac_id: ac_id.into(),
+                    })
+                }
+                (None, Some(ac_id)) => {
+                    if goal.is_some() || cards.is_some() || labels.is_some() {
+                        return Err(OrbitError::malformed(
+                            "spec.update",
+                            "--ac-uncheck cannot be combined with --goal / --cards / --labels; \
+                             call them in separate invocations",
+                        ));
                     }
-                };
-                VerbRequest::SpecUpdate(SpecUpdateArgs {
+                    // Sugar over the spec.uncheck verb (per spec
+                    // 2026-05-24-port-acceptance-shim ac-05).
+                    VerbRequest::SpecUncheck(SpecUncheckArgs {
+                        id: id.clone(),
+                        ac_id: ac_id.into(),
+                    })
+                }
+                (None, None) => VerbRequest::SpecUpdate(SpecUpdateArgs {
                     id: id.clone(),
                     goal: goal.clone(),
                     cards: cards.clone(),
                     labels: labels.clone(),
-                    acceptance_criteria,
-                })
-            }
+                    acceptance_criteria: None,
+                }),
+            },
             SpecAction::Close { id, force } => {
                 VerbRequest::SpecClose(SpecCloseArgs { id: id.clone(), force: *force })
             }
             SpecAction::MigrateLayout { .. } => unreachable!(
                 "spec migrate-layout is short-circuited in main() before reaching build_request"
             ),
+            SpecAction::Acs { id } => VerbRequest::SpecAcs(SpecAcsArgs { id: id.clone() }),
+            SpecAction::NextAc { id } => {
+                VerbRequest::SpecNextAc(SpecNextAcArgs { id: id.clone() })
+            }
+            SpecAction::BlockingGate { id } => {
+                VerbRequest::SpecBlockingGate(SpecBlockingGateArgs { id: id.clone() })
+            }
+            SpecAction::HasUnchecked { id } => {
+                VerbRequest::SpecHasUnchecked(SpecHasUncheckedArgs { id: id.clone() })
+            }
+            SpecAction::Check { id, ac_id } => VerbRequest::SpecCheck(SpecCheckArgs {
+                id: id.clone(),
+                ac_id: ac_id.clone(),
+            }),
+            SpecAction::Uncheck { id, ac_id } => VerbRequest::SpecUncheck(SpecUncheckArgs {
+                id: id.clone(),
+                ac_id: ac_id.clone(),
+            }),
         },
         Command::Task { action } => match action {
             TaskAction::Open {
@@ -1353,6 +1432,14 @@ fn render_human(response: &VerbResponse) {
         VerbResponse::SpecCreate(result) => render_spec_create(result),
         VerbResponse::SpecUpdate(result) => render_spec_update(result),
         VerbResponse::SpecClose(result) => render_spec_close(result),
+        VerbResponse::SpecAcs(result) => render_spec_acs(result),
+        VerbResponse::SpecNextAc(result) => render_spec_next_ac(result),
+        VerbResponse::SpecBlockingGate(result) => render_spec_blocking_gate(result),
+        VerbResponse::SpecHasUnchecked(_) => {
+            // has-unchecked's signal is exit code (handled in main()); no stdout.
+        }
+        VerbResponse::SpecCheck(result) => render_spec_check(result),
+        VerbResponse::SpecUncheck(result) => render_spec_uncheck(result),
         VerbResponse::TaskOpen(result) => render_task_open(result),
         VerbResponse::TaskList(result) | VerbResponse::TaskReady(result) => {
             render_task_list(result)
@@ -1970,6 +2057,45 @@ fn render_spec_close(result: &SpecCloseResult) {
     if !result.cards_updated.is_empty() {
         println!("cards updated: {}", result.cards_updated.join(", "));
     }
+}
+
+/// Render `spec.acs` output as one tab-separated tuple per AC, byte-equal
+/// to the shim's `acs` subcommand (per spec 2026-05-24-port-acceptance-shim
+/// ac-01). Empty acceptance_criteria → no stdout. Format:
+/// `<ac-id>\t<status>\t<description>\t<is_gate>` where status is `[ ]` or
+/// `[x]` and is_gate is `0` or `1`.
+fn render_spec_acs(result: &SpecAcsResult) {
+    for ac in &result.acs {
+        let status = if ac.checked { "[x]" } else { "[ ]" };
+        let is_gate = if ac.gate { "1" } else { "0" };
+        println!("{}\t{}\t{}\t{}", ac.id, status, ac.description.trim(), is_gate);
+    }
+}
+
+/// Render `spec.next-ac` as `<ac-id>\t<is_gate>` or empty stdout when no
+/// AC is available (all checked, or blocked by an unchecked gate of a
+/// different id).
+fn render_spec_next_ac(result: &SpecNextAcResult) {
+    if let Some(next) = &result.next {
+        let is_gate = if next.gate { "1" } else { "0" };
+        println!("{}\t{}", next.id, is_gate);
+    }
+}
+
+/// Render `spec.blocking-gate` as `<ac-id>\t<description>` or empty stdout
+/// when no unchecked gate exists.
+fn render_spec_blocking_gate(result: &SpecBlockingGateResult) {
+    if let Some(b) = &result.blocking {
+        println!("{}\t{}", b.id, b.description.trim());
+    }
+}
+
+fn render_spec_check(result: &SpecCheckResult) {
+    println!("checked spec {}", result.spec.id);
+}
+
+fn render_spec_uncheck(result: &SpecUncheckResult) {
+    println!("unchecked spec {}", result.spec.id);
 }
 
 fn render_spec_list(result: &SpecListResult) {

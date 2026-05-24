@@ -74,6 +74,18 @@ pub enum VerbRequest {
     SpecUpdate(SpecUpdateArgs),
     #[serde(rename = "spec.close")]
     SpecClose(SpecCloseArgs),
+    #[serde(rename = "spec.acs")]
+    SpecAcs(SpecAcsArgs),
+    #[serde(rename = "spec.next-ac")]
+    SpecNextAc(SpecNextAcArgs),
+    #[serde(rename = "spec.blocking-gate")]
+    SpecBlockingGate(SpecBlockingGateArgs),
+    #[serde(rename = "spec.has-unchecked")]
+    SpecHasUnchecked(SpecHasUncheckedArgs),
+    #[serde(rename = "spec.check")]
+    SpecCheck(SpecCheckArgs),
+    #[serde(rename = "spec.uncheck")]
+    SpecUncheck(SpecUncheckArgs),
     #[serde(rename = "task.open")]
     TaskOpen(TaskOpenArgs),
     #[serde(rename = "task.list")]
@@ -263,6 +275,65 @@ pub struct SpecCloseArgs {
     /// so the audit trail is preserved in the structured response.
     #[serde(default)]
     pub force: bool,
+}
+
+// ----------------------------------------------------------------------------
+// Spec acceptance-criterion verbs (per spec 2026-05-24-port-acceptance-shim).
+// Port of plugins/orb/scripts/orbit-acceptance.sh into native verbs on the
+// `spec` family — `spec.acs`, `spec.next-ac`, `spec.blocking-gate`,
+// `spec.has-unchecked` are read-only; `spec.check` / `spec.uncheck` mutate
+// an AC's `checked` flag with idempotency.
+// ----------------------------------------------------------------------------
+
+/// Args for `spec.acs` — return the full acceptance_criteria list for a spec.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct SpecAcsArgs {
+    pub id: String,
+}
+
+/// Args for `spec.next-ac` — return the first unchecked AC that is not
+/// blocked by an unchecked gate. Gate-axis traversal (per ac-06 of spec
+/// 2026-05-24-port-acceptance-shim).
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct SpecNextAcArgs {
+    pub id: String,
+}
+
+/// Args for `spec.blocking-gate` — return the first unchecked gate AC, if any.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct SpecBlockingGateArgs {
+    pub id: String,
+}
+
+/// Args for `spec.has-unchecked` — true if any AC is unchecked. Raw-axis
+/// (`!checked`) traversal, distinct from `spec.close`'s taxonomy-axis
+/// pre-flight per ac-06 of spec 2026-05-24-port-acceptance-shim.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct SpecHasUncheckedArgs {
+    pub id: String,
+}
+
+/// Args for `spec.check` — flip an AC's `checked` flag from false to true.
+/// Errors on missing AC (`Error::not_found`) or already-checked AC
+/// (`Error::conflict`). The CLI `--ac-check` flag is preserved as sugar.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct SpecCheckArgs {
+    pub id: String,
+    pub ac_id: String,
+}
+
+/// Args for `spec.uncheck` — flip an AC's `checked` flag from true to false.
+/// Symmetric to `spec.check`; same error contract.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct SpecUncheckArgs {
+    pub id: String,
+    pub ac_id: String,
 }
 
 // ----------------------------------------------------------------------------
@@ -795,6 +866,18 @@ pub enum VerbResponse {
     SpecUpdate(SpecUpdateResult),
     #[serde(rename = "spec.close")]
     SpecClose(SpecCloseResult),
+    #[serde(rename = "spec.acs")]
+    SpecAcs(SpecAcsResult),
+    #[serde(rename = "spec.next-ac")]
+    SpecNextAc(SpecNextAcResult),
+    #[serde(rename = "spec.blocking-gate")]
+    SpecBlockingGate(SpecBlockingGateResult),
+    #[serde(rename = "spec.has-unchecked")]
+    SpecHasUnchecked(SpecHasUncheckedResult),
+    #[serde(rename = "spec.check")]
+    SpecCheck(SpecCheckResult),
+    #[serde(rename = "spec.uncheck")]
+    SpecUncheck(SpecUncheckResult),
     #[serde(rename = "task.open")]
     TaskOpen(TaskOpenResult),
     #[serde(rename = "task.list")]
@@ -999,6 +1082,64 @@ pub struct SpecCloseResult {
     /// matches exist. Per spec 2026-05-18-topology-substrate-wires ac-03.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub topology_warnings: Vec<TopologyDriftEntry>,
+}
+
+// ----------------------------------------------------------------------------
+// Spec acceptance-criterion verb results (per spec 2026-05-24-port-acceptance-shim).
+// ----------------------------------------------------------------------------
+
+/// Result for `spec.acs` — the full acceptance_criteria list.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct SpecAcsResult {
+    pub acs: Vec<AcceptanceCriterion>,
+}
+
+/// Pointer to the first unchecked AC not blocked by an unchecked gate.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct NextAc {
+    pub id: String,
+    pub gate: bool,
+}
+
+/// Result for `spec.next-ac` — `None` when all checked or when the first
+/// unchecked is preceded by an unchecked gate of a different id.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct SpecNextAcResult {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub next: Option<NextAc>,
+}
+
+/// Pointer to the first unchecked gate AC.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct BlockingGate {
+    pub id: String,
+    pub description: String,
+}
+
+/// Result for `spec.blocking-gate` — `None` when no unchecked gate exists.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct SpecBlockingGateResult {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub blocking: Option<BlockingGate>,
+}
+
+/// Result for `spec.has-unchecked` — true if any AC is unchecked.
+/// Raw-axis (`!checked`) traversal per ac-06 of spec 2026-05-24-port-acceptance-shim.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct SpecHasUncheckedResult {
+    pub has_unchecked: bool,
+}
+
+/// Result for `spec.check` — the spec post-flip.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct SpecCheckResult {
+    pub spec: Spec,
+}
+
+/// Result for `spec.uncheck` — the spec post-flip.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct SpecUncheckResult {
+    pub spec: Spec,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -1607,6 +1748,18 @@ pub fn execute(layout: &OrbitLayout, request: &VerbRequest) -> Result<VerbRespon
         VerbRequest::SpecCreate(args) => spec_create(layout, args).map(VerbResponse::SpecCreate),
         VerbRequest::SpecUpdate(args) => spec_update(layout, args).map(VerbResponse::SpecUpdate),
         VerbRequest::SpecClose(args) => spec_close(layout, args).map(VerbResponse::SpecClose),
+        VerbRequest::SpecAcs(args) => spec_acs(layout, args).map(VerbResponse::SpecAcs),
+        VerbRequest::SpecNextAc(args) => spec_next_ac(layout, args).map(VerbResponse::SpecNextAc),
+        VerbRequest::SpecBlockingGate(args) => {
+            spec_blocking_gate(layout, args).map(VerbResponse::SpecBlockingGate)
+        }
+        VerbRequest::SpecHasUnchecked(args) => {
+            spec_has_unchecked(layout, args).map(VerbResponse::SpecHasUnchecked)
+        }
+        VerbRequest::SpecCheck(args) => spec_check(layout, args).map(VerbResponse::SpecCheck),
+        VerbRequest::SpecUncheck(args) => {
+            spec_uncheck(layout, args).map(VerbResponse::SpecUncheck)
+        }
         VerbRequest::TaskOpen(args) => task_open(layout, args).map(VerbResponse::TaskOpen),
         VerbRequest::TaskList(args) => task_list(layout, args).map(VerbResponse::TaskList),
         VerbRequest::TaskShow(args) => task_show(layout, args).map(VerbResponse::TaskShow),
@@ -2370,6 +2523,209 @@ fn resolve_numeric_slug(verb: &str, dir: &Path, query: &str) -> Result<Option<St
             ))
         }
     }
+}
+
+// ============================================================================
+// Spec acceptance-criterion verbs (per spec 2026-05-24-port-acceptance-shim).
+// Ported from the deprecated plugins/orb/scripts/orbit-acceptance.sh shim:
+// `spec.acs`, `spec.next-ac`, `spec.blocking-gate`, `spec.has-unchecked` are
+// read-only; `spec.check` / `spec.uncheck` flip an AC's `checked` flag with
+// idempotency.
+//
+// Per ac-06: traversal helpers split along their two predicates and do NOT
+// force-share with `spec_close`. Gate-axis helpers back `spec.next-ac` and
+// `spec.blocking-gate`; the raw-axis helper backs `spec.has-unchecked`
+// (drive's implement-loop termination). The taxonomy-axis pre-flight inside
+// `spec_close` (over `ac_type.blocks_close()`) is unchanged.
+// ============================================================================
+
+/// Gate-axis: first unchecked AC not preceded by an unchecked gate. Returns
+/// `None` when all checked or when a gate precedes every unchecked AC of a
+/// different id. Per ac-06 of spec 2026-05-24-port-acceptance-shim.
+pub(crate) fn next_unblocked(acs: &[AcceptanceCriterion]) -> Option<&AcceptanceCriterion> {
+    let mut blocked = false;
+    for ac in acs {
+        if !ac.checked && !blocked {
+            return Some(ac);
+        }
+        if ac.gate && !ac.checked {
+            blocked = true;
+        }
+    }
+    None
+}
+
+/// Gate-axis: first unchecked gate AC, if any. Per ac-06 of spec
+/// 2026-05-24-port-acceptance-shim.
+pub(crate) fn first_blocking_gate(acs: &[AcceptanceCriterion]) -> Option<&AcceptanceCriterion> {
+    acs.iter().find(|ac| !ac.checked && ac.gate)
+}
+
+/// Raw-axis: true if any AC is unchecked. Distinct from `spec_close`'s
+/// taxonomy-axis pre-flight (which filters on `ac_type.blocks_close()`).
+/// Per ac-06 of spec 2026-05-24-port-acceptance-shim.
+pub(crate) fn any_unchecked(acs: &[AcceptanceCriterion]) -> bool {
+    acs.iter().any(|ac| !ac.checked)
+}
+
+/// `spec.acs` — return the full acceptance_criteria list for a spec.
+fn spec_acs(layout: &OrbitLayout, args: &SpecAcsArgs) -> Result<SpecAcsResult> {
+    const VERB: &str = "spec.acs";
+    let spec = load_spec_for_ac_verb(layout, VERB, &args.id)?;
+    Ok(SpecAcsResult {
+        acs: spec.acceptance_criteria,
+    })
+}
+
+/// `spec.next-ac` — first unchecked AC not blocked by an unchecked gate.
+fn spec_next_ac(layout: &OrbitLayout, args: &SpecNextAcArgs) -> Result<SpecNextAcResult> {
+    const VERB: &str = "spec.next-ac";
+    let spec = load_spec_for_ac_verb(layout, VERB, &args.id)?;
+    Ok(SpecNextAcResult {
+        next: next_unblocked(&spec.acceptance_criteria).map(|ac| NextAc {
+            id: ac.id.clone(),
+            gate: ac.gate,
+        }),
+    })
+}
+
+/// `spec.blocking-gate` — first unchecked gate AC.
+fn spec_blocking_gate(
+    layout: &OrbitLayout,
+    args: &SpecBlockingGateArgs,
+) -> Result<SpecBlockingGateResult> {
+    const VERB: &str = "spec.blocking-gate";
+    let spec = load_spec_for_ac_verb(layout, VERB, &args.id)?;
+    Ok(SpecBlockingGateResult {
+        blocking: first_blocking_gate(&spec.acceptance_criteria).map(|ac| BlockingGate {
+            id: ac.id.clone(),
+            description: ac.description.clone(),
+        }),
+    })
+}
+
+/// `spec.has-unchecked` — true if any AC is unchecked.
+fn spec_has_unchecked(
+    layout: &OrbitLayout,
+    args: &SpecHasUncheckedArgs,
+) -> Result<SpecHasUncheckedResult> {
+    const VERB: &str = "spec.has-unchecked";
+    let spec = load_spec_for_ac_verb(layout, VERB, &args.id)?;
+    Ok(SpecHasUncheckedResult {
+        has_unchecked: any_unchecked(&spec.acceptance_criteria),
+    })
+}
+
+/// `spec.check` — flip an AC's `checked` flag from false to true.
+fn spec_check(layout: &OrbitLayout, args: &SpecCheckArgs) -> Result<SpecCheckResult> {
+    const VERB: &str = "spec.check";
+    let spec = flip_ac_checked(layout, VERB, &args.id, &args.ac_id, true)?;
+    Ok(SpecCheckResult { spec })
+}
+
+/// `spec.uncheck` — flip an AC's `checked` flag from true to false.
+fn spec_uncheck(layout: &OrbitLayout, args: &SpecUncheckArgs) -> Result<SpecUncheckResult> {
+    const VERB: &str = "spec.uncheck";
+    let spec = flip_ac_checked(layout, VERB, &args.id, &args.ac_id, false)?;
+    Ok(SpecUncheckResult { spec })
+}
+
+/// Shared loader for the four read-only AC verbs — same id validation +
+/// not-found shape as `spec.show`, returns the parsed Spec.
+fn load_spec_for_ac_verb(layout: &OrbitLayout, verb: &'static str, id: &str) -> Result<Spec> {
+    if id.is_empty() {
+        return Err(Error::malformed(verb, "id must not be empty"));
+    }
+    if id.contains('/') || id.contains('\\') || id.contains("..") {
+        return Err(Error::malformed(
+            verb,
+            format!("id must not contain path separators or '..': '{id}'"),
+        ));
+    }
+    let path = layout.spec_file(id);
+    if !path.exists() {
+        return Err(Error::not_found(
+            verb,
+            format!("no spec at {}", path.display()),
+        ));
+    }
+    let text = std::fs::read_to_string(&path)
+        .map_err(|e| Error::unavailable(verb, format!("read {}: {e}", path.display())))?;
+    parse_yaml::<Spec>(&text).map_err(|mut e| {
+        e.verb = verb.into();
+        e
+    })
+}
+
+/// Shared mutator for `spec.check` / `spec.uncheck` — acquires the spec
+/// lock, reads, validates the AC exists, errors on already-in-target-state,
+/// flips, writes atomically. Returns the post-write Spec.
+fn flip_ac_checked(
+    layout: &OrbitLayout,
+    verb: &'static str,
+    spec_id: &str,
+    ac_id: &str,
+    want_checked: bool,
+) -> Result<Spec> {
+    if spec_id.is_empty() {
+        return Err(Error::malformed(verb, "id must not be empty"));
+    }
+    if spec_id.contains('/') || spec_id.contains('\\') || spec_id.contains("..") {
+        return Err(Error::malformed(
+            verb,
+            format!("id must not contain path separators or '..': '{spec_id}'"),
+        ));
+    }
+    if ac_id.is_empty() {
+        return Err(Error::malformed(verb, "ac_id must not be empty"));
+    }
+
+    let lock_key = format!("spec-{spec_id}");
+    let _guard = locks::acquire_default(layout, &lock_key).map_err(|mut e| {
+        e.verb = verb.into();
+        e
+    })?;
+
+    let path = layout.spec_file(spec_id);
+    if !path.exists() {
+        return Err(Error::not_found(
+            verb,
+            format!("no spec at {}", path.display()),
+        ));
+    }
+    let text = std::fs::read_to_string(&path)
+        .map_err(|e| Error::unavailable(verb, format!("read {}: {e}", path.display())))?;
+    let mut spec: Spec = parse_yaml(&text).map_err(|mut e| {
+        e.verb = verb.into();
+        e
+    })?;
+
+    let pos = spec
+        .acceptance_criteria
+        .iter()
+        .position(|ac| ac.id == ac_id)
+        .ok_or_else(|| {
+            Error::not_found(verb, format!("AC {ac_id} not found on spec {spec_id}"))
+        })?;
+    if spec.acceptance_criteria[pos].checked == want_checked {
+        let state = if want_checked { "checked" } else { "unchecked" };
+        return Err(Error::conflict(
+            verb,
+            format!("AC {ac_id} is already {state}"),
+        ));
+    }
+    spec.acceptance_criteria[pos].checked = want_checked;
+
+    let yaml = serialise_yaml(&spec).map_err(|mut e| {
+        e.verb = verb.into();
+        e
+    })?;
+    write_atomic(&path, yaml.as_bytes()).map_err(|mut e| {
+        e.verb = verb.into();
+        e
+    })?;
+
+    Ok(spec)
 }
 
 // ============================================================================
