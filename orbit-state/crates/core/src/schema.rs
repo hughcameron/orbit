@@ -146,7 +146,7 @@ impl Relation {
 }
 
 impl Config {
-    pub const FIELDS: &'static [&'static str] = &["docs", "plugin_version"];
+    pub const FIELDS: &'static [&'static str] = &["docs", "plugin_version", "plugin_repo"];
 }
 
 impl DocsConfig {
@@ -632,6 +632,15 @@ pub struct Config {
     /// release contract).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub plugin_version: Option<String>,
+    /// Marks this repo as the orbit-plugin source repo itself. When `Some(true)`,
+    /// `/orb:setup`'s topology-scaffolding step seeds the 5 substrate-typed entries
+    /// (`cards`, `choices`, `memories`, `specs-substrate`, `topology`) that describe
+    /// orbit's own substrate types. When `None` or `Some(false)`, setup scaffolds an
+    /// empty `.orbit/topology/` directory with a README pointing at `/orb:topology` —
+    /// the substrate-typed seeds are a category error for any project that isn't the
+    /// orbit-plugin source. Per spec 2026-05-24-setup-is-orbit-state-aware ac-12.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub plugin_repo: Option<bool>,
 }
 
 /// Documentation-surface inner config. Per spec

@@ -1,6 +1,6 @@
 ---
 name: setup
-description: Set up a project for the orbit workflow — creates orbit/ directory with artefact subdirs on greenfield, or interactively migrates bare-layout repos to the orbit/ folder on brownfield
+description: Set up a project for the orbit workflow — creates .orbit/ directory with artefact subdirs on greenfield, or interactively migrates bare-layout or wrapped-undotted repos to the .orbit/ folder on brownfield
 ---
 
 # /orb:setup
@@ -19,31 +19,36 @@ Workflow artefacts live under a single top-level `orbit/` folder — `.orbit/car
 
 ### 1. Detect the Repo State
 
-Before creating or moving anything, classify the repo into one of four mutually exclusive states by inspecting the working tree at the project root:
+Before creating or moving anything, classify the repo into one of six mutually exclusive states by inspecting the working tree at the project root:
 
 | State | Condition | Action |
 |-------|-----------|--------|
-| **greenfield** | `orbit/` absent AND none of bare `cards/`, `specs/`, `decisions/`, `discovery/` present | Create `orbit/` fresh → §2 |
-| **idempotent** | `orbit/` present AND none of bare `cards/`, `specs/`, `decisions/`, `discovery/` present | No-op → §5 |
-| **brownfield** | `orbit/` absent AND any of bare `cards/`, `specs/`, `decisions/`, `discovery/` present | Prompt → migrate or abort → §3 |
-| **mixed** | `orbit/` present AND any of bare `cards/`, `specs/`, `decisions/`, `discovery/` also present | Refuse → §4 |
+| **greenfield** | none of `.orbit/`, `orbit/`, or bare `cards/`/`specs/`/`decisions/`/`discovery/` present | Create `.orbit/` fresh → §2 |
+| **idempotent** | `.orbit/` present AND neither `orbit/` nor any bare artefact dir present | No-op → §5 |
+| **brownfield-bare** | bare `cards/`/`specs/`/`decisions/`/`discovery/` present AND neither `.orbit/` nor `orbit/` present | Prompt → migrate or abort → §3 |
+| **wrapped-undotted** | `orbit/` present (wrapped substrate from a pre-`.orbit/` plugin version) AND `.orbit/` absent AND no bare dirs | Prompt → single-rename `git mv orbit .orbit` → §3 |
+| **mixed-bare** | `.orbit/` present AND any bare artefact dir present at root | Refuse → §4 |
+| **mixed-undotted** | `.orbit/` present AND `orbit/` present | Refuse → §4 |
 
-These four states cover the 2×2 of (orbit/ present?) × (any bare artefact dir present?). There is no other state.
+These six states cover all reachable combinations of the three independent axes (`.orbit/` present?, `orbit/` present?, any bare artefact dir present?). Conditions are non-overlapping; the union is exhaustive. There is no other state.
 
-### 2. Greenfield: Create Fresh `orbit/`
+The classifier helper lives in `orbit-state` as a shared Rust function (see `orbit-state/crates/core/src/verbs.rs::classify_substrate_layout`); the setup skill and the conformance audit's `undotted_substrate_finding` (per spec 2026-05-24-workflow-conformance) call the same predicate.
 
-Create the following directories (skip any that already exist within `orbit/`):
+### 2. Greenfield: Create Fresh `.orbit/`
+
+Create the following directories (skip any that already exist within `.orbit/`):
 
 ```
-orbit/
+.orbit/
   cards/      # Feature cards — who needs what and why
   specs/      # Specifications, interviews, reviews, progress
-  decisions/  # MADR decision records
+  choices/    # MADR decision records (YAML — was `decisions/` pre-canonical)
+  memos/      # Rough ideas awaiting distillation
 ```
 
 Do **not** create `.orbit/discovery/` at setup time. It is created ad-hoc the first time `/orb:discovery` runs. Setup detects it during brownfield migration but never creates it eagerly.
 
-Then proceed to §6 (CLAUDE.md snippet) and §7 (first card tutorial).
+Then proceed to §6 (canonical files + topology) and §7 (first card tutorial). Topology scaffolding follows the plugin_repo gate (§6d).
 
 ### 3. Brownfield: Interactive All-or-Nothing Migration
 
