@@ -2,7 +2,7 @@ id: 2026-05-24-brownfield-spec-migration
 goal: a project with N legacy spec.yaml files reaches `orbit verify` clean in one verb invocation; unknown fields are mapped onto canonical equivalents, dropped with a recorded migration disposition, or quarantined into a sidecar so semantic content isn't silently lost; the canonical strict-parse invariant (ac-01) is preserved unchanged
 cards:
 - 0032-brownfield-spec-migration
-status: open
+status: closed
 labels: []
 acceptance_criteria:
 - id: ac-01
