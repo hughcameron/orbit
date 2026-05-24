@@ -43,7 +43,7 @@ relations:
 - card: 0020-orbit-state
   type: depends-on
   reason: brew-installable is meaningful only because the orbit-state binary is what's being shipped; the substrate (0020) is the artefact, distribution is the channel
-- card: 0017-setup-is-bead-aware
+- card: 0017-setup-is-orbit-state-aware
   type: feeds
   reason: /setup assumes orbit is on PATH; brew-installable removes the silent precondition
 references:

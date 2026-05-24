@@ -50,7 +50,7 @@ specs:
 - .orbit/specs/2026-05-19-workflow-conformance/spec.yaml
 - .orbit/specs/2026-05-20-conformance-park-signal/spec.yaml
 relations:
-- card: 0017-setup-is-bead-aware
+- card: 0017-setup-is-orbit-state-aware
   type: depends-on
   reason: /orb:setup §6b's byte-compare-and-prompt voice (METHOD.md) and §6d's topology scaffolding establish the seed pattern for plugin-canonical handling; conformance generalises and aggregates these alongside substrate-state checks
 - card: 0040-documentation-topology

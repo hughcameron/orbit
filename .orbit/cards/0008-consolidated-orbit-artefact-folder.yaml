@@ -49,7 +49,7 @@ relations:
 - card: 0020-orbit-state
   type: depends-on
   reason: the substrate for the .orbit/ layout is orbit-state; without it, the folder is just convention
-- card: 0017-setup-is-bead-aware
+- card: 0017-setup-is-orbit-state-aware
   type: feeds
   reason: setup creates the .orbit/ structure as part of its bootstrap
 references:
