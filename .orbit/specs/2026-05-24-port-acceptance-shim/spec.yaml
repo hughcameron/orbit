@@ -4,7 +4,7 @@ cards:
 - 0005-drive
 - 0003-implement
 - 0020-orbit-state
-status: open
+status: closed
 labels: []
 acceptance_criteria:
 - id: ac-01

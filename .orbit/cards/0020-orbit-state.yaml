@@ -41,7 +41,8 @@ scenarios:
   when: I inspect .orbit/
   then: cards, choices, specs, memories, memos are tracked; state.db, schema-version, locks/ are gitignored — canonical files travel with git, derived index does not
   gate: false
-specs: []
+specs:
+- .orbit/specs/2026-05-24-port-acceptance-shim/spec.yaml
 relations:
 - card: 0018-two-artefact-contract
   type: feeds

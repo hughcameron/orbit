@@ -64,6 +64,7 @@ scenarios:
 specs:
 - .orbit/archive/specs/2026-04-04-implement/spec.yaml
 - .orbit/archive/specs/2026-04-20-implement-session-visibility/spec.yaml
+- .orbit/specs/2026-05-24-port-acceptance-shim/spec.yaml
 relations: []
 references:
 - 'Prior incident: agent treated codebase as ground truth, missed spec-prescribed entrypoint pattern'
