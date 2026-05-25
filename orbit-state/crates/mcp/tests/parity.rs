@@ -954,3 +954,53 @@ fn spec_check_mcp_missing_ac_returns_not_found() {
     let envelope = inner_envelope_text(&inner);
     assert_eq!(envelope, common::expected_envelope_for_spec_check_missing());
 }
+
+// ---------------------------------------------------------------------------
+// spec.promote parity (per spec 2026-05-25-port-promote-sh ac-06).
+// ---------------------------------------------------------------------------
+
+#[test]
+fn spec_promote_mcp_envelope_matches_canonical_envelope() {
+    let dir = tempfile::tempdir().unwrap();
+    common::populate_promote_card_fixture(dir.path());
+    let inner = run_mcp_tools_call(
+        dir.path(),
+        json!({
+            "name": "spec.promote",
+            "arguments": {
+                "card_path": ".orbit/cards/0050-promote-fixture.yaml",
+                "today": common::PROMOTE_FIXTURE_TODAY,
+            }
+        }),
+    );
+    let envelope = inner_envelope_text(&inner);
+    assert_eq!(envelope, common::expected_envelope_for_spec_promote_fixture());
+}
+
+#[test]
+fn spec_promote_mcp_dry_run_envelope_matches_and_writes_nothing() {
+    let dir = tempfile::tempdir().unwrap();
+    common::populate_promote_card_fixture(dir.path());
+    let inner = run_mcp_tools_call(
+        dir.path(),
+        json!({
+            "name": "spec.promote",
+            "arguments": {
+                "card_path": ".orbit/cards/0050-promote-fixture.yaml",
+                "dry_run": true,
+                "today": common::PROMOTE_FIXTURE_TODAY,
+            }
+        }),
+    );
+    let envelope = inner_envelope_text(&inner);
+    assert_eq!(
+        envelope,
+        common::expected_envelope_for_spec_promote_fixture_dry_run()
+    );
+    // No spec file written.
+    let spec_file = dir.path().join(format!(
+        ".orbit/specs/{}-promote-fixture/spec.yaml",
+        common::PROMOTE_FIXTURE_TODAY
+    ));
+    assert!(!spec_file.exists(), "dry-run must NOT write the spec file");
+}

@@ -107,10 +107,10 @@ in three branches:
 Promote replaces the old Design + Spec stages.
 
 ```bash
-SPEC_ID=$(plugins/orb/scripts/promote.sh "<card_path>")
+SPEC_ID=$(orbit spec promote "<card_path>")
 ```
 
-`promote.sh` materialises a spec at `.orbit/specs/<spec-id>/spec.yaml` (flat
+`orbit spec promote` materialises a spec at `.orbit/specs/<spec-id>/spec.yaml` (flat
 sidecar layout — orbit-state v0.1) seeded from the card's scenarios as
 ACs. The returned `SPEC_ID` is the spec's id.
 
@@ -732,7 +732,7 @@ synthetic BLOCK) or was rejected at a supervised gate.
 
 4. **Promote a new iteration spec:**
    ```bash
-   NEW_SPEC=$(plugins/orb/scripts/promote.sh "<card_path>")
+   NEW_SPEC=$(orbit spec promote "<card_path>")
    ```
 
 5. **Inject the cumulative constraint history into the new spec's

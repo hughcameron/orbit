@@ -2,6 +2,35 @@
 
 All notable changes to orbit are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.4.35] - 2026-05-25
+
+Ports `plugins/orb/scripts/promote.sh` — a 197-line python3-in-bash shim that derived a spec id from a card filename and fanned the card's scenarios into a fresh spec's `acceptance_criteria` — into a single native verb `orbit spec promote` on the `orbit spec` family. Second opportunistic migration under choice 0020 (orbit-acceptance.sh shipped as 0.4.34 yesterday).
+
+### Added
+
+- **`spec.promote <card-path>` verb** — turns a card into a spec server-side. Reads the card, derives the spec id as `<today-iso>-<slug-without-NNNN>`, creates the spec with the card's goal and `cards: [<card.id>]`, materialises one AC per scenario (preserving `gate: bool`, seeding `checked: false`). Errors `Error::not_found` for missing card path, `Error::malformed` for empty goal / no scenarios / path-outside-project-root, `Error::conflict` for derived spec id already on disk.
+- **`--dry-run` flag** (also exposed as `dry_run: bool` on `SpecPromoteArgs` so MCP callers get the same preview surface) — computes the planned spec and returns the envelope without writing. The dry-run path succeeds even when the target spec already exists.
+- **`--today <YYYY-MM-DD>` flag** (also exposed as `today: Option<String>`) — overrides the date used in the derived spec id. Production callers omit this; the substrate reads UTC. Test-only knob so parity tests are byte-deterministic.
+- **Bare-spec-id stdout in default mode** — preserves drive's `SPEC_ID=$(orbit spec promote <card-path>)` shell-capture shape verbatim. `--json` mode emits the full envelope.
+- **CLI + MCP parity tests** — six new test cases (CLI: baseline, dry-run no-side-effect with layout-snapshot assertion, dry-run on existing target, bare-stdout assertion; MCP: baseline + dry-run mirrors) using a shared 3-scenario fixture card with mixed `gate` flags.
+
+### Changed
+
+- **Card-path validation uses canonicalise + containment** (not literal `..` substring match) so symlinks pointing outside the project root are rejected too. The verb resolves paths relative to the project root (parent of `.orbit/`), so call sites like `orbit spec promote .orbit/cards/0001-memos.yaml` work from any cwd.
+- **SKILL.md rewrites across all promote.sh consumers** — six call sites in `plugins/orb/skills/{drive,rally,card}/SKILL.md` rewritten from `plugins/orb/scripts/promote.sh <args>` to `orbit spec promote <args>`. AC-08's grep gate (`rg --no-heading 'promote\.sh' plugins/orb/skills/` returns zero) passes.
+- **Choice 0020's "in-scope migration candidates" table** updated — the `promote.sh` row marked migrated with this spec id cited. Only `setup-method.sh` remains as a named candidate; `code-investigate-mark.sh` still awaits its discrimination `/orb:choice`.
+
+### Removed
+
+- **`plugins/orb/scripts/promote.sh`** (197 lines) — the shim. Deleted same-commit as the last SKILL.md call-site rewrite per AC-09's no-orphaned-wrapper invariant.
+- **`plugins/orb/scripts/tests/test-promote-gate-propagation.sh`** — the shim's dedicated test. Coverage moves to the Rust parity suite per choice 0020's test-vs-prod parity clause.
+
+### Notes
+
+- The choice-0020 `relations:respects → 0020` edge writes on cards 0005-drive and 0006-rally are deferred to a follow-up spec — the `Relation` schema in `orbit-state/crates/core/src/schema.rs` does not yet support `choice:` targets or a `respects` kind; bundling that schema change here would double the surface (per review-spec cycle 1 finding).
+- Tests: 524 → 530 (+6 across spec_promote baseline / dry-run / dry-run-on-existing for CLI + MCP, plus bare-stdout assertion).
+- Driven from a session stacked on top of PR #32 (0.4.34) — the version bump assumes #32 merges first; if not, rebase resolves the collision.
+
 ## [0.4.34] - 2026-05-24
 
 Ports `plugins/orb/scripts/orbit-acceptance.sh` — a 182-line python3-in-bash shim that wrapped `orbit spec show --json` with five AC-traversal subcommands — into native verbs on the `orbit spec` family. Five new verbs, internal-helper discipline that respects spec 2026-05-16-ac-taxonomy's two-axis traversal split, full CLI/MCP parity, and same-commit deletion of the shim and its dedicated test. First opportunistic migration under choice 0020 (shell-scripts-to-rust-verbs policy).

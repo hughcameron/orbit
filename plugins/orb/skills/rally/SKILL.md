@@ -228,7 +228,7 @@ RALLY_ID="$(date -I)-${SLUG}-rally"
 declare -a CHILDREN_YAML
 for CARD in "${APPROVED_CARDS[@]}"; do
   CARD_SLUG=$(basename "$CARD" .yaml)
-  SPEC_ID=$(plugins/orb/scripts/promote.sh "$CARD")
+  SPEC_ID=$(orbit spec promote "$CARD")
   CHILDREN_YAML+=("- card_path: $CARD")
   CHILDREN_YAML+=("  spec_id: $SPEC_ID")
   CHILDREN_YAML+=("  branch: rally/${CARD_SLUG#*-}")

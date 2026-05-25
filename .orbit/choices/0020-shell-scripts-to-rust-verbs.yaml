@@ -2,7 +2,7 @@ id: '0020'
 title: Shell scripts under plugins/orb/scripts/ migrate into orbit Rust verbs
 status: accepted
 date_created: 2026-05-09
-date_modified: 2026-05-24
+date_modified: 2026-05-25
 body: |
   # 0020. Shell scripts under plugins/orb/scripts/ migrate into orbit Rust verbs
 
@@ -50,7 +50,7 @@ body: |
 
   | Script | Suggested verb | Notes |
   |--------|----------------|-------|
-  | `promote.sh` | `orbit spec promote <card-path>` | Wraps current `orbit spec create` + acceptance_criteria write + canonicalise into one verb. |
+  | `promote.sh` | ~~`orbit spec promote <card-path>` — Wraps current `orbit spec create` + acceptance_criteria write + canonicalise into one verb.~~ **MIGRATED** in spec `2026-05-25-port-promote-sh` — shipped `orbit spec promote <card-path> [--dry-run] [--today YYYY-MM-DD]` with CLI/MCP parity; shim and its dedicated test deleted in the same commit. |
   | `setup-method.sh` | `orbit setup method --project-root <path>` (or extend `orbit init` if it exists) | Atomic legacy detection, byte-for-byte drift check, idempotent @-import. |
   | `orbit-acceptance.sh` | ~~Already largely covered by `orbit spec show --json`; the `next-ac` / `blocking-gate` / `has-unchecked` / `check` subcommands could become orbit task or spec verbs.~~ **MIGRATED** in spec `2026-05-24-port-acceptance-shim` — shipped `orbit spec acs / next-ac / blocking-gate / has-unchecked / check / uncheck` with CLI/MCP parity; shim and its dedicated test deleted in the same commit. | Done. |
 

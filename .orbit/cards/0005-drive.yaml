@@ -62,6 +62,7 @@ specs:
 - .orbit/specs/2026-05-09-promote-orbit-state-port/spec.yaml
 - .orbit/specs/2026-05-09-drive-rally-sidecar-layout/spec.yaml
 - .orbit/specs/2026-05-24-port-acceptance-shim/spec.yaml
+- .orbit/specs/2026-05-25-port-promote-sh/spec.yaml
 relations:
 - card: 0019-tabletop
   type: depends-on
