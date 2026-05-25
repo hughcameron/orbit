@@ -45,6 +45,7 @@ use orbit_state_core::{
     SpecListResult, SpecNextAcArgs, SpecNextAcResult, SpecNoteArgs, SpecNoteResult,
     SpecPromoteArgs, SpecPromoteResult, SpecResolveArgs, SpecResolveResult, SpecShowArgs,
     SpecShowResult, SpecUncheckArgs, SpecUncheckResult, SpecUpdateArgs, SpecUpdateResult,
+    DriftAction, LegacyAction, SetupFilesArgs, SetupFilesResult,
     TaskClaimArgs, TaskDoneArgs,
     TaskEventResult, TaskListArgs, TaskListResult, TaskOpenArgs, TaskOpenResult, TaskReadyArgs,
     TaskShowArgs, TaskShowResult, TaskUpdateArgs, VerbRequest, VerbResponse,
@@ -146,6 +147,14 @@ enum Command {
     Topology {
         #[command(subcommand)]
         action: TopologyAction,
+    },
+    /// Setup verbs (files) — implements /orb:setup §6 (CLAUDE.md legacy
+    /// migration, canonical METHOD.md + STYLE.md copy with byte-compare
+    /// drift detection, idempotent @-import appends). Native port of
+    /// `plugins/orb/scripts/setup-method.sh` per choice 0020.
+    Setup {
+        #[command(subcommand)]
+        action: SetupAction,
     },
     /// Substrate-layout verbs (classify) — read-only inspection of the working
     /// tree shape against the six setup-classifier states. Per spec
@@ -381,6 +390,38 @@ enum SubstrateAction {
     /// `mixed-undotted`). Read-only; no filesystem mutation. The /orb:setup
     /// skill calls this verb to decide which migration arm to enter.
     Classify,
+}
+
+#[derive(Debug, Subcommand)]
+enum SetupAction {
+    /// Run /orb:setup §6 — atomic CLAUDE.md legacy-block migration,
+    /// byte-compare-and-copy of canonical METHOD.md + STYLE.md into
+    /// `<project-root>/.orbit/`, idempotent @-import appends. Interactive
+    /// prompts at this CLI layer; the core verb takes pre-resolved typed
+    /// Action enums. Per spec 2026-05-25-port-setup-method-sh.
+    Files {
+        /// Project root containing CLAUDE.md and `.orbit/`.
+        #[arg(long = "project-root")]
+        project_root: PathBuf,
+        /// Override the canonical METHOD.md source path. Defaults to the
+        /// in-plugin location via `ORBIT_PLUGIN_ROOT` env var.
+        #[arg(long = "canonical-method")]
+        canonical_method: Option<PathBuf>,
+        /// Override the canonical STYLE.md source path.
+        #[arg(long = "canonical-style")]
+        canonical_style: Option<PathBuf>,
+        /// Script the legacy-migration prompt for non-interactive runs.
+        /// `y|yes` → `migrate`; `n|no` → `refuse`. Matches shim flag.
+        #[arg(long = "answer-legacy")]
+        answer_legacy: Option<String>,
+        /// Script the METHOD.md drift prompt. `y|yes` → `overwrite`;
+        /// `n|no` → `keep`. Matches shim flag.
+        #[arg(long = "answer-method-drift")]
+        answer_method_drift: Option<String>,
+        /// Script the STYLE.md drift prompt. Matches shim flag.
+        #[arg(long = "answer-style-drift")]
+        answer_style_drift: Option<String>,
+    },
 }
 
 #[derive(Debug, Subcommand)]
@@ -1422,6 +1463,23 @@ fn build_request(_layout: &OrbitLayout, command: &Command) -> Result<VerbRequest
                 })
             }
         },
+        Command::Setup { action } => match action {
+            SetupAction::Files {
+                project_root,
+                canonical_method,
+                canonical_style,
+                answer_legacy,
+                answer_method_drift,
+                answer_style_drift,
+            } => build_setup_files_request(
+                project_root,
+                canonical_method.as_deref(),
+                canonical_style.as_deref(),
+                answer_legacy.as_deref(),
+                answer_method_drift.as_deref(),
+                answer_style_drift.as_deref(),
+            )?,
+        },
         Command::Substrate { action } => match action {
             SubstrateAction::Classify => {
                 VerbRequest::SubstrateClassify(SubstrateClassifyArgs::default())
@@ -1473,6 +1531,7 @@ fn render_human(response: &VerbResponse) {
         VerbResponse::SpecCheck(result) => render_spec_check(result),
         VerbResponse::SpecUncheck(result) => render_spec_uncheck(result),
         VerbResponse::SpecPromote(result) => render_spec_promote(result),
+        VerbResponse::SetupFiles(result) => render_setup_files(result),
         VerbResponse::TaskOpen(result) => render_task_open(result),
         VerbResponse::TaskList(result) | VerbResponse::TaskReady(result) => {
             render_task_list(result)
@@ -2136,6 +2195,167 @@ fn render_spec_uncheck(result: &SpecUncheckResult) {
 /// (per spec 2026-05-25-port-promote-sh ac-02). No labels, no formatting.
 fn render_spec_promote(result: &SpecPromoteResult) {
     println!("{}", result.spec.id);
+}
+
+/// Render `setup.files` as a human-readable summary of what the verb did.
+fn render_setup_files(result: &SetupFilesResult) {
+    if result.legacy_migrated {
+        println!("legacy: migrated (CLAUDE.md cleaned; canonicals copied; @-imports added)");
+    } else {
+        println!("legacy: none detected");
+    }
+    println!("method.md: {:?}", result.method_md_action);
+    println!("style.md:  {:?}", result.style_md_action);
+    if result.claude_md_created {
+        println!("CLAUDE.md: created");
+    }
+    if result.method_import_added {
+        println!("CLAUDE.md: appended @.orbit/METHOD.md");
+    }
+    if result.style_import_added {
+        println!("CLAUDE.md: appended @.orbit/STYLE.md");
+    }
+}
+
+/// CLI layer for `setup files`: detects legacy markers + drift, prompts
+/// stdin for missing `--answer-*` flags only when the answer is needed,
+/// then builds the typed `SetupFilesArgs` for the core verb. Matches the
+/// shim's conditional prompt UX at `plugins/orb/scripts/setup-method.sh`
+/// lines 121-182. Per spec 2026-05-25-port-setup-method-sh ac-02.
+fn build_setup_files_request(
+    project_root: &std::path::Path,
+    canonical_method: Option<&std::path::Path>,
+    canonical_style: Option<&std::path::Path>,
+    answer_legacy: Option<&str>,
+    answer_method_drift: Option<&str>,
+    answer_style_drift: Option<&str>,
+) -> Result<VerbRequest, OrbitError> {
+    use std::io::Write;
+    let claude_md = project_root.join("CLAUDE.md");
+    let method_md = project_root.join(".orbit").join("METHOD.md");
+    let style_md = project_root.join(".orbit").join("STYLE.md");
+
+    // Resolve canonical source paths via env fallback (matches verb default).
+    let canonical_method_buf = canonical_method
+        .map(|p| p.to_path_buf())
+        .or_else(|| default_canonical_from_env("METHOD.md"));
+    let canonical_style_buf = canonical_style
+        .map(|p| p.to_path_buf())
+        .or_else(|| default_canonical_from_env("STYLE.md"));
+
+    // Legacy detection — read CLAUDE.md if it exists, scan for any of the
+    // three markers. If found, resolve LegacyAction via flag or stdin prompt.
+    let legacy_present = match std::fs::read_to_string(&claude_md) {
+        Ok(text) => text.lines().any(|l| {
+            l == "## Workflow (orbit)" || l == "## Orbit vocabulary" || l == "## Current Sprint"
+        }),
+        Err(_) => false,
+    };
+    let legacy_action = if legacy_present {
+        match answer_legacy.map(str::trim).map(|s| s.to_lowercase()) {
+            Some(ref s) if s == "y" || s == "yes" => LegacyAction::Migrate,
+            Some(ref s) if s == "n" || s == "no" => LegacyAction::Refuse,
+            Some(ref s) if !s.is_empty() => {
+                return Err(OrbitError::malformed(
+                    "setup.files",
+                    format!("--answer-legacy must be y/yes/n/no, got '{s}'"),
+                ));
+            }
+            _ => {
+                eprintln!(
+                    "orbit: CLAUDE.md contains legacy workflow blocks (## Workflow (orbit) / ## Orbit vocabulary / ## Current Sprint)."
+                );
+                eprint!("Migrate now? (y/N) ");
+                let _ = std::io::stderr().flush();
+                prompt_yn_default_no("legacy", LegacyAction::Migrate, LegacyAction::Refuse)?
+            }
+        }
+    } else {
+        LegacyAction::Migrate // unused when legacy_present == false
+    };
+
+    // Drift detection per canonical — only prompt when destination exists
+    // and differs from source by bytewise equality.
+    let method_drift_action = resolve_drift_action(
+        "method",
+        canonical_method_buf.as_deref(),
+        &method_md,
+        answer_method_drift,
+    )?;
+    let style_drift_action = resolve_drift_action(
+        "style",
+        canonical_style_buf.as_deref(),
+        &style_md,
+        answer_style_drift,
+    )?;
+
+    Ok(VerbRequest::SetupFiles(SetupFilesArgs {
+        project_root: project_root.display().to_string(),
+        legacy_action,
+        method_drift_action,
+        style_drift_action,
+        canonical_method_path: canonical_method_buf.map(|p| p.display().to_string()),
+        canonical_style_path: canonical_style_buf.map(|p| p.display().to_string()),
+    }))
+}
+
+fn default_canonical_from_env(filename: &str) -> Option<std::path::PathBuf> {
+    std::env::var("ORBIT_PLUGIN_ROOT")
+        .ok()
+        .map(|root| std::path::PathBuf::from(root).join("skills").join("setup").join(filename))
+}
+
+fn resolve_drift_action(
+    label: &str,
+    canonical: Option<&std::path::Path>,
+    destination: &std::path::Path,
+    answer: Option<&str>,
+) -> Result<DriftAction, OrbitError> {
+    use std::io::Write;
+    let has_drift = match canonical {
+        Some(canonical) if destination.exists() => {
+            let canonical_bytes = std::fs::read(canonical).ok();
+            let dest_bytes = std::fs::read(destination).ok();
+            match (canonical_bytes, dest_bytes) {
+                (Some(a), Some(b)) => a != b,
+                _ => false,
+            }
+        }
+        _ => false,
+    };
+    if !has_drift {
+        return Ok(DriftAction::Keep); // unused by the verb when no drift
+    }
+    match answer.map(str::trim).map(|s| s.to_lowercase()) {
+        Some(ref s) if s == "y" || s == "yes" => Ok(DriftAction::Overwrite),
+        Some(ref s) if s == "n" || s == "no" => Ok(DriftAction::Keep),
+        Some(ref s) if !s.is_empty() => Err(OrbitError::malformed(
+            "setup.files",
+            format!("--answer-{label}-drift must be y/yes/n/no, got '{s}'"),
+        )),
+        _ => {
+            eprintln!(
+                "orbit: {} differs from the canonical (the plugin has updated, or the file has been edited locally).",
+                destination.display()
+            );
+            eprint!("Overwrite with canonical? (y/N) ");
+            let _ = std::io::stderr().flush();
+            prompt_yn_default_no(label, DriftAction::Overwrite, DriftAction::Keep)
+        }
+    }
+}
+
+fn prompt_yn_default_no<T>(_label: &str, yes: T, no: T) -> Result<T, OrbitError> {
+    let mut buf = String::new();
+    std::io::stdin()
+        .read_line(&mut buf)
+        .map_err(|e| OrbitError::unavailable("setup.files", format!("read stdin: {e}")))?;
+    let trimmed = buf.trim().to_lowercase();
+    if trimmed == "y" || trimmed == "yes" {
+        Ok(yes)
+    } else {
+        Ok(no)
+    }
 }
 
 fn render_spec_list(result: &SpecListResult) {

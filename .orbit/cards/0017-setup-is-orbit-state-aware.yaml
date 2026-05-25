@@ -64,6 +64,9 @@ relations:
 - card: 0028-four-pillars
   type: feeds
   reason: setup primes downstream project CLAUDE.md with the canonical METHOD.md so new agents in any orbit-using repo learn the substrate without re-discovering it — the load-bearing wire for pillar 2 (agent self-learning)
+- choice: '0020'
+  type: respects
+  reason: setup's canonical-files step uses the orbit setup files Rust verb that this choice authorised the shell-script migration to (per choice 0020 Consequences)
 references:
 - 'plugins/orb/skills/setup/SKILL.md: current setup skill — handles orbit/ layout and CLAUDE.md vocabulary; needs orbit-state awareness rewrite'
 - '.orbit/choices/0015-orbit-state-architecture.md: substrate decision that makes setup-without-orbit-state a non-state'

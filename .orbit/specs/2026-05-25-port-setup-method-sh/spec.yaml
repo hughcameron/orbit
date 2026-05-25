@@ -9,44 +9,44 @@ acceptance_criteria:
 - id: ac-01
   description: '`orbit setup files <project-root>` ships as a verb on the (new) `orbit setup` family — core takes `SetupFilesArgs { project_root: PathBuf, legacy_action: LegacyAction, method_drift_action: DriftAction, style_drift_action: DriftAction, canonical_method_path: Option<PathBuf>, canonical_style_path: Option<PathBuf> }` with `LegacyAction::{Migrate, Refuse}` and `DriftAction::{Overwrite, Keep}` enums (kebab-case-serialised). Default canonical paths resolve to the in-plugin METHOD.md and STYLE.md, matching the shim''s script-relative defaults at lines 87-91'
   gate: true
-  checked: false
+  checked: true
 - id: ac-02
   description: Interactive prompts live in the CLI layer ONLY — core verb takes pre-resolved typed args. The CLI subcommand reads `--answer-legacy`, `--answer-method-drift`, `--answer-style-drift` flags (preserving the shim's flag names); when a flag is absent, the CLI prompts via stdin to resolve the action before calling the core verb. MCP callers always pass typed args (no prompts). The core verb has no stdin awareness
   gate: false
-  checked: false
+  checked: true
 - id: ac-03
   description: 'Atomic legacy migration: when CLAUDE.md contains any of `## Workflow (orbit)`, `## Orbit vocabulary`, `## Current Sprint` and `legacy_action: refuse` is passed, the ENTIRE verb refuses with `Error::conflict("setup.files", "legacy CLAUDE.md blocks present; legacy_action=refuse halts setup — no files copied, no @-imports added")`. When `legacy_action: migrate`, the verb (i) strips each legacy section from its marker line up to and including the line BEFORE the next top-level heading (`^## ` or `^# `) or end-of-file, (ii) collapses 3-plus consecutive blank lines back to 2, (iii) copies the canonical METHOD.md and STYLE.md, (iv) adds the @-imports — same sequence as the shim at lines 199-224. Implementation is behaviour-driven (NOT pattern-prescribed): the workspace ships `regex = "1.10"` which is RE2-derived and rejects lookahead, so the marker-to-next-heading scan uses a line-walking loop OR a fixed-pattern split, implementer''s choice. AC-06''s legacy-migrate fixture (b) is the byte-equivalence backstop. Each file write uses `write_atomic` (per-file atomic; multi-file rollback is NOT promised — matches shim parity, partial-failure recovery is the operator''s job)'
   gate: false
-  checked: false
+  checked: true
 - id: ac-04
   description: 'Byte-compare drift detection: for each canonical (METHOD.md, STYLE.md), if the destination file exists and differs from the source by bytewise `std::fs::read` equality (NOT `same_file::is_same_file`), the corresponding `DriftAction` applies. `DriftAction::Overwrite` writes the canonical contents via `write_atomic`. `DriftAction::Keep` skips the write. Identical files are no-ops regardless of action. The CLI''s interactive prompt for drift fires only when destination exists AND differs'
   gate: false
-  checked: false
+  checked: true
 - id: ac-05
   description: '@-import idempotency: after the verb runs, CLAUDE.md contains exactly one `@.orbit/METHOD.md` line and exactly one `@.orbit/STYLE.md` line, regardless of invocation count. The lines are appended only when not already present (`grep -Fxq` equivalent, full-line match). When CLAUDE.md is missing, it is created with the two import lines. When CLAUDE.md exists but does not end with a newline, the appender prepends a newline before appending each new line (shim lines 154-159: ensures trailing `\n` then appends `\n<import>\n`). When CLAUDE.md exists and ends with content but not blank-line-padded, a leading blank line is inserted before the first new import (shim line 156)'
   gate: false
-  checked: false
+  checked: true
 - id: ac-06
   description: 'CLI/MCP parity tests across all branches — `orbit-state/crates/cli/tests/parity.rs` and `orbit-state/crates/mcp/tests/parity.rs` each include byte-equal envelope assertions for at least seven scenarios against shared fixtures: (a) greenfield (no CLAUDE.md, no .orbit/) → creates both files + imports, (b) legacy-detected + migrate action → strips markers + copies + imports atomically, (c) legacy-detected + refuse action → Error::conflict envelope, no disk writes (filesystem-snapshot equality before/after), (d) drift-overwrite on METHOD.md → file replaced, (e) drift-keep on METHOD.md → file unchanged + envelope still ok, (f) drift-overwrite on STYLE.md (symmetric to d), (g) drift-keep on STYLE.md (symmetric to e). Plus an idempotency test: run the verb twice with identical args against the same fixture and assert the post-second-run filesystem state is byte-equal to the post-first-run filesystem state (NOT just envelope no-op — actual on-disk byte-equality is the load-bearing assertion)'
   gate: true
-  checked: false
+  checked: true
 - id: ac-07
   description: '`plugins/orb/skills/setup/SKILL.md` call site rewritten from `plugins/orb/scripts/setup-method.sh ...` to `orbit setup files ...` — verified by `rg --no-heading ''setup-method\.sh'' plugins/orb/skills/` returning zero lines. Pre-flight count: 1 SKILL.md call site (setup)'
   gate: true
-  checked: false
+  checked: true
 - id: ac-08
   description: The shim (`plugins/orb/scripts/setup-method.sh`) and its dedicated test (`plugins/orb/scripts/tests/test-setup-method.sh`) delete in the same commit as the last SKILL.md call-site rewrite — no orphaned wrapper, no partial decommission. Per choice 0020's no-orphaned-wrapper invariant
   gate: false
-  checked: false
+  checked: true
 - id: ac-09
   description: Choice 0020's "in-scope migration candidates" table updated — the `setup-method.sh` row is marked migrated with this spec id cited; choice file otherwise untouched. `date_modified` bumped to 2026-05-25
   gate: false
-  checked: false
+  checked: true
 - id: ac-10
   description: '`.orbit/cards/0017-setup-is-orbit-state-aware.yaml` gains a `relations:` entry `{choice: ''0020'', type: respects, reason: "setup''s canonical-files step uses the orbit setup files Rust verb that this choice authorised the shell-script migration to (per choice 0020 Consequences)"}` appended to the existing relations list. Choice id form bare numeric per `.orbit/conventions/id-conventions.md`. `orbit canonicalise` then normalises byte form; `orbit verify` clean'
   gate: false
-  checked: false
+  checked: true
 - id: ac-11
   description: '`cargo test` passes across the orbit-state workspace; `orbit verify` returns zero drift; the orbit-state workspace version bumped by one patch from the working-tree `orbit-state/Cargo.toml` at implement-stage start (0.4.36 → 0.4.37); top-level `CHANGELOG.md` gains an entry under that bumped version naming the `setup.files` verb, the CLI interactive-prompt layer, the shim + test removal, the choice 0020 table update, and card 0017''s relations-edge write'
   gate: false
-  checked: false
+  checked: true

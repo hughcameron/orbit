@@ -88,6 +88,8 @@ pub enum VerbRequest {
     SpecUncheck(SpecUncheckArgs),
     #[serde(rename = "spec.promote")]
     SpecPromote(SpecPromoteArgs),
+    #[serde(rename = "setup.files")]
+    SetupFiles(SetupFilesArgs),
     #[serde(rename = "task.open")]
     TaskOpen(TaskOpenArgs),
     #[serde(rename = "task.list")]
@@ -361,6 +363,65 @@ pub struct SpecPromoteArgs {
     /// `SpecNoteArgs.timestamp`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub today: Option<String>,
+}
+
+// ----------------------------------------------------------------------------
+// Setup verb args (per spec 2026-05-25-port-setup-method-sh).
+// Port of plugins/orb/scripts/setup-method.sh — third opportunistic
+// migration under choice 0020. Interactive prompts live at the CLI layer;
+// core takes pre-resolved typed Action enums.
+// ----------------------------------------------------------------------------
+
+/// Action taken when CLAUDE.md contains legacy workflow blocks (the three
+/// markers `## Workflow (orbit)`, `## Orbit vocabulary`, `## Current Sprint`).
+/// Per spec ac-03.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum LegacyAction {
+    /// Strip the legacy section markers from CLAUDE.md, then copy
+    /// canonicals + add @-imports in one batch.
+    Migrate,
+    /// Refuse the entire setup — no files copied, no @-imports added.
+    Refuse,
+}
+
+/// Action taken when a canonical destination (`<project>/.orbit/METHOD.md`
+/// or `<project>/.orbit/STYLE.md`) already exists and differs from the
+/// plugin's canonical source by bytewise equality. Per spec ac-04.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum DriftAction {
+    /// Replace the destination with the canonical contents.
+    Overwrite,
+    /// Leave the destination unchanged.
+    Keep,
+}
+
+/// Args for `setup.files` — port of `plugins/orb/scripts/setup-method.sh`.
+/// Runs the three §6 sub-steps atomically: legacy detect+migrate, copy
+/// canonicals with byte-compare drift detection, ensure @-imports.
+/// Interactive prompts live at the CLI layer; the core verb takes
+/// pre-resolved Action enums (ac-02).
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct SetupFilesArgs {
+    /// Path to the project root containing CLAUDE.md and `.orbit/`.
+    pub project_root: String,
+    /// Action when legacy CLAUDE.md blocks are detected.
+    pub legacy_action: LegacyAction,
+    /// Action when `<project>/.orbit/METHOD.md` exists and drifts.
+    pub method_drift_action: DriftAction,
+    /// Action when `<project>/.orbit/STYLE.md` exists and drifts.
+    pub style_drift_action: DriftAction,
+    /// Override the canonical METHOD.md source. Production callers omit
+    /// this; the substrate resolves it from the in-plugin location
+    /// (matching shim defaults at lines 87-89).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub canonical_method_path: Option<String>,
+    /// Override the canonical STYLE.md source. Production callers omit
+    /// this; matches shim defaults at lines 90-91.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub canonical_style_path: Option<String>,
 }
 
 // ----------------------------------------------------------------------------
@@ -907,6 +968,8 @@ pub enum VerbResponse {
     SpecUncheck(SpecUncheckResult),
     #[serde(rename = "spec.promote")]
     SpecPromote(SpecPromoteResult),
+    #[serde(rename = "setup.files")]
+    SetupFiles(SetupFilesResult),
     #[serde(rename = "task.open")]
     TaskOpen(TaskOpenResult),
     #[serde(rename = "task.list")]
@@ -1179,6 +1242,41 @@ pub struct SpecPromoteResult {
     pub spec: Spec,
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub dry_run: bool,
+}
+
+/// Outcome of copying one canonical file (`METHOD.md` or `STYLE.md`) into
+/// the project's `.orbit/` directory. Per spec ac-04.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum FileAction {
+    /// Destination did not exist — written from canonical.
+    Created,
+    /// Destination existed and differed — replaced with canonical (DriftAction::Overwrite).
+    Overwritten,
+    /// Destination existed and differed — preserved (DriftAction::Keep).
+    KeptDrift,
+    /// Destination existed and was byte-identical to canonical — no-op.
+    Identical,
+}
+
+/// Result for `setup.files` — flat structured audit of what the verb did.
+/// Per spec ac-01.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct SetupFilesResult {
+    /// True when the legacy-migrate branch ran (legacy markers detected
+    /// and `legacy_action: migrate` honoured). False when no legacy was
+    /// present OR the user refused (refuse path errors before this result
+    /// is returned).
+    pub legacy_migrated: bool,
+    pub method_md_action: FileAction,
+    pub style_md_action: FileAction,
+    /// True when `@.orbit/METHOD.md` was appended to CLAUDE.md (the line
+    /// was not already present).
+    pub method_import_added: bool,
+    /// True when `@.orbit/STYLE.md` was appended to CLAUDE.md.
+    pub style_import_added: bool,
+    /// True when CLAUDE.md was missing and created by the verb.
+    pub claude_md_created: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -1801,6 +1899,9 @@ pub fn execute(layout: &OrbitLayout, request: &VerbRequest) -> Result<VerbRespon
         }
         VerbRequest::SpecPromote(args) => {
             spec_promote(layout, args).map(VerbResponse::SpecPromote)
+        }
+        VerbRequest::SetupFiles(args) => {
+            setup_files(layout, args).map(VerbResponse::SetupFiles)
         }
         VerbRequest::TaskOpen(args) => task_open(layout, args).map(VerbResponse::TaskOpen),
         VerbRequest::TaskList(args) => task_list(layout, args).map(VerbResponse::TaskList),
@@ -2960,6 +3061,371 @@ fn spec_promote(layout: &OrbitLayout, args: &SpecPromoteArgs) -> Result<SpecProm
         spec: planned,
         dry_run: false,
     })
+}
+
+// ============================================================================
+// Setup verb (per spec 2026-05-25-port-setup-method-sh).
+// Port of plugins/orb/scripts/setup-method.sh — third opportunistic
+// migration under choice 0020.
+// ============================================================================
+
+const LEGACY_MARKERS: &[&str] = &[
+    "## Workflow (orbit)",
+    "## Orbit vocabulary",
+    "## Current Sprint",
+];
+
+/// `setup.files` — runs the three §6 sub-steps from the shim atomically:
+/// legacy detect + migrate (or refuse), copy canonicals with byte-compare
+/// drift detection, ensure @-imports. Interactive prompts live at the CLI
+/// layer; this core verb takes pre-resolved typed Action enums (per
+/// spec ac-02).
+fn setup_files(_layout: &OrbitLayout, args: &SetupFilesArgs) -> Result<SetupFilesResult> {
+    const VERB: &str = "setup.files";
+
+    let project_root = std::path::PathBuf::from(&args.project_root);
+    if !project_root.is_dir() {
+        return Err(Error::not_found(
+            VERB,
+            format!("project root not found: {}", project_root.display()),
+        ));
+    }
+
+    let claude_md = project_root.join("CLAUDE.md");
+    let method_md = project_root.join(".orbit").join("METHOD.md");
+    let style_md = project_root.join(".orbit").join("STYLE.md");
+
+    // Resolve canonical source paths.
+    let canonical_method = match &args.canonical_method_path {
+        Some(p) => std::path::PathBuf::from(p),
+        None => default_canonical_path("METHOD.md")?,
+    };
+    let canonical_style = match &args.canonical_style_path {
+        Some(p) => std::path::PathBuf::from(p),
+        None => default_canonical_path("STYLE.md")?,
+    };
+    if !canonical_method.exists() {
+        return Err(Error::not_found(
+            VERB,
+            format!("canonical METHOD.md not found: {}", canonical_method.display()),
+        ));
+    }
+    if !canonical_style.exists() {
+        return Err(Error::not_found(
+            VERB,
+            format!("canonical STYLE.md not found: {}", canonical_style.display()),
+        ));
+    }
+
+    // 6a — legacy CLAUDE.md detection.
+    let legacy_present = if claude_md.exists() {
+        let text = std::fs::read_to_string(&claude_md)
+            .map_err(|e| Error::unavailable(VERB, format!("read CLAUDE.md: {e}")))?;
+        legacy_markers_present(&text)
+    } else {
+        false
+    };
+
+    if legacy_present {
+        match args.legacy_action {
+            LegacyAction::Refuse => {
+                return Err(Error::conflict(
+                    VERB,
+                    "legacy CLAUDE.md blocks present; legacy_action=refuse halts setup — no files copied, no @-imports added",
+                ));
+            }
+            LegacyAction::Migrate => {
+                // Atomic-batch: strip legacy + copy canonicals + add imports.
+                std::fs::create_dir_all(project_root.join(".orbit"))
+                    .map_err(|e| Error::unavailable(VERB, format!("mkdir .orbit/: {e}")))?;
+
+                // Copy canonicals (legacy-migrate always overwrites — the user
+                // accepted migration, so we replace pre-migration content too).
+                copy_canonical_unconditional(VERB, &canonical_method, &method_md)?;
+                copy_canonical_unconditional(VERB, &canonical_style, &style_md)?;
+
+                // Strip legacy + ensure imports in one CLAUDE.md write.
+                let text = std::fs::read_to_string(&claude_md)
+                    .map_err(|e| Error::unavailable(VERB, format!("read CLAUDE.md: {e}")))?;
+                let migrated = migrate_claude_md(&text);
+                write_atomic(&claude_md, migrated.as_bytes()).map_err(|mut e| {
+                    e.verb = VERB.into();
+                    e
+                })?;
+
+                return Ok(SetupFilesResult {
+                    legacy_migrated: true,
+                    method_md_action: FileAction::Overwritten,
+                    style_md_action: FileAction::Overwritten,
+                    // migrate_claude_md always ensures both imports are present.
+                    method_import_added: true,
+                    style_import_added: true,
+                    claude_md_created: false,
+                });
+            }
+        }
+    }
+
+    // 6b — copy canonical files (no legacy blocks present).
+    std::fs::create_dir_all(project_root.join(".orbit"))
+        .map_err(|e| Error::unavailable(VERB, format!("mkdir .orbit/: {e}")))?;
+    let method_md_action =
+        copy_canonical_with_drift(VERB, &canonical_method, &method_md, args.method_drift_action)?;
+    let style_md_action =
+        copy_canonical_with_drift(VERB, &canonical_style, &style_md, args.style_drift_action)?;
+
+    // 6c — ensure CLAUDE.md @-imports (idempotent for each).
+    let (method_import_added, style_import_added, claude_md_created) =
+        ensure_at_imports(VERB, &claude_md)?;
+
+    Ok(SetupFilesResult {
+        legacy_migrated: false,
+        method_md_action,
+        style_md_action,
+        method_import_added,
+        style_import_added,
+        claude_md_created,
+    })
+}
+
+/// Resolve the default canonical path for METHOD.md or STYLE.md from the
+/// in-plugin location, matching the shim's script-relative defaults at
+/// lines 87-91. The canonical files live alongside the binary in the
+/// `plugins/orb/skills/setup/` directory of the orbit repo. Production
+/// CLI callers can override via `--canonical-method` / `--canonical-style`;
+/// when called from the workspace, the default resolves via the
+/// `ORBIT_PLUGIN_ROOT` env var if set, otherwise an error.
+fn default_canonical_path(filename: &str) -> Result<std::path::PathBuf> {
+    const VERB: &str = "setup.files";
+    if let Ok(plugin_root) = std::env::var("ORBIT_PLUGIN_ROOT") {
+        return Ok(std::path::PathBuf::from(plugin_root)
+            .join("skills")
+            .join("setup")
+            .join(filename));
+    }
+    Err(Error::unavailable(
+        VERB,
+        format!(
+            "canonical {filename} path not provided and ORBIT_PLUGIN_ROOT env var not set; \
+             pass --canonical-method / --canonical-style or set ORBIT_PLUGIN_ROOT"
+        ),
+    ))
+}
+
+/// Return true if any of `LEGACY_MARKERS` appears as a full line in `text`.
+/// Mirrors the shim's `grep -Fxq` check at lines 165-171.
+fn legacy_markers_present(text: &str) -> bool {
+    let mut lines = text.lines();
+    lines.any(|line| LEGACY_MARKERS.contains(&line))
+}
+
+/// Behaviour-driven legacy migration (per spec ac-03): strip each legacy
+/// section from its marker line up to (but not including) the next
+/// top-level heading or end-of-file. Collapse 3-plus blank lines back to
+/// 2. Ensure both @-imports are present.
+fn migrate_claude_md(text: &str) -> String {
+    let mut out = strip_legacy_sections(text);
+    out = collapse_blank_runs(&out);
+    out = ensure_imports_in_text(&out);
+    out
+}
+
+/// Strip the three legacy section blocks via a line-walking loop —
+/// RE2-compatible (no lookahead). For each marker, scan to its line; skip
+/// lines until the next `## ` or `# ` heading or EOF.
+fn strip_legacy_sections(text: &str) -> String {
+    let lines: Vec<&str> = text.lines().collect();
+    let mut keep = vec![true; lines.len()];
+    for (i, line) in lines.iter().enumerate() {
+        if !keep[i] {
+            continue;
+        }
+        if LEGACY_MARKERS.contains(line) {
+            // Mark this marker line and all subsequent lines for removal
+            // until the next top-level heading.
+            keep[i] = false;
+            for (j, sub) in lines.iter().enumerate().skip(i + 1) {
+                if sub.starts_with("## ") || sub.starts_with("# ") {
+                    break;
+                }
+                keep[j] = false;
+            }
+        }
+    }
+    let preserved_newline = text.ends_with('\n');
+    let mut buf = String::with_capacity(text.len());
+    for (i, line) in lines.iter().enumerate() {
+        if keep[i] {
+            buf.push_str(line);
+            buf.push('\n');
+        }
+    }
+    if !preserved_newline && buf.ends_with('\n') {
+        buf.pop();
+    }
+    buf
+}
+
+/// Collapse 3-plus consecutive blank lines back to 2. Matches shim line 211.
+fn collapse_blank_runs(text: &str) -> String {
+    let lines: Vec<&str> = text.lines().collect();
+    let mut out = String::with_capacity(text.len());
+    let mut blank_run = 0usize;
+    let preserved_newline = text.ends_with('\n');
+    for line in &lines {
+        if line.is_empty() {
+            blank_run += 1;
+            if blank_run <= 2 {
+                out.push('\n');
+            }
+        } else {
+            blank_run = 0;
+            out.push_str(line);
+            out.push('\n');
+        }
+    }
+    if !preserved_newline && out.ends_with('\n') {
+        out.pop();
+    }
+    out
+}
+
+/// Ensure both `@.orbit/METHOD.md` and `@.orbit/STYLE.md` appear as full
+/// lines in `text`. Append missing lines with shim-equivalent spacing
+/// (blank line before each new import). Matches shim lines 213-220.
+fn ensure_imports_in_text(text: &str) -> String {
+    let imports = ["@.orbit/METHOD.md", "@.orbit/STYLE.md"];
+    let mut out = text.to_string();
+    for import in &imports {
+        let has_import = out.lines().any(|line| line == *import);
+        if !has_import {
+            if !out.ends_with('\n') {
+                out.push('\n');
+            }
+            if !out.ends_with("\n\n") {
+                out.push('\n');
+            }
+            out.push_str(import);
+            out.push('\n');
+        }
+    }
+    out
+}
+
+/// Legacy-migrate path: always overwrite the destination with canonical
+/// contents (no drift check — the user accepted migration).
+fn copy_canonical_unconditional(
+    verb: &'static str,
+    canonical: &std::path::Path,
+    destination: &std::path::Path,
+) -> Result<()> {
+    let bytes = std::fs::read(canonical)
+        .map_err(|e| Error::unavailable(verb, format!("read {}: {e}", canonical.display())))?;
+    write_atomic(destination, &bytes).map_err(|mut e| {
+        e.verb = verb.into();
+        e
+    })?;
+    Ok(())
+}
+
+/// Non-legacy path: byte-compare destination against canonical and apply
+/// the supplied DriftAction. Returns a `FileAction` describing what
+/// happened.
+fn copy_canonical_with_drift(
+    verb: &'static str,
+    canonical: &std::path::Path,
+    destination: &std::path::Path,
+    drift_action: DriftAction,
+) -> Result<FileAction> {
+    if !destination.exists() {
+        let bytes = std::fs::read(canonical)
+            .map_err(|e| Error::unavailable(verb, format!("read {}: {e}", canonical.display())))?;
+        write_atomic(destination, &bytes).map_err(|mut e| {
+            e.verb = verb.into();
+            e
+        })?;
+        return Ok(FileAction::Created);
+    }
+    let canonical_bytes = std::fs::read(canonical)
+        .map_err(|e| Error::unavailable(verb, format!("read {}: {e}", canonical.display())))?;
+    let dest_bytes = std::fs::read(destination)
+        .map_err(|e| Error::unavailable(verb, format!("read {}: {e}", destination.display())))?;
+    if canonical_bytes == dest_bytes {
+        return Ok(FileAction::Identical);
+    }
+    match drift_action {
+        DriftAction::Overwrite => {
+            write_atomic(destination, &canonical_bytes).map_err(|mut e| {
+                e.verb = verb.into();
+                e
+            })?;
+            Ok(FileAction::Overwritten)
+        }
+        DriftAction::Keep => Ok(FileAction::KeptDrift),
+    }
+}
+
+/// Ensure both `@-imports` are present in CLAUDE.md (creating the file if
+/// missing). Returns `(method_added, style_added, claude_created)`.
+/// Matches shim function `ensure_at_import` at lines 148-161.
+fn ensure_at_imports(
+    verb: &'static str,
+    claude_md: &std::path::Path,
+) -> Result<(bool, bool, bool)> {
+    let imports = ["@.orbit/METHOD.md", "@.orbit/STYLE.md"];
+
+    if !claude_md.exists() {
+        // Shim path: creates file with leading blank line + both imports.
+        let mut text = String::new();
+        for import in &imports {
+            text.push('\n');
+            text.push_str(import);
+            text.push('\n');
+        }
+        write_atomic(claude_md, text.as_bytes()).map_err(|mut e| {
+            e.verb = verb.into();
+            e
+        })?;
+        return Ok((true, true, true));
+    }
+
+    let original = std::fs::read_to_string(claude_md)
+        .map_err(|e| Error::unavailable(verb, format!("read CLAUDE.md: {e}")))?;
+    let mut text = original.clone();
+    let mut method_added = false;
+    let mut style_added = false;
+    for (i, import) in imports.iter().enumerate() {
+        let has_import = text.lines().any(|line| line == *import);
+        if has_import {
+            continue;
+        }
+        // Shim handles trailing-newline + blank-line padding.
+        if !text.is_empty() && !text.ends_with('\n') {
+            text.push('\n');
+        }
+        if text.is_empty() {
+            text.push_str(import);
+            text.push('\n');
+        } else {
+            text.push('\n');
+            text.push_str(import);
+            text.push('\n');
+        }
+        match i {
+            0 => method_added = true,
+            1 => style_added = true,
+            _ => unreachable!(),
+        }
+    }
+
+    if text != original {
+        write_atomic(claude_md, text.as_bytes()).map_err(|mut e| {
+            e.verb = verb.into();
+            e
+        })?;
+    }
+
+    Ok((method_added, style_added, false))
 }
 
 // ============================================================================

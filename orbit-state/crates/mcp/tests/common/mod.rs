@@ -984,3 +984,150 @@ pub fn expected_envelope_for_card_show_mixed_relations() -> String {
     });
     envelope_ok_string(&response).expect("infallible")
 }
+
+// ---------------------------------------------------------------------------
+// setup.files parity (per spec 2026-05-25-port-setup-method-sh ac-06).
+// Fixtures: greenfield, legacy-present, drift-on-method, drift-on-style.
+// Shared by CLI + MCP parity assertions.
+// ---------------------------------------------------------------------------
+
+/// Canonical METHOD.md / STYLE.md contents used by all setup.files fixtures
+/// so parity-test expectations are deterministic without depending on the
+/// real in-plugin files.
+pub const FIXTURE_CANONICAL_METHOD: &str = "# Canonical METHOD test content\n";
+pub const FIXTURE_CANONICAL_STYLE: &str = "# Canonical STYLE test content\n";
+
+/// Write the canonical METHOD.md + STYLE.md into a temp plugin-root and
+/// return the per-file source paths. Used to drive setup.files without
+/// touching the real plugin tree.
+pub fn write_setup_files_canonicals(plugin_root: &std::path::Path) -> (std::path::PathBuf, std::path::PathBuf) {
+    let setup_dir = plugin_root.join("skills/setup");
+    std::fs::create_dir_all(&setup_dir).unwrap();
+    let method = setup_dir.join("METHOD.md");
+    let style = setup_dir.join("STYLE.md");
+    std::fs::write(&method, FIXTURE_CANONICAL_METHOD).unwrap();
+    std::fs::write(&style, FIXTURE_CANONICAL_STYLE).unwrap();
+    (method, style)
+}
+
+/// Fixture (a): greenfield — no CLAUDE.md, no .orbit/, no legacy. The
+/// verb creates both canonicals + CLAUDE.md with both imports.
+pub fn populate_setup_files_greenfield(_project_root: &std::path::Path) {
+    // Nothing to write — greenfield is the absence of CLAUDE.md and .orbit/.
+}
+
+/// Fixture (b/c): CLAUDE.md exists and carries the three legacy markers.
+pub fn populate_setup_files_legacy(project_root: &std::path::Path) {
+    std::fs::write(
+        project_root.join("CLAUDE.md"),
+        "## Workflow (orbit)\nlegacy text\n\n## Orbit vocabulary\nmore legacy\n\n## Current Sprint\nstill legacy\n\n## Keep this section\nthis stays\n",
+    )
+    .unwrap();
+}
+
+/// Fixture (d/e): CLAUDE.md exists clean; .orbit/METHOD.md exists but
+/// differs from canonical.
+pub fn populate_setup_files_method_drift(project_root: &std::path::Path) {
+    std::fs::write(project_root.join("CLAUDE.md"), "# CLAUDE\n\n@.orbit/METHOD.md\n\n@.orbit/STYLE.md\n").unwrap();
+    let orbit = project_root.join(".orbit");
+    std::fs::create_dir_all(&orbit).unwrap();
+    std::fs::write(orbit.join("METHOD.md"), "# Local edited METHOD\n").unwrap();
+    std::fs::write(orbit.join("STYLE.md"), FIXTURE_CANONICAL_STYLE).unwrap();
+}
+
+/// Fixture (f/g): CLAUDE.md exists clean; .orbit/STYLE.md exists but
+/// differs from canonical.
+pub fn populate_setup_files_style_drift(project_root: &std::path::Path) {
+    std::fs::write(project_root.join("CLAUDE.md"), "# CLAUDE\n\n@.orbit/METHOD.md\n\n@.orbit/STYLE.md\n").unwrap();
+    let orbit = project_root.join(".orbit");
+    std::fs::create_dir_all(&orbit).unwrap();
+    std::fs::write(orbit.join("METHOD.md"), FIXTURE_CANONICAL_METHOD).unwrap();
+    std::fs::write(orbit.join("STYLE.md"), "# Local edited STYLE\n").unwrap();
+}
+
+pub fn expected_envelope_for_setup_files_greenfield() -> String {
+    use orbit_state_core::{envelope_ok_string, FileAction, SetupFilesResult, VerbResponse};
+    let response = VerbResponse::SetupFiles(SetupFilesResult {
+        legacy_migrated: false,
+        method_md_action: FileAction::Created,
+        style_md_action: FileAction::Created,
+        method_import_added: true,
+        style_import_added: true,
+        claude_md_created: true,
+    });
+    envelope_ok_string(&response).expect("infallible")
+}
+
+pub fn expected_envelope_for_setup_files_legacy_migrate() -> String {
+    use orbit_state_core::{envelope_ok_string, FileAction, SetupFilesResult, VerbResponse};
+    let response = VerbResponse::SetupFiles(SetupFilesResult {
+        legacy_migrated: true,
+        method_md_action: FileAction::Overwritten,
+        style_md_action: FileAction::Overwritten,
+        method_import_added: true,
+        style_import_added: true,
+        claude_md_created: false,
+    });
+    envelope_ok_string(&response).expect("infallible")
+}
+
+pub fn expected_envelope_for_setup_files_legacy_refuse() -> String {
+    use orbit_state_core::{envelope_err_string, Error};
+    let err = Error::conflict(
+        "setup.files",
+        "legacy CLAUDE.md blocks present; legacy_action=refuse halts setup — no files copied, no @-imports added",
+    );
+    envelope_err_string(&err)
+}
+
+pub fn expected_envelope_for_setup_files_method_overwrite() -> String {
+    use orbit_state_core::{envelope_ok_string, FileAction, SetupFilesResult, VerbResponse};
+    let response = VerbResponse::SetupFiles(SetupFilesResult {
+        legacy_migrated: false,
+        method_md_action: FileAction::Overwritten,
+        style_md_action: FileAction::Identical,
+        method_import_added: false,
+        style_import_added: false,
+        claude_md_created: false,
+    });
+    envelope_ok_string(&response).expect("infallible")
+}
+
+pub fn expected_envelope_for_setup_files_method_keep() -> String {
+    use orbit_state_core::{envelope_ok_string, FileAction, SetupFilesResult, VerbResponse};
+    let response = VerbResponse::SetupFiles(SetupFilesResult {
+        legacy_migrated: false,
+        method_md_action: FileAction::KeptDrift,
+        style_md_action: FileAction::Identical,
+        method_import_added: false,
+        style_import_added: false,
+        claude_md_created: false,
+    });
+    envelope_ok_string(&response).expect("infallible")
+}
+
+pub fn expected_envelope_for_setup_files_style_overwrite() -> String {
+    use orbit_state_core::{envelope_ok_string, FileAction, SetupFilesResult, VerbResponse};
+    let response = VerbResponse::SetupFiles(SetupFilesResult {
+        legacy_migrated: false,
+        method_md_action: FileAction::Identical,
+        style_md_action: FileAction::Overwritten,
+        method_import_added: false,
+        style_import_added: false,
+        claude_md_created: false,
+    });
+    envelope_ok_string(&response).expect("infallible")
+}
+
+pub fn expected_envelope_for_setup_files_style_keep() -> String {
+    use orbit_state_core::{envelope_ok_string, FileAction, SetupFilesResult, VerbResponse};
+    let response = VerbResponse::SetupFiles(SetupFilesResult {
+        legacy_migrated: false,
+        method_md_action: FileAction::Identical,
+        style_md_action: FileAction::KeptDrift,
+        method_import_added: false,
+        style_import_added: false,
+        claude_md_created: false,
+    });
+    envelope_ok_string(&response).expect("infallible")
+}

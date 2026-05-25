@@ -2042,3 +2042,187 @@ fn card_show_cli_json_matches_canonical_envelope_with_mixed_relations() {
         common::expected_envelope_for_card_show_mixed_relations()
     );
 }
+
+// ---------------------------------------------------------------------------
+// setup.files parity (per spec 2026-05-25-port-setup-method-sh ac-06).
+// ---------------------------------------------------------------------------
+
+fn run_setup_files_cli(
+    project_root: &Path,
+    plugin_root: &Path,
+    extra_args: &[&str],
+) -> std::process::Output {
+    let cli_bin = env!("CARGO_BIN_EXE_orbit");
+    let (method, style) = common::write_setup_files_canonicals(plugin_root);
+    let project_str = project_root.to_str().unwrap();
+    let method_str = method.to_str().unwrap();
+    let style_str = style.to_str().unwrap();
+    let mut args: Vec<&str> = vec![
+        "--root",
+        project_str,
+        "--json",
+        "setup",
+        "files",
+        "--project-root",
+        project_str,
+        "--canonical-method",
+        method_str,
+        "--canonical-style",
+        style_str,
+    ];
+    args.extend(extra_args);
+    Command::new(cli_bin)
+        .args(&args)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .output()
+        .expect("run cli")
+}
+
+#[test]
+fn setup_files_cli_greenfield_envelope_matches() {
+    let project = tempfile::tempdir().unwrap();
+    let plugin = tempfile::tempdir().unwrap();
+    common::populate_setup_files_greenfield(project.path());
+    let output = run_setup_files_cli(project.path(), plugin.path(), &[]);
+    assert!(output.status.success(), "stderr: {}", String::from_utf8_lossy(&output.stderr));
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert_eq!(
+        stdout.trim_end_matches('\n'),
+        common::expected_envelope_for_setup_files_greenfield()
+    );
+    // Files actually created.
+    assert!(project.path().join("CLAUDE.md").exists());
+    assert!(project.path().join(".orbit/METHOD.md").exists());
+    assert!(project.path().join(".orbit/STYLE.md").exists());
+}
+
+#[test]
+fn setup_files_cli_legacy_migrate_envelope_matches() {
+    let project = tempfile::tempdir().unwrap();
+    let plugin = tempfile::tempdir().unwrap();
+    common::populate_setup_files_legacy(project.path());
+    let output = run_setup_files_cli(project.path(), plugin.path(), &["--answer-legacy", "y"]);
+    assert!(output.status.success(), "stderr: {}", String::from_utf8_lossy(&output.stderr));
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert_eq!(
+        stdout.trim_end_matches('\n'),
+        common::expected_envelope_for_setup_files_legacy_migrate()
+    );
+    // Legacy markers stripped; canonicals copied; @-imports present.
+    let claude_md = std::fs::read_to_string(project.path().join("CLAUDE.md")).unwrap();
+    assert!(!claude_md.contains("## Workflow (orbit)"), "legacy marker not stripped: {claude_md}");
+    assert!(!claude_md.contains("## Orbit vocabulary"));
+    assert!(!claude_md.contains("## Current Sprint"));
+    assert!(claude_md.contains("## Keep this section"));
+    assert!(claude_md.contains("@.orbit/METHOD.md"));
+    assert!(claude_md.contains("@.orbit/STYLE.md"));
+}
+
+#[test]
+fn setup_files_cli_legacy_refuse_errors_and_writes_nothing() {
+    let project = tempfile::tempdir().unwrap();
+    let plugin = tempfile::tempdir().unwrap();
+    common::populate_setup_files_legacy(project.path());
+    let before = snapshot_layout_paths(project.path());
+    let output = run_setup_files_cli(project.path(), plugin.path(), &["--answer-legacy", "n"]);
+    assert!(!output.status.success(), "refuse must exit non-zero");
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert_eq!(
+        stdout.trim_end_matches('\n'),
+        common::expected_envelope_for_setup_files_legacy_refuse()
+    );
+    // Filesystem-snapshot equality — no disk writes from the verb.
+    let after = snapshot_layout_paths(project.path());
+    assert_eq!(before, after, "refuse must leave the filesystem unchanged");
+}
+
+#[test]
+fn setup_files_cli_method_drift_overwrite_envelope_matches() {
+    let project = tempfile::tempdir().unwrap();
+    let plugin = tempfile::tempdir().unwrap();
+    common::populate_setup_files_method_drift(project.path());
+    let output = run_setup_files_cli(project.path(), plugin.path(), &["--answer-method-drift", "y"]);
+    assert!(output.status.success(), "stderr: {}", String::from_utf8_lossy(&output.stderr));
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert_eq!(
+        stdout.trim_end_matches('\n'),
+        common::expected_envelope_for_setup_files_method_overwrite()
+    );
+    // METHOD.md replaced with canonical.
+    let method = std::fs::read_to_string(project.path().join(".orbit/METHOD.md")).unwrap();
+    assert_eq!(method, common::FIXTURE_CANONICAL_METHOD);
+}
+
+#[test]
+fn setup_files_cli_method_drift_keep_envelope_matches() {
+    let project = tempfile::tempdir().unwrap();
+    let plugin = tempfile::tempdir().unwrap();
+    common::populate_setup_files_method_drift(project.path());
+    let output = run_setup_files_cli(project.path(), plugin.path(), &["--answer-method-drift", "n"]);
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert_eq!(
+        stdout.trim_end_matches('\n'),
+        common::expected_envelope_for_setup_files_method_keep()
+    );
+    // METHOD.md unchanged.
+    let method = std::fs::read_to_string(project.path().join(".orbit/METHOD.md")).unwrap();
+    assert_eq!(method, "# Local edited METHOD\n");
+}
+
+#[test]
+fn setup_files_cli_style_drift_overwrite_envelope_matches() {
+    let project = tempfile::tempdir().unwrap();
+    let plugin = tempfile::tempdir().unwrap();
+    common::populate_setup_files_style_drift(project.path());
+    let output = run_setup_files_cli(project.path(), plugin.path(), &["--answer-style-drift", "y"]);
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert_eq!(
+        stdout.trim_end_matches('\n'),
+        common::expected_envelope_for_setup_files_style_overwrite()
+    );
+    let style = std::fs::read_to_string(project.path().join(".orbit/STYLE.md")).unwrap();
+    assert_eq!(style, common::FIXTURE_CANONICAL_STYLE);
+}
+
+#[test]
+fn setup_files_cli_style_drift_keep_envelope_matches() {
+    let project = tempfile::tempdir().unwrap();
+    let plugin = tempfile::tempdir().unwrap();
+    common::populate_setup_files_style_drift(project.path());
+    let output = run_setup_files_cli(project.path(), plugin.path(), &["--answer-style-drift", "n"]);
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert_eq!(
+        stdout.trim_end_matches('\n'),
+        common::expected_envelope_for_setup_files_style_keep()
+    );
+    let style = std::fs::read_to_string(project.path().join(".orbit/STYLE.md")).unwrap();
+    assert_eq!(style, "# Local edited STYLE\n");
+}
+
+#[test]
+fn setup_files_cli_idempotent_filesystem_byte_equality() {
+    let project = tempfile::tempdir().unwrap();
+    let plugin = tempfile::tempdir().unwrap();
+    common::populate_setup_files_greenfield(project.path());
+    let _ = run_setup_files_cli(project.path(), plugin.path(), &[]);
+    let after_first = snapshot_layout_paths(project.path());
+    let claude_first = std::fs::read(project.path().join("CLAUDE.md")).unwrap();
+    let method_first = std::fs::read(project.path().join(".orbit/METHOD.md")).unwrap();
+    let style_first = std::fs::read(project.path().join(".orbit/STYLE.md")).unwrap();
+
+    let _ = run_setup_files_cli(project.path(), plugin.path(), &[]);
+    let after_second = snapshot_layout_paths(project.path());
+    let claude_second = std::fs::read(project.path().join("CLAUDE.md")).unwrap();
+    let method_second = std::fs::read(project.path().join(".orbit/METHOD.md")).unwrap();
+    let style_second = std::fs::read(project.path().join(".orbit/STYLE.md")).unwrap();
+
+    assert_eq!(after_first, after_second, "filesystem snapshot diverged across idempotent runs");
+    assert_eq!(claude_first, claude_second, "CLAUDE.md bytes diverged across runs");
+    assert_eq!(method_first, method_second, "METHOD.md bytes diverged");
+    assert_eq!(style_first, style_second, "STYLE.md bytes diverged");
+}
