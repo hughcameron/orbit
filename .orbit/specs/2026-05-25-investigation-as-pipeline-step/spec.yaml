@@ -22,7 +22,7 @@ goal: |
   Test prefix for this spec: pipinv.
 cards:
 - 0025-codebase-mastery
-status: open
+status: closed
 labels:
 - spec
 acceptance_criteria:
