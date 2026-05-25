@@ -275,6 +275,20 @@ fn tool_descriptors() -> Vec<Value> {
             }
         }),
         json!({
+            "name": "spec.promote",
+            "description": "Turn a card into a spec — derives the spec id from today's date + the card's slug, copies the goal, materialises one AC per scenario (preserving gate, seeding checked: false). Native port of plugins/orb/scripts/promote.sh per spec 2026-05-25-port-promote-sh.",
+            "inputSchema": {
+                "type": "object",
+                "required": ["card_path"],
+                "properties": {
+                    "card_path": { "type": "string", "description": "Path to the card file (absolute or relative to the layout root)." },
+                    "dry_run":   { "type": "boolean", "description": "When true, compute the planned spec but write nothing." },
+                    "today":     { "type": "string", "description": "Override today's date (YYYY-MM-DD). Test-only; production callers omit this." }
+                },
+                "additionalProperties": false
+            }
+        }),
+        json!({
             "name": "task.open",
             "description": "Open a new task under a spec.",
             "inputSchema": {

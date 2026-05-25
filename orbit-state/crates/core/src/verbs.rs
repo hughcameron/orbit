@@ -26,7 +26,7 @@ use crate::error::{Error, Result};
 use crate::layout::OrbitLayout;
 use crate::locks;
 use crate::schema::{
-    AcceptanceCriterion, Card, Choice, InvocationOutcome, Memory, NoteEvent, Session,
+    AcType, AcceptanceCriterion, Card, Choice, InvocationOutcome, Memory, NoteEvent, Session,
     SkillInvocation, Spec, SpecStatus, TaskEvent, TaskEventKind,
 };
 use crate::session::{read_session_card, read_session_id};
@@ -86,6 +86,8 @@ pub enum VerbRequest {
     SpecCheck(SpecCheckArgs),
     #[serde(rename = "spec.uncheck")]
     SpecUncheck(SpecUncheckArgs),
+    #[serde(rename = "spec.promote")]
+    SpecPromote(SpecPromoteArgs),
     #[serde(rename = "task.open")]
     TaskOpen(TaskOpenArgs),
     #[serde(rename = "task.list")]
@@ -334,6 +336,31 @@ pub struct SpecCheckArgs {
 pub struct SpecUncheckArgs {
     pub id: String,
     pub ac_id: String,
+}
+
+/// Args for `spec.promote` — turn a card into a spec. Per spec
+/// 2026-05-25-port-promote-sh (second opportunistic migration under
+/// choice 0020). Reads the card at `card_path`, derives the spec id as
+/// `<today-iso>-<slug-without-NNNN>`, creates the spec with the card''s
+/// `goal` and `cards: [<card.id>]`, and populates `acceptance_criteria`
+/// one entry per `scenario` (preserving `gate: bool`, seeding
+/// `checked: false`).
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct SpecPromoteArgs {
+    /// Path to the card file (absolute or relative to the layout root).
+    pub card_path: String,
+    /// When true, compute the planned spec but write nothing. Round-trips
+    /// the same envelope shape as the non-dry-run path for parity tests.
+    #[serde(default)]
+    pub dry_run: bool,
+    /// Override the date used in the derived spec id (`YYYY-MM-DD`).
+    /// Production callers omit this — the substrate reads `now_utc()`.
+    /// Primarily for parity tests so the expected envelope is byte-
+    /// deterministic regardless of when the test runs. Mirrors
+    /// `SpecNoteArgs.timestamp`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub today: Option<String>,
 }
 
 // ----------------------------------------------------------------------------
@@ -878,6 +905,8 @@ pub enum VerbResponse {
     SpecCheck(SpecCheckResult),
     #[serde(rename = "spec.uncheck")]
     SpecUncheck(SpecUncheckResult),
+    #[serde(rename = "spec.promote")]
+    SpecPromote(SpecPromoteResult),
     #[serde(rename = "task.open")]
     TaskOpen(TaskOpenResult),
     #[serde(rename = "task.list")]
@@ -1140,6 +1169,16 @@ pub struct SpecCheckResult {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct SpecUncheckResult {
     pub spec: Spec,
+}
+
+/// Result for `spec.promote` — the freshly-created spec, or the planned
+/// spec when `dry_run: true`. `dry_run` echoes back so consumers can
+/// branch on whether the write happened.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct SpecPromoteResult {
+    pub spec: Spec,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub dry_run: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -1759,6 +1798,9 @@ pub fn execute(layout: &OrbitLayout, request: &VerbRequest) -> Result<VerbRespon
         VerbRequest::SpecCheck(args) => spec_check(layout, args).map(VerbResponse::SpecCheck),
         VerbRequest::SpecUncheck(args) => {
             spec_uncheck(layout, args).map(VerbResponse::SpecUncheck)
+        }
+        VerbRequest::SpecPromote(args) => {
+            spec_promote(layout, args).map(VerbResponse::SpecPromote)
         }
         VerbRequest::TaskOpen(args) => task_open(layout, args).map(VerbResponse::TaskOpen),
         VerbRequest::TaskList(args) => task_list(layout, args).map(VerbResponse::TaskList),
@@ -2726,6 +2768,194 @@ fn flip_ac_checked(
     })?;
 
     Ok(spec)
+}
+
+// ============================================================================
+// Spec promote verb (per spec 2026-05-25-port-promote-sh).
+// Port of plugins/orb/scripts/promote.sh — second opportunistic migration
+// under choice 0020.
+// ============================================================================
+
+/// `spec.promote` — turn a card into a spec. Reads the card at
+/// `args.card_path`, derives the spec id as
+/// `<today-iso>-<slug-without-NNNN-prefix>`, creates the spec with the
+/// card's `goal` and `cards: [<card.id>]`, populates `acceptance_criteria`
+/// one entry per scenario (preserving `gate: bool`, seeding
+/// `checked: false`), and writes through the canonical writer.
+///
+/// `args.dry_run: true` returns the planned spec without writing.
+///
+/// Error contract:
+/// - `Error::not_found` — card path doesn't exist
+/// - `Error::malformed` — card has no scenarios, empty goal, or path
+///   contains `..` / escapes the layout root (canonicalise + containment)
+/// - `Error::conflict` — non-dry-run: spec at derived id already exists
+///   (dry-run path succeeds even when target exists; ac-04 contract)
+fn spec_promote(layout: &OrbitLayout, args: &SpecPromoteArgs) -> Result<SpecPromoteResult> {
+    const VERB: &str = "spec.promote";
+
+    // 1. Resolve card path. Accept absolute or relative-to-project-root.
+    //    `layout.root` is the `.orbit/` directory; the project root is its
+    //    parent. Use canonicalise + containment so symlinks pointing
+    //    outside the project root are also rejected (per spec ac-05).
+    let project_root = layout.root.parent().ok_or_else(|| {
+        Error::unavailable(
+            VERB,
+            format!("layout root has no parent: {}", layout.root.display()),
+        )
+    })?;
+    let card_path_raw = std::path::PathBuf::from(&args.card_path);
+    let card_path_abs = if card_path_raw.is_absolute() {
+        card_path_raw
+    } else {
+        project_root.join(&card_path_raw)
+    };
+    if !card_path_abs.exists() {
+        return Err(Error::not_found(
+            VERB,
+            format!("card not found: {}", card_path_abs.display()),
+        ));
+    }
+    let card_path_canon = std::fs::canonicalize(&card_path_abs)
+        .map_err(|e| Error::unavailable(VERB, format!("canonicalise {}: {e}", card_path_abs.display())))?;
+    let root_canon = std::fs::canonicalize(project_root)
+        .map_err(|e| Error::unavailable(VERB, format!("canonicalise project root: {e}")))?;
+    if !card_path_canon.starts_with(&root_canon) {
+        return Err(Error::malformed(
+            VERB,
+            format!(
+                "card path resolves outside project root: {} (root: {})",
+                card_path_canon.display(),
+                root_canon.display(),
+            ),
+        ));
+    }
+
+    // 2. Parse the card.
+    let card_text = std::fs::read_to_string(&card_path_canon)
+        .map_err(|e| Error::unavailable(VERB, format!("read {}: {e}", card_path_canon.display())))?;
+    let card: Card = parse_yaml(&card_text).map_err(|mut e| {
+        e.verb = VERB.into();
+        e
+    })?;
+
+    if card.goal.is_empty() {
+        return Err(Error::malformed(
+            VERB,
+            format!("card has empty goal: {}", card_path_canon.display()),
+        ));
+    }
+    if card.scenarios.is_empty() {
+        return Err(Error::malformed(
+            VERB,
+            format!("card has no scenarios: {}", card_path_canon.display()),
+        ));
+    }
+
+    // 3. Derive ids. card_id = filename minus .yaml. slug = card_id with
+    //    leading NNNN- stripped. spec_id = <today-iso>-<slug>.
+    let card_id = card_path_canon
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .ok_or_else(|| Error::malformed(VERB, format!("card filename not utf-8: {}", card_path_canon.display())))?
+        .to_string();
+    let slug = card_id
+        .strip_prefix(|c: char| c.is_ascii_digit())
+        .and_then(|s| s.strip_prefix(|c: char| c.is_ascii_digit()))
+        .and_then(|s| s.strip_prefix(|c: char| c.is_ascii_digit()))
+        .and_then(|s| s.strip_prefix(|c: char| c.is_ascii_digit()))
+        .and_then(|s| s.strip_prefix('-'))
+        .unwrap_or(&card_id);
+    let today = match &args.today {
+        Some(t) => t.clone(),
+        None => OffsetDateTime::now_utc()
+            .date()
+            .format(&time::format_description::well_known::Iso8601::DATE)
+            .map_err(|e| Error::unavailable(VERB, format!("format today's date: {e}")))?,
+    };
+    let spec_id = format!("{today}-{slug}");
+
+    // 4. Build the planned spec in memory.
+    let acceptance_criteria: Vec<AcceptanceCriterion> = card
+        .scenarios
+        .iter()
+        .enumerate()
+        .map(|(i, s)| {
+            let name = s.name.trim();
+            let then = s.then.trim();
+            let description = if then.is_empty() {
+                name.to_string()
+            } else {
+                format!("{name} — {then}")
+            };
+            AcceptanceCriterion {
+                id: format!("ac-{:02}", i + 1),
+                description,
+                gate: s.gate,
+                checked: false,
+                verification: None,
+                ac_type: AcType::default(),
+            }
+        })
+        .collect();
+
+    let planned = Spec {
+        id: spec_id.clone(),
+        goal: card.goal.clone(),
+        cards: vec![card_id.clone()],
+        status: SpecStatus::Open,
+        labels: vec![],
+        acceptance_criteria,
+        memories_considered: vec![],
+    };
+
+    // 5. Dry-run short-circuits before any disk write — succeeds even when
+    //    the target spec already exists (per ac-04).
+    if args.dry_run {
+        return Ok(SpecPromoteResult {
+            spec: planned,
+            dry_run: true,
+        });
+    }
+
+    // 6. Pre-check: target must not already exist. Error verb-tagged as
+    //    spec.promote (not spec.create) so consumers see the right surface
+    //    per review-spec cycle 3 finding.
+    let spec_path = layout.spec_file(&spec_id);
+    if spec_path.exists() {
+        return Err(Error::conflict(
+            VERB,
+            format!("spec '{spec_id}' already exists; promote produces fresh specs"),
+        ));
+    }
+
+    // 7. Acquire spec lock + write.
+    let lock_key = format!("spec-{spec_id}");
+    let _guard = locks::acquire_default(layout, &lock_key).map_err(|mut e| {
+        e.verb = VERB.into();
+        e
+    })?;
+
+    // Materialise the spec folder.
+    let spec_dir = spec_path
+        .parent()
+        .expect("spec_file path always has a parent");
+    std::fs::create_dir_all(spec_dir)
+        .map_err(|e| Error::unavailable(VERB, format!("mkdir {}: {e}", spec_dir.display())))?;
+
+    let yaml = serialise_yaml(&planned).map_err(|mut e| {
+        e.verb = VERB.into();
+        e
+    })?;
+    write_atomic(&spec_path, yaml.as_bytes()).map_err(|mut e| {
+        e.verb = VERB.into();
+        e
+    })?;
+
+    Ok(SpecPromoteResult {
+        spec: planned,
+        dry_run: false,
+    })
 }
 
 // ============================================================================
@@ -3744,7 +3974,7 @@ fn card_specs(layout: &OrbitLayout, args: &CardSpecsArgs) -> Result<CardSpecsRes
                 )
             })?
             .to_string();
-        let path_str = relativise_spec_path(&path, &layout.root);
+        let path_str = relativise_spec_path(&path, &&layout.root);
         match std::fs::read_to_string(&path)
             .map_err(|e| (e, "read".to_string()))
             .and_then(|t| parse_yaml::<Spec>(&t).map_err(|e| (std::io::Error::other(e.to_string()), "parse".to_string())))
@@ -3939,7 +4169,7 @@ fn audit_drift(layout: &OrbitLayout, _args: &AuditDriftArgs) -> Result<AuditDrif
     // against the known field set. parse-failed files surface as a single
     // drift entry with a special field name so callers see the file at all.
     let scan = |path: &Path, kind: &str, known: &[&str], out: &mut Vec<DriftEntry>| -> Result<()> {
-        let display_path = relativise_spec_path(path, &layout.root);
+        let display_path = relativise_spec_path(path, &&layout.root);
         let text = match std::fs::read_to_string(path) {
             Ok(t) => t,
             Err(e) => {
@@ -4117,7 +4347,7 @@ fn audit_topology(
     }
 
     let mut drift: Vec<TopologyDriftEntry> = Vec::new();
-    let repo_root = layout.root.parent().unwrap_or(&layout.root);
+    let repo_root = &layout.root.parent().unwrap_or(&&layout.root);
 
     // 1. Per-file structural failures: parse_failed / invalid_field.
     //    Each unparseable or invalid file becomes one drift entry
@@ -4661,7 +4891,7 @@ fn decisions_md_unmigrated_findings(
     layout: &OrbitLayout,
 ) -> Result<Vec<ConformanceFinding>> {
     let mut findings = Vec::new();
-    let decisions_dir = layout.root.join("decisions");
+    let decisions_dir = &layout.root.join("decisions");
     if !decisions_dir.is_dir() {
         return Ok(findings);
     }
@@ -4989,7 +5219,7 @@ const BARE_ARTEFACT_DIRS: &[&str] = &["cards", "specs", "decisions", "discovery"
 /// Per spec 2026-05-24-setup-is-orbit-state-aware ac-11.
 pub fn classify_substrate_layout(layout: &OrbitLayout) -> SubstrateLayoutState {
     let repo_root = layout.repo_root();
-    let dotted = layout.root.is_dir();
+    let dotted = &layout.root.is_dir();
     let undotted = repo_root.join("orbit").is_dir();
     let bare_present = BARE_ARTEFACT_DIRS
         .iter()
@@ -10822,7 +11052,7 @@ canonical_code:
         // Brownfield arm: an existing .orbit/config.yaml carrying
         // docs.topology is stripped of that key.
         let (_dir, layout) = fresh_topology_layout();
-        std::fs::create_dir_all(&layout.root).unwrap();
+        std::fs::create_dir_all(&&layout.root).unwrap();
         std::fs::write(
             layout.config_file(),
             "docs:\n  topology: docs/topology.md\n",
@@ -10916,7 +11146,7 @@ canonical_code:
     /// with every pointer resolved against a created path under `src/` so
     /// audit_topology stays clean. Substrate-folder shape per choice 0025.
     fn install_topology(layout: &OrbitLayout, subsystems: &[&str]) {
-        let repo = layout.root.parent().unwrap();
+        let repo = &layout.root.parent().unwrap();
         std::fs::create_dir_all(repo.join("src")).unwrap();
         std::fs::create_dir_all(layout.topology_dir()).unwrap();
         for s in subsystems {
@@ -10985,7 +11215,7 @@ canonical_code:
     fn session_prime_topology_drift_some_populated_when_drift_present() {
         let (_dir, layout) = fresh_topology_layout();
         layout.ensure_dirs().unwrap();
-        let repo = layout.root.parent().unwrap();
+        let repo = &layout.root.parent().unwrap();
         // Topology covers `myauth` but codebase also has `ingest` → missing_entry.
         std::fs::create_dir_all(repo.join("src/myauth")).unwrap();
         std::fs::create_dir_all(repo.join("src/ingest")).unwrap();
@@ -11316,7 +11546,7 @@ unknown: surprise
             .find(|(p, _)| *p == ".orbit/METHOD.md")
             .map(|(_, c)| *c)
             .unwrap();
-        std::fs::write(layout.root.join("METHOD.md"), canonical).unwrap();
+        std::fs::write(&layout.root.join("METHOD.md"), canonical).unwrap();
     }
 
     fn write_canonical_style_md(layout: &OrbitLayout) {
@@ -11325,7 +11555,7 @@ unknown: surprise
             .find(|(p, _)| *p == ".orbit/STYLE.md")
             .map(|(_, c)| *c)
             .unwrap();
-        std::fs::write(layout.root.join("STYLE.md"), canonical).unwrap();
+        std::fs::write(&layout.root.join("STYLE.md"), canonical).unwrap();
     }
 
     fn write_canonical_files(layout: &OrbitLayout) {
@@ -11582,7 +11812,7 @@ unknown: surprise
     fn conformance_byte_drift_fires_when_method_md_differs() {
         let (_dir, layout) = fresh_conformance_layout();
         write_canonical_style_md(&layout);
-        std::fs::write(layout.root.join("METHOD.md"), "hand-edited\n").unwrap();
+        std::fs::write(&layout.root.join("METHOD.md"), "hand-edited\n").unwrap();
         let result =
             audit_conformance_at(&layout, &AuditConformanceArgs::default(), date(2026, 5, 19))
                 .unwrap();
@@ -11598,7 +11828,7 @@ unknown: surprise
     fn conformance_byte_drift_fires_when_style_md_differs() {
         let (_dir, layout) = fresh_conformance_layout();
         write_canonical_method_md(&layout);
-        std::fs::write(layout.root.join("STYLE.md"), "hand-edited\n").unwrap();
+        std::fs::write(&layout.root.join("STYLE.md"), "hand-edited\n").unwrap();
         let result =
             audit_conformance_at(&layout, &AuditConformanceArgs::default(), date(2026, 5, 19))
                 .unwrap();
@@ -11681,7 +11911,7 @@ unknown: surprise
         write_config_with_pin(&layout, "0.0.1");
         // Add a byte-drift fixture that WOULD fire under matches/unpinned
         // (and STYLE.md absent, which would fire a "missing" finding).
-        std::fs::write(layout.root.join("METHOD.md"), "hand-edited\n").unwrap();
+        std::fs::write(&layout.root.join("METHOD.md"), "hand-edited\n").unwrap();
         let result =
             audit_conformance_at(&layout, &AuditConformanceArgs::default(), date(2026, 5, 19))
                 .unwrap();
@@ -11703,7 +11933,7 @@ unknown: surprise
     fn conformance_pin_ahead_fires_and_suppresses_per_file() {
         let (_dir, layout) = fresh_conformance_layout();
         write_config_with_pin(&layout, "99.99.99");
-        std::fs::write(layout.root.join("METHOD.md"), "hand-edited\n").unwrap();
+        std::fs::write(&layout.root.join("METHOD.md"), "hand-edited\n").unwrap();
         let result =
             audit_conformance_at(&layout, &AuditConformanceArgs::default(), date(2026, 5, 19))
                 .unwrap();

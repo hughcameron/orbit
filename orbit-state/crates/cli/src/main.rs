@@ -43,7 +43,7 @@ use orbit_state_core::{
     SpecCheckArgs, SpecCheckResult, SpecCloseArgs, SpecCloseResult, SpecCreateArgs,
     SpecCreateResult, SpecHasUncheckedArgs, SpecListArgs,
     SpecListResult, SpecNextAcArgs, SpecNextAcResult, SpecNoteArgs, SpecNoteResult,
-    SpecResolveArgs, SpecResolveResult, SpecShowArgs,
+    SpecPromoteArgs, SpecPromoteResult, SpecResolveArgs, SpecResolveResult, SpecShowArgs,
     SpecShowResult, SpecUncheckArgs, SpecUncheckResult, SpecUpdateArgs, SpecUpdateResult,
     TaskClaimArgs, TaskDoneArgs,
     TaskEventResult, TaskListArgs, TaskListResult, TaskOpenArgs, TaskOpenResult, TaskReadyArgs,
@@ -650,6 +650,29 @@ enum SpecAction {
         /// AC identifier (e.g. `ac-05`).
         ac_id: String,
     },
+    /// Turn a card into a spec. Reads the card at `<card-path>`, derives
+    /// the spec id as `<today-iso>-<slug-without-NNNN>`, creates the spec
+    /// with the card's goal and one acceptance criterion per scenario
+    /// (preserving gate, seeding checked: false). Native port of the
+    /// `plugins/orb/scripts/promote.sh` shim per spec
+    /// 2026-05-25-port-promote-sh (second opportunistic migration under
+    /// choice 0020). Default-mode stdout is the bare spec id so drive's
+    /// `SPEC_ID=$(orbit spec promote <card-path>)` shell-capture shape
+    /// preserves.
+    Promote {
+        /// Path to the card file (absolute or relative to the layout root).
+        card_path: String,
+        /// Compute the planned spec without writing anything. Stdout still
+        /// emits the planned spec id; `--json` mode shows the full envelope
+        /// with `dry_run: true`.
+        #[arg(long)]
+        dry_run: bool,
+        /// Override today's date (`YYYY-MM-DD`) in the derived spec id.
+        /// Production callers omit this — the substrate reads UTC. Test-
+        /// only flag for deterministic parity assertions.
+        #[arg(long)]
+        today: Option<String>,
+    },
 }
 
 fn main() -> ExitCode {
@@ -1172,6 +1195,15 @@ fn build_request(_layout: &OrbitLayout, command: &Command) -> Result<VerbRequest
                 id: id.clone(),
                 ac_id: ac_id.clone(),
             }),
+            SpecAction::Promote {
+                card_path,
+                dry_run,
+                today,
+            } => VerbRequest::SpecPromote(SpecPromoteArgs {
+                card_path: card_path.clone(),
+                dry_run: *dry_run,
+                today: today.clone(),
+            }),
         },
         Command::Task { action } => match action {
             TaskAction::Open {
@@ -1440,6 +1472,7 @@ fn render_human(response: &VerbResponse) {
         }
         VerbResponse::SpecCheck(result) => render_spec_check(result),
         VerbResponse::SpecUncheck(result) => render_spec_uncheck(result),
+        VerbResponse::SpecPromote(result) => render_spec_promote(result),
         VerbResponse::TaskOpen(result) => render_task_open(result),
         VerbResponse::TaskList(result) | VerbResponse::TaskReady(result) => {
             render_task_list(result)
@@ -2096,6 +2129,13 @@ fn render_spec_check(result: &SpecCheckResult) {
 
 fn render_spec_uncheck(result: &SpecUncheckResult) {
     println!("unchecked spec {}", result.spec.id);
+}
+
+/// Render `spec.promote` as the bare spec id alone — preserves drive's
+/// `SPEC_ID=$(orbit spec promote <card-path>)` shell-capture contract
+/// (per spec 2026-05-25-port-promote-sh ac-02). No labels, no formatting.
+fn render_spec_promote(result: &SpecPromoteResult) {
+    println!("{}", result.spec.id);
 }
 
 fn render_spec_list(result: &SpecListResult) {

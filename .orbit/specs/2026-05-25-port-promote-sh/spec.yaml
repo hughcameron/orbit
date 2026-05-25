@@ -1,0 +1,53 @@
+id: 2026-05-25-port-promote-sh
+goal: Port plugins/orb/scripts/promote.sh into a native orbit spec promote Rust verb per choice 0020 — single verb with --dry-run, CLI/MCP parity, bare-spec-id stdout preserving drive's shell-capture contract, then decommission the shim + its test once SKILL.md call sites are clean. The choice-0020 relations:respects edge writes on cards 0005 + 0006 are deferred to a follow-up spec (small, schema-only — the Relation variant set in core/src/schema.rs does not yet support `choice:` targets or a `respects` kind; bundling that change here would double the surface).
+cards:
+- 0005-drive
+- 0006-rally
+- 0020-orbit-state
+status: closed
+labels: []
+acceptance_criteria:
+- id: ac-01
+  description: '`orbit spec promote <card-path>` ships as a verb on the orbit spec family — for a fixture card with N scenarios at `.orbit/cards/<NNNN-slug>.yaml`, the verb materialises a spec at `.orbit/specs/<today-iso>-<slug-without-NNNN>/spec.yaml` whose `id` matches the folder, `goal` equals the card''s `goal`, `cards` array contains the card''s id, and `acceptance_criteria` is one entry per scenario preserving `gate: bool` and seeding `checked: false`. Today''s date is read once at the start of the verb (no clock drift mid-call)'
+  gate: true
+  checked: true
+- id: ac-02
+  description: CLI default-mode stdout is the bare spec id alone — one line, no trailing whitespace beyond the line terminator, no labels, no formatting — so drive's `SPEC_ID=$(orbit spec promote <card-path>)` shell-capture shape preserves. `--json` mode emits the full envelope as usual
+  gate: false
+  checked: true
+- id: ac-03
+  description: '`--dry-run` flag on `orbit spec promote` returns the planned spec (full envelope with id + goal + cards + acceptance_criteria) but performs no disk writes — verifiable by snapshotting the layout before/after and asserting byte-equality. The dry-run path lands as `dry_run: bool` on `SpecPromoteArgs` (not CLI-only) so MCP callers can preview too, matching the `spec_close --force` arg-on-core pattern'
+  gate: false
+  checked: true
+- id: ac-04
+  description: 'Idempotency: the pre-check fires inside `spec.promote` BEFORE delegating to the existing `spec_create` body — so when a spec at the derived id already exists on disk, the verb errors with `Error::conflict("spec.promote", "spec ''<id>'' already exists; promote produces fresh specs")` (NOT `spec.create`''s error). The `--dry-run` path stays read-only and succeeds even when the target already exists (it reports what WOULD be written, not what is) — its parity test exercises this branch explicitly'
+  gate: false
+  checked: true
+- id: ac-05
+  description: 'Card-path validation uses canonicalise-then-containment (not literal substring `..` matching) so symlinks pointing outside the layout root are rejected too. Non-existent card paths return `Error::not_found`. A card with an empty `goal` returns `Error::malformed("spec.promote", "card has empty goal: <path>")`; a card with zero scenarios returns `Error::malformed("spec.promote", "card has no scenarios: <path>")`. The verb honours the CLI''s standard `--root` flag for layout-root selection (matches the shim''s `--root <path>` arg shape)'
+  gate: false
+  checked: true
+- id: ac-06
+  description: 'CLI/MCP parity tests — `orbit-state/crates/cli/tests/parity.rs` and `orbit-state/crates/mcp/tests/parity.rs` each include byte-equal envelope assertions for `spec.promote` against a shared fixture card (mixed gate + non-gate scenarios) across three cases: (a) baseline non-dry-run promote against an empty layout, (b) `--dry-run` no-side-effect assertion (layout snapshot equality before/after) AND envelope equality with case (a), and (c) `--dry-run` succeeds when the target spec already exists (ac-04''s contract)'
+  gate: true
+  checked: true
+- id: ac-07
+  description: '`plugins/orb/scripts/promote.sh` either (a) collapses to a thin compat wrapper that shells into `orbit spec promote` preserving the existing CLI signature (card-path arg, optional `--dry-run`, bare-spec-id stdout, exit codes), OR (b) is deleted in the same commit as the verbs ship and all SKILL.md call sites rewrite — implementer chooses the path. Per yesterday''s port-acceptance-shim precedent, path (b) is preferred when a single PR can land verbs + rewrites + deletion cleanly. AC-09''s no-orphaned-wrapper invariant holds either way'
+  gate: false
+  checked: true
+- id: ac-08
+  description: 'Every SKILL.md call site under `plugins/orb/skills/` rewritten from `plugins/orb/scripts/promote.sh <args>` to `orbit spec promote <args>` — verified by `rg --no-heading ''promote\.sh'' plugins/orb/skills/` returning zero lines. Three SKILL.md files, six call sites per pre-flight grep: drive 3, card 2, rally 1'
+  gate: true
+  checked: true
+- id: ac-09
+  description: The shim (`plugins/orb/scripts/promote.sh`) and its dedicated test (`plugins/orb/scripts/tests/test-promote-gate-propagation.sh`) delete in the same commit as the last SKILL.md call-site rewrite — no orphaned wrapper, no partial decommission
+  gate: false
+  checked: true
+- id: ac-10
+  description: Choice 0020's "in-scope migration candidates" table updated — the `promote.sh` row is marked migrated with this spec id cited; choice file otherwise untouched. `date_modified` bumped to 2026-05-25
+  gate: false
+  checked: true
+- id: ac-11
+  description: '`cargo test` passes across the orbit-state workspace; `orbit verify` returns zero drift on the orbit substrate after canonicalise; orbit-state workspace version bumped by one patch from whatever the working-tree `orbit-state/Cargo.toml` carries at implement-stage start (0.4.33 → 0.4.34 if rebased on main, 0.4.34 → 0.4.35 if PR #32 lands first); CHANGELOG.md entry under that bumped version names the `spec.promote` verb addition and the shim + test removal. If the workspace version collides with an already-published version on main at PR-creation time, the rebase resolves it'
+  gate: false
+  checked: true

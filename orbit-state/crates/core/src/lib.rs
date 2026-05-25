@@ -57,9 +57,10 @@ pub use verbs::{
     SpecCheckArgs, SpecCheckResult, SpecCloseArgs, SpecCloseResult, SpecCreateArgs,
     SpecCreateResult, SpecHasUncheckedArgs, SpecHasUncheckedResult, SpecListArgs,
     SpecListResult, SpecNextAcArgs, SpecNextAcResult, SpecNoteArgs, SpecNoteResult,
-    SpecResolveArgs, SpecResolveCandidate, SpecResolveResult, SpecShowArgs,
-    SpecShowResult, SpecSummary, SpecUncheckArgs, SpecUncheckResult, SpecUpdateArgs,
-    SpecUpdateResult, BlockingGate, NextAc, TaskClaimArgs, TaskDoneArgs,
+    SpecPromoteArgs, SpecPromoteResult, SpecResolveArgs, SpecResolveCandidate,
+    SpecResolveResult, SpecShowArgs, SpecShowResult, SpecSummary, SpecUncheckArgs,
+    SpecUncheckResult, SpecUpdateArgs, SpecUpdateResult, BlockingGate, NextAc,
+    TaskClaimArgs, TaskDoneArgs,
     TaskEventResult, TaskListArgs, TaskListResult, TaskOpenArgs, TaskOpenResult, TaskReadyArgs,
     TaskShowArgs, TaskShowResult, TaskState, TaskUpdateArgs, VerbRequest, VerbResponse,
 };

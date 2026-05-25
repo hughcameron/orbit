@@ -1846,3 +1846,177 @@ fn spec_check_cli_already_checked_returns_conflict() {
         common::expected_envelope_for_spec_check_already_checked()
     );
 }
+
+// ---------------------------------------------------------------------------
+// spec.promote parity (per spec 2026-05-25-port-promote-sh ac-06).
+// ---------------------------------------------------------------------------
+
+#[test]
+fn spec_promote_cli_json_matches_canonical_envelope() {
+    let dir = tempfile::tempdir().unwrap();
+    common::populate_promote_card_fixture(dir.path());
+    let output = run_cli_json(
+        dir.path(),
+        &[
+            "spec",
+            "promote",
+            ".orbit/cards/0050-promote-fixture.yaml",
+            "--today",
+            common::PROMOTE_FIXTURE_TODAY,
+        ],
+    );
+    assert!(
+        output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert_eq!(
+        stdout.trim_end_matches('\n'),
+        common::expected_envelope_for_spec_promote_fixture()
+    );
+    // Side-effect verification: the spec file was actually written.
+    let spec_file = dir
+        .path()
+        .join(format!(
+            ".orbit/specs/{}-promote-fixture/spec.yaml",
+            common::PROMOTE_FIXTURE_TODAY
+        ));
+    assert!(spec_file.exists(), "non-dry-run must write the spec file");
+}
+
+#[test]
+fn spec_promote_cli_dry_run_writes_nothing_and_envelope_matches() {
+    let dir = tempfile::tempdir().unwrap();
+    common::populate_promote_card_fixture(dir.path());
+    // Snapshot layout before the dry-run call.
+    let layout_before = snapshot_layout_paths(dir.path());
+    let output = run_cli_json(
+        dir.path(),
+        &[
+            "spec",
+            "promote",
+            ".orbit/cards/0050-promote-fixture.yaml",
+            "--dry-run",
+            "--today",
+            common::PROMOTE_FIXTURE_TODAY,
+        ],
+    );
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert_eq!(
+        stdout.trim_end_matches('\n'),
+        common::expected_envelope_for_spec_promote_fixture_dry_run()
+    );
+    // No spec file written.
+    let spec_file = dir
+        .path()
+        .join(format!(
+            ".orbit/specs/{}-promote-fixture/spec.yaml",
+            common::PROMOTE_FIXTURE_TODAY
+        ));
+    assert!(!spec_file.exists(), "dry-run must NOT write the spec file");
+    // Full layout snapshot equality — defence-in-depth.
+    let layout_after = snapshot_layout_paths(dir.path());
+    assert_eq!(
+        layout_before, layout_after,
+        "dry-run must produce a byte-identical filesystem"
+    );
+}
+
+#[test]
+fn spec_promote_cli_dry_run_succeeds_when_target_exists() {
+    let dir = tempfile::tempdir().unwrap();
+    common::populate_promote_card_fixture(dir.path());
+    // First call: actually create the spec.
+    let _ = run_cli_json(
+        dir.path(),
+        &[
+            "spec",
+            "promote",
+            ".orbit/cards/0050-promote-fixture.yaml",
+            "--today",
+            common::PROMOTE_FIXTURE_TODAY,
+        ],
+    );
+    // Second call: --dry-run against the now-existing target — must succeed
+    // (per spec ac-04: dry-run path stays read-only and reports what WOULD
+    // be written, not what is).
+    let output = run_cli_json(
+        dir.path(),
+        &[
+            "spec",
+            "promote",
+            ".orbit/cards/0050-promote-fixture.yaml",
+            "--dry-run",
+            "--today",
+            common::PROMOTE_FIXTURE_TODAY,
+        ],
+    );
+    assert!(
+        output.status.success(),
+        "dry-run must succeed even when target exists; stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert_eq!(
+        stdout.trim_end_matches('\n'),
+        common::expected_envelope_for_spec_promote_fixture_dry_run()
+    );
+}
+
+#[test]
+fn spec_promote_cli_default_stdout_is_bare_spec_id() {
+    // Per spec ac-02: default-mode stdout is the bare spec id alone so
+    // drive's `SPEC_ID=$(orbit spec promote <card-path>)` shell-capture
+    // shape preserves.
+    let dir = tempfile::tempdir().unwrap();
+    common::populate_promote_card_fixture(dir.path());
+    let cli_bin = env!("CARGO_BIN_EXE_orbit");
+    let output = Command::new(cli_bin)
+        .args([
+            "--root",
+            dir.path().to_str().unwrap(),
+            "spec",
+            "promote",
+            ".orbit/cards/0050-promote-fixture.yaml",
+            "--today",
+            common::PROMOTE_FIXTURE_TODAY,
+        ])
+        .stdin(Stdio::null())
+        .output()
+        .expect("run cli");
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert_eq!(
+        stdout,
+        format!("{}-promote-fixture\n", common::PROMOTE_FIXTURE_TODAY),
+        "stdout must be just the spec id + newline"
+    );
+}
+
+/// Walk `.orbit/` and return a sorted list of (relative path, file size).
+/// Used by the dry-run no-side-effect assertion to detect any FS mutation.
+fn snapshot_layout_paths(root: &Path) -> Vec<(String, u64)> {
+    let orbit_dir = root.join(".orbit");
+    if !orbit_dir.exists() {
+        return vec![];
+    }
+    let mut entries = vec![];
+    walk_dir(&orbit_dir, &orbit_dir, &mut entries);
+    entries.sort();
+    entries
+}
+
+fn walk_dir(root: &Path, dir: &Path, out: &mut Vec<(String, u64)>) {
+    for entry in std::fs::read_dir(dir).unwrap().flatten() {
+        let path = entry.path();
+        let rel = path.strip_prefix(root).unwrap().display().to_string();
+        let meta = entry.metadata().unwrap();
+        if meta.is_dir() {
+            walk_dir(root, &path, out);
+        } else {
+            out.push((rel, meta.len()));
+        }
+    }
+}

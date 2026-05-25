@@ -872,3 +872,91 @@ pub fn expected_envelope_for_spec_check_already_checked() -> String {
     let err = Error::conflict("spec.check", "AC ac-03 is already checked");
     envelope_err_string(&err)
 }
+
+// ---------------------------------------------------------------------------
+// spec.promote parity (per spec 2026-05-25-port-promote-sh ac-06).
+// ---------------------------------------------------------------------------
+
+/// Populate `<root>/.orbit/cards/0050-promote-fixture.yaml` with a card
+/// carrying three scenarios — mixed gate flags — so the expected envelope
+/// exercises every branch of the AC-list builder.
+pub fn populate_promote_card_fixture(root: &std::path::Path) {
+    let cards_dir = root.join(".orbit/cards");
+    std::fs::create_dir_all(&cards_dir).unwrap();
+    std::fs::write(
+        cards_dir.join("0050-promote-fixture.yaml"),
+        "id: 0050-promote-fixture\n\
+         feature: promote fixture\n\
+         goal: a goal for promotion\n\
+         maturity: planned\n\
+         scenarios:\n\
+         - name: first\n  given: g\n  when: w\n  then: t1\n  gate: true\n\
+         - name: second\n  given: g\n  when: w\n  then: t2\n\
+         - name: third\n  given: g\n  when: w\n  then: t3\n  gate: true\n",
+    )
+    .unwrap();
+}
+
+/// Canonical date token used by promote parity tests so the derived spec id
+/// is byte-deterministic.
+pub const PROMOTE_FIXTURE_TODAY: &str = "2026-05-25";
+
+fn promote_fixture_expected_spec() -> orbit_state_core::schema::Spec {
+    use orbit_state_core::schema::{AcType, AcceptanceCriterion, Spec, SpecStatus};
+    Spec {
+        id: format!("{PROMOTE_FIXTURE_TODAY}-promote-fixture"),
+        goal: "a goal for promotion".into(),
+        cards: vec!["0050-promote-fixture".into()],
+        status: SpecStatus::Open,
+        labels: vec![],
+        acceptance_criteria: vec![
+            AcceptanceCriterion {
+                id: "ac-01".into(),
+                description: "first — t1".into(),
+                gate: true,
+                checked: false,
+                verification: None,
+                ac_type: AcType::Code,
+            },
+            AcceptanceCriterion {
+                id: "ac-02".into(),
+                description: "second — t2".into(),
+                gate: false,
+                checked: false,
+                verification: None,
+                ac_type: AcType::Code,
+            },
+            AcceptanceCriterion {
+                id: "ac-03".into(),
+                description: "third — t3".into(),
+                gate: true,
+                checked: false,
+                verification: None,
+                ac_type: AcType::Code,
+            },
+        ],
+        memories_considered: vec![],
+    }
+}
+
+/// Expected envelope for `spec.promote .orbit/cards/0050-promote-fixture.yaml
+/// --today 2026-05-25` against the fixture (non-dry-run path).
+pub fn expected_envelope_for_spec_promote_fixture() -> String {
+    use orbit_state_core::{envelope_ok_string, SpecPromoteResult, VerbResponse};
+    let response = VerbResponse::SpecPromote(SpecPromoteResult {
+        spec: promote_fixture_expected_spec(),
+        dry_run: false,
+    });
+    envelope_ok_string(&response).expect("infallible")
+}
+
+/// Expected envelope for `--dry-run` against the fixture — same shape as the
+/// non-dry-run path EXCEPT `dry_run: true`.
+pub fn expected_envelope_for_spec_promote_fixture_dry_run() -> String {
+    use orbit_state_core::{envelope_ok_string, SpecPromoteResult, VerbResponse};
+    let response = VerbResponse::SpecPromote(SpecPromoteResult {
+        spec: promote_fixture_expected_spec(),
+        dry_run: true,
+    });
+    envelope_ok_string(&response).expect("infallible")
+}
