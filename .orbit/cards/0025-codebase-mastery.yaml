@@ -1,9 +1,9 @@
 id: 0025-codebase-mastery
-feature: Codebase mastery — token-frugal navigation, parsing, and search
-as_a: agent working in any of Hugh's repos
-i_want: rtk-wrapped commands, tree-sitter for AST queries, ripgrep and ast-grep for search — all delivered via /orb:code-investigate in token-frugal modes by default
-so_that: I can check the codebase before editing it (Think Before Coding), reuse existing patterns (Simplicity First), edit surgically (Surgical Changes), and write tests-first (Goal-Driven Execution) — without burning the context budget on browsing
-goal: agents check the codebase cheaply enough that they actually check — /orb:code-investigate is the delivery vehicle for the token-frugal default with a PreToolUse nudge ensuring the discipline fires before edits; Karpathy's principles become operable rather than aspirational; token cost of evidence is low enough that evidence is gathered before assumptions are made
+feature: Informed, surgical agents — investigation as a pipeline-stage step
+as_a: agent working a stage of the orbit pipeline that touches code
+i_want: investigation routed by the stage I'm in — narrow mode for specific questions, broad mode for neighbourhood awareness — backed by tools (ast-grep, tree-sitter, ripgrep, rtk-wrapped variants) that make evidence cheap enough to gather as a matter of course
+so_that: I edit from evidence rather than working memory — surgical change, not approximate change; the right amount of investigation for the stage, not browse-the-whole-repo or fly-blind
+goal: agents in the orbit pipeline edit from evidence rather than working memory. At each stage that touches code, investigation happens as a structural step — narrow when there's a specific question, broad when picking up a neighbourhood. Tooling (ast-grep, tree-sitter, ripgrep, rtk-wrapped variants) and token-frugality make this affordable. Surgical change is what affordable buys.
 maturity: emerging
 scenarios:
 - name: rtk wraps command interactions by default
@@ -26,10 +26,10 @@ scenarios:
   when: the agent uses ast-grep
   then: pattern-based AST search returns the structural matches across the language family without the agent writing custom AST traversal
   gate: false
-- name: Token-frugality is the constraint, not a nice-to-have
-  given: an agent considering a command invocation
+- name: Token-frugality is the enabler, not the goal
+  given: an agent considering a tool invocation
   when: it picks the tool
-  then: the token-frugal variant is the default; the verbose variant is the exception, used only when full output is necessary
+  then: the token-frugal variant is reached for by default because surgical change depends on cheap evidence — frugality serves informed editing, it is not the headline value
   gate: true
 - name: Karpathy's principles are operable, not aspirational
   given: an agent about to edit code
@@ -56,6 +56,9 @@ relations:
 references:
 - '.orbit/specs/2026-05-17-code-investigate-skill/spec.yaml: ships /orb:code-investigate as the agent-equipment surface delivering this card'
 - '.orbit/memos/2026-05-06-codebase-mastery.md: distillation source — three pillars and Karpathy''s principles mapping'
+- '.orbit/memos/2026-05-17-codebase-mastery-audit.md: narrowed audit at ship — 5 of 7 scenarios aspirational; consumer-repo evidence of zero tool reach'
+- '.orbit/memos/2026-05-25-code-investigate-stage-bound.md: in-repo signal + stage-bound principle — code-investigate belongs to workflow stages, not SessionStart'
+- '.orbit/memos/2026-05-25-code-investigate-empirical-audit.md: 5-repo, 35-session audit — 1,725 edits, 610 hook fires, 0 invocations; baseline unchanged post-ship'
 - 'rtk: token-compressing CLI proxy installed on PATH; agent-facing reference is `rtk --help` (lists wrapped verbs — ls, tree, read, grep, git, find, diff, log, json, etc.)'
 - 'https://github.com/quickwit-oss/tantivy: indexed full-text search (deferred to v0.2+)'
 - 'https://github.com/ast-grep/ast-grep: pattern-based AST search'
