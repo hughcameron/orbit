@@ -1,0 +1,10 @@
+spec_id: 2026-05-25-verify-surfaces-migration-errors
+card_path: .orbit/cards/0020-orbit-state.yaml
+autonomy: guided
+iteration: 1
+stage: review-spec
+review_spec_cycle: 0
+review_spec_date: null
+review_pr_cycle: 0
+review_pr_date: null
+iteration_history: []
