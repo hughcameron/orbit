@@ -36,7 +36,7 @@ acceptance_criteria:
     that pushes a synthetic RoundTripFailure on the Err arm. The Ok arm
     is a no-op.
   gate: true
-  checked: false
+  checked: true
 - id: ac-02
   description: |
     A new unit test in verify.rs's test module covers the future-version
@@ -50,7 +50,7 @@ acceptance_criteria:
     Verification: cargo test -p orbit-state --test … (or workspace test
     suite) reports the new test passing on a clean tree.
   gate: true
-  checked: false
+  checked: true
 - id: ac-03
   description: |
     No regression on existing verify_all coverage. The full workspace test
@@ -62,4 +62,4 @@ acceptance_criteria:
     Verification: cargo test --workspace passes with ≥510 tests green,
     zero failures.
   gate: true
-  checked: false
+  checked: true
