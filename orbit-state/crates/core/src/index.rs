@@ -197,6 +197,10 @@ impl Index {
                 Error::unavailable("index.rebuild", format!("read {}: {e}", path.display()))
             })?;
             let card: Card = parse_yaml(&text)?;
+            card.validate_relations().map_err(|mut e| {
+                e.verb = "index.rebuild".into();
+                e
+            })?;
             let slug = path
                 .file_stem()
                 .and_then(|s| s.to_str())

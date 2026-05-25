@@ -2,6 +2,32 @@
 
 All notable changes to orbit are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.4.36] - 2026-05-25
+
+Lands the deferred `relations:respects → choice 0020` edges that PRs #32 + #33 noted as out-of-scope: the `Relation` schema gains additive choice-target support and a `Respects` kind, then cards 0005-drive and 0006-rally each gain the edge. Smallest possible schema-additive change — existing card-target relations across the entire substrate round-trip byte-identically.
+
+### Added
+
+- **`Relation.choice: Option<String>`** at `orbit-state/crates/core/src/schema.rs`. Mutually exclusive with `card` per `Relation::validate()`; both fields carry `#[serde(default, skip_serializing_if = "Option::is_none")]` so on-disk YAML stays clean (no `card: null` / `choice: null` noise).
+- **`RelationKind::Respects` variant** — a card honours a choice's policy. Serialises as `respects` per the existing `rename_all = "kebab-case"`. Kind-vs-target coherence is not validated in v1 (deferred).
+- **`Card::validate_relations()`** — single-point post-parse check; called from every Card-parsing site (index rebuild, canonicalise, card.show, card.tree, card.specs, spec.promote — 7 sites total, audited per spec ac-09). Pre-recommendation (b) "call-site sweep" beat (a) "custom Deserialize" because custom-Deserialize loses derive's `deny_unknown_fields` enforcement.
+- **Seven unit tests** in `schema.rs` covering parse card-target / parse choice-target / reject both-set / reject neither-set / `deny_unknown_fields` still rejects unknown siblings / round-trip omits unset target field (backward-compat guarantee) / Card-level validation propagates first error.
+- **CLI + MCP parity test** pinned to `card.show` against a fixture card carrying BOTH a card-target relation AND a choice-target relation — asserts byte-equal envelopes across surfaces.
+- **`relations:respects → choice '0020'` edges** on `.orbit/cards/0005-drive.yaml` and `.orbit/cards/0006-rally.yaml` — the deferred edge writes from PRs #32 + #33 land here. Choice id form is bare numeric (`'0020'`, matching `Choice.id` on disk per `.orbit/conventions/id-conventions.md`); the `relations:respects` shape is the canonical pattern for any future choice-honour edge.
+
+### Changed
+
+- **`Relation.card` softens from `String` to `Option<String>`** at `orbit-state/crates/core/src/schema.rs`. Backward-compat preserved: `#[serde(default)]` keeps existing `card: <id>` YAML parseable; `skip_serializing_if` keeps serialised output byte-equal to today's shape for card-target relations.
+- **Four card-graph read sites in `verbs.rs`** updated to handle `Option`: forward-edges helper, reverse-edges helper, mermaid render, graphviz render. Each now skips choice-target relations (card graphs are card-target only; choice-target visualisation is a separate surface, out of scope here).
+- **`Relation::FIELDS` constant + drift test at `schema.rs:1245-1257`** extended to include `choice`; drift test constructs a Relation with both target fields set so the top-level-keys assertion matches the FIELDS enumeration.
+
+### Notes
+
+- Consumer audit per spec ac-09 captured 7 type-system touch sites (Relation struct + FIELDS + drift test + RelationKind enum + relation_kind_str match in verbs.rs + 4 graph read-sites in verbs.rs) and 7 Card-parse call sites needing `validate_relations()` wiring (index.rs, canonicalise.rs, verbs.rs:2837/3697/3797/3962/5751). All addressed.
+- Tests: 530 → 539 (+9 across the 7 schema-level relation tests and the 2 card.show parity assertions).
+- The schema change is additive enough that `orbit verify` returns clean immediately — every existing card across the substrate round-trips byte-identically.
+- Driven from a session stacked three-deep on PRs #32 + #33. Rebase clean when both merge in order.
+
 ## [0.4.35] - 2026-05-25
 
 Ports `plugins/orb/scripts/promote.sh` — a 197-line python3-in-bash shim that derived a spec id from a card filename and fanned the card's scenarios into a fresh spec's `acceptance_criteria` — into a single native verb `orbit spec promote` on the `orbit spec` family. Second opportunistic migration under choice 0020 (orbit-acceptance.sh shipped as 0.4.34 yesterday).

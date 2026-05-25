@@ -1004,3 +1004,23 @@ fn spec_promote_mcp_dry_run_envelope_matches_and_writes_nothing() {
     ));
     assert!(!spec_file.exists(), "dry-run must NOT write the spec file");
 }
+
+// ---------------------------------------------------------------------------
+// card.show with mixed-target relations (per spec
+// 2026-05-25-relation-schema-choice-targets ac-06).
+// ---------------------------------------------------------------------------
+
+#[test]
+fn card_show_mcp_envelope_matches_canonical_envelope_with_mixed_relations() {
+    let dir = tempfile::tempdir().unwrap();
+    common::populate_card_with_mixed_relations(dir.path());
+    let inner = run_mcp_tools_call(
+        dir.path(),
+        json!({ "name": "card.show", "arguments": { "slug": "0050-mixed" } }),
+    );
+    let envelope = inner_envelope_text(&inner);
+    assert_eq!(
+        envelope,
+        common::expected_envelope_for_card_show_mixed_relations()
+    );
+}

@@ -2020,3 +2020,25 @@ fn walk_dir(root: &Path, dir: &Path, out: &mut Vec<(String, u64)>) {
         }
     }
 }
+
+// ---------------------------------------------------------------------------
+// card.show with mixed-target relations (per spec
+// 2026-05-25-relation-schema-choice-targets ac-06).
+// ---------------------------------------------------------------------------
+
+#[test]
+fn card_show_cli_json_matches_canonical_envelope_with_mixed_relations() {
+    let dir = tempfile::tempdir().unwrap();
+    common::populate_card_with_mixed_relations(dir.path());
+    let output = run_cli_json(dir.path(), &["card", "show", "0050-mixed"]);
+    assert!(
+        output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert_eq!(
+        stdout.trim_end_matches('\n'),
+        common::expected_envelope_for_card_show_mixed_relations()
+    );
+}
