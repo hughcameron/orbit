@@ -1,0 +1,9 @@
+# orbit-state runtime artefacts — local to each clone, never tracked.
+state.db
+state.db-journal
+state.db-wal
+schema-version
+locks/
+.session-id
+.session-card
+.code-investigate-recent

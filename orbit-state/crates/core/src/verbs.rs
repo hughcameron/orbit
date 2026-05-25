@@ -2838,6 +2838,10 @@ fn spec_promote(layout: &OrbitLayout, args: &SpecPromoteArgs) -> Result<SpecProm
         e.verb = VERB.into();
         e
     })?;
+    card.validate_relations().map_err(|mut e| {
+        e.verb = VERB.into();
+        e
+    })?;
 
     if card.goal.is_empty() {
         return Err(Error::malformed(
@@ -3698,6 +3702,10 @@ fn card_show(layout: &OrbitLayout, args: &CardShowArgs) -> Result<CardShowResult
         e.verb = VERB.into();
         e
     })?;
+    card.validate_relations().map_err(|mut e| {
+        e.verb = VERB.into();
+        e
+    })?;
     Ok(CardShowResult {
         slug: resolved,
         card,
@@ -3798,6 +3806,10 @@ fn load_all_cards(
             e.verb = verb.into();
             e
         })?;
+        card.validate_relations().map_err(|mut e| {
+            e.verb = verb.into();
+            e
+        })?;
         let slug = path
             .file_stem()
             .and_then(|s| s.to_str())
@@ -3819,7 +3831,13 @@ fn build_forward_edges(
         let edges = card
             .relations
             .iter()
-            .map(|r| (r.card.clone(), relation_kind_str(&r.kind).into(), r.reason.clone()))
+            // Card-tree views are card-target only; skip choice-target relations
+            // (per spec 2026-05-25-relation-schema-choice-targets ac-09).
+            .filter_map(|r| {
+                r.card
+                    .as_ref()
+                    .map(|c| (c.clone(), relation_kind_str(&r.kind).into(), r.reason.clone()))
+            })
             .collect();
         out.insert(slug.clone(), edges);
     }
@@ -3836,7 +3854,10 @@ fn build_reverse_edges(
     let mut out: BTreeMap<String, Vec<(String, String, String)>> = BTreeMap::new();
     for (source, card) in cards {
         for relation in &card.relations {
-            out.entry(relation.card.clone()).or_default().push((
+            // Card-tree views are card-target only; skip choice-target relations
+            // (per spec 2026-05-25-relation-schema-choice-targets ac-09).
+            let Some(target_card) = &relation.card else { continue };
+            out.entry(target_card.clone()).or_default().push((
                 source.clone(),
                 relation_kind_str(&relation.kind).into(),
                 relation.reason.clone(),
@@ -3853,6 +3874,7 @@ fn relation_kind_str(kind: &crate::schema::RelationKind) -> &'static str {
         RelationKind::Feeds => "feeds",
         RelationKind::Supersedes => "supersedes",
         RelationKind::SupersededBy => "superseded-by",
+        RelationKind::Respects => "respects",
     }
 }
 
@@ -3950,6 +3972,10 @@ fn card_specs(layout: &OrbitLayout, args: &CardSpecsArgs) -> Result<CardSpecsRes
     let card_text = std::fs::read_to_string(&card_path)
         .map_err(|e| Error::unavailable(VERB, format!("read {}: {e}", card_path.display())))?;
     let card: Card = parse_yaml(&card_text).map_err(|mut e| {
+        e.verb = VERB.into();
+        e
+    })?;
+    card.validate_relations().map_err(|mut e| {
         e.verb = VERB.into();
         e
     })?;
@@ -5650,10 +5676,14 @@ fn render_mermaid(
     for (slug, card) in cards {
         let from = mermaid_id('c', slug);
         for relation in &card.relations {
-            if !cards.contains_key(&relation.card) {
+            // Card graph is card-target only; choice-target relations are
+            // skipped here (per spec 2026-05-25-relation-schema-choice-targets
+            // ac-09 — separate visualisation surface is out of scope).
+            let Some(target_card) = &relation.card else { continue };
+            if !cards.contains_key(target_card) {
                 continue;
             }
-            let to = mermaid_id('c', &relation.card);
+            let to = mermaid_id('c', target_card);
             let label = relation_kind_str(&relation.kind);
             out.push_str(&format!("  {from} -->|{label}| {to}\n"));
         }
@@ -5682,13 +5712,14 @@ fn render_graphviz(
     }
     for (slug, card) in cards {
         for relation in &card.relations {
-            if !cards.contains_key(&relation.card) {
+            // Card graph is card-target only; skip choice-target relations.
+            let Some(target_card) = &relation.card else { continue };
+            if !cards.contains_key(target_card) {
                 continue;
             }
             let label = relation_kind_str(&relation.kind);
             out.push_str(&format!(
-                "  \"{slug}\" -> \"{target}\" [label=\"{label}\"];\n",
-                target = relation.card
+                "  \"{slug}\" -> \"{target_card}\" [label=\"{label}\"];\n",
             ));
         }
     }
@@ -5734,6 +5765,10 @@ fn collect_card_summaries(layout: &OrbitLayout, verb: &'static str) -> Result<Ve
         let text = std::fs::read_to_string(&path)
             .map_err(|e| Error::unavailable(verb, format!("read {}: {e}", path.display())))?;
         let card: Card = parse_yaml(&text).map_err(|mut e| {
+            e.verb = verb.into();
+            e
+        })?;
+        card.validate_relations().map_err(|mut e| {
             e.verb = verb.into();
             e
         })?;

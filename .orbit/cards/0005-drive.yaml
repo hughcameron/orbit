@@ -63,6 +63,7 @@ specs:
 - .orbit/specs/2026-05-09-drive-rally-sidecar-layout/spec.yaml
 - .orbit/specs/2026-05-24-port-acceptance-shim/spec.yaml
 - .orbit/specs/2026-05-25-port-promote-sh/spec.yaml
+- .orbit/specs/2026-05-25-relation-schema-choice-targets/spec.yaml
 relations:
 - card: 0019-tabletop
   type: depends-on
@@ -73,6 +74,9 @@ relations:
 - card: 0006-rally
   type: feeds
   reason: rallies orchestrate parallel drives — each drive is one fan-out track
+- choice: '0020'
+  type: respects
+  reason: drive's promote stage consumes the orbit spec promote Rust verb that this choice authorised the shell-script migration to (per choice 0020 Consequences)
 references:
 - '.orbit/memos/2026-05-06-rally-fan-out.md: drive types, the mid-run rule, and the contract-consumption pattern'
 - 'Prior experience: disposition embedded in agent definition + CLAUDE.md proved effective for focus and throughput'

@@ -108,6 +108,10 @@ fn canonicalise_card_file(path: &Path, dry_run: bool, report: &mut CanonicaliseR
             return;
         }
     };
+    if let Err(e) = parsed.validate_relations() {
+        report.parse_failed.push((path.to_path_buf(), e.to_string()));
+        return;
+    }
     let expected_id = match path.file_stem().and_then(|s| s.to_str()) {
         Some(s) => s.to_string(),
         None => {

@@ -142,7 +142,40 @@ impl Scenario {
 }
 
 impl Relation {
-    pub const FIELDS: &'static [&'static str] = &["card", "type", "reason"];
+    pub const FIELDS: &'static [&'static str] = &["card", "choice", "type", "reason"];
+
+    /// Validate that exactly one of `card` / `choice` is set. Per spec
+    /// 2026-05-25-relation-schema-choice-targets ac-02 — Relation supports
+    /// both card-target and choice-target edges via separate optional
+    /// fields; neither/both is a malformed entry.
+    pub fn validate(&self) -> std::result::Result<(), crate::error::Error> {
+        use crate::error::Error;
+        const VERB: &str = "card.parse";
+        match (&self.card, &self.choice) {
+            (Some(_), Some(_)) => Err(Error::malformed(
+                VERB,
+                "relation has both `card:` and `choice:` set — pick one",
+            )),
+            (None, None) => Err(Error::malformed(
+                VERB,
+                "relation has neither `card:` nor `choice:` set — pick one",
+            )),
+            _ => Ok(()),
+        }
+    }
+}
+
+impl Card {
+    /// Validate every `Relation` entry post-parse. Called from every site
+    /// that parses a Card YAML — keeps derive-driven `deny_unknown_fields`
+    /// intact while enforcing the exactly-one-target invariant per spec
+    /// 2026-05-25-relation-schema-choice-targets ac-02.
+    pub fn validate_relations(&self) -> std::result::Result<(), crate::error::Error> {
+        for r in &self.relations {
+            r.validate()?;
+        }
+        Ok(())
+    }
 }
 
 impl Config {
@@ -547,7 +580,19 @@ pub struct Scenario {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Relation {
-    pub card: String,
+    /// Card-target edge: full slug (e.g. `0019-tabletop`). Mutually
+    /// exclusive with `choice` — exactly one of the two is set per entry.
+    /// `Relation::validate()` enforces this post-parse (called from every
+    /// Card-parse site). `skip_serializing_if` preserves byte-equal
+    /// serialisation of existing card-target relations.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub card: Option<String>,
+    /// Choice-target edge: bare numeric id (e.g. `'0020'`, matching
+    /// `Choice.id` on disk per `.orbit/conventions/id-conventions.md`).
+    /// Mutually exclusive with `card`. Per spec
+    /// 2026-05-25-relation-schema-choice-targets.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub choice: Option<String>,
     #[serde(rename = "type")]
     pub kind: RelationKind,
     pub reason: String,
@@ -560,6 +605,10 @@ pub enum RelationKind {
     Feeds,
     Supersedes,
     SupersededBy,
+    /// A card honours a choice's policy. Pairs with a `choice:` target;
+    /// kind-vs-target coherence is not validated in v1 per spec
+    /// 2026-05-25-relation-schema-choice-targets ac-03.
+    Respects,
 }
 
 // ============================================================================
@@ -881,7 +930,8 @@ unknown_field: oops
             }],
             specs: vec!["sp".into()],
             relations: vec![Relation {
-                card: "c".into(),
+                card: Some("c".into()),
+                choice: None,
                 kind: RelationKind::Feeds,
                 reason: "r".into(),
             }],
@@ -1244,8 +1294,14 @@ unknown_field: oops
 
     #[test]
     fn relation_fields_matches_struct() {
+        // Construct a Relation with BOTH target fields populated so the
+        // top-level-keys assertion compares apples-to-apples against
+        // Relation::FIELDS (which lists every legal field, including the
+        // mutually-exclusive `card`/`choice` pair per spec
+        // 2026-05-25-relation-schema-choice-targets ac-01).
         let relation = Relation {
-            card: "c".into(),
+            card: Some("c".into()),
+            choice: Some("0020".into()),
             kind: RelationKind::Feeds,
             reason: "r".into(),
         };
@@ -1254,6 +1310,113 @@ unknown_field: oops
         let mut expected: Vec<String> = Relation::FIELDS.iter().map(|s| s.to_string()).collect();
         expected.sort();
         assert_eq!(got, expected, "Relation::FIELDS drifted from struct");
+    }
+
+    // -----------------------------------------------------------------------
+    // spec 2026-05-25-relation-schema-choice-targets ac-05 — Relation parse +
+    // validate coverage across both target shapes.
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn relation_parse_card_target_succeeds() {
+        let yaml = "card: 0019-tabletop\ntype: depends-on\nreason: r\n";
+        let r: Relation = serde_yaml::from_str(yaml).unwrap();
+        assert_eq!(r.card.as_deref(), Some("0019-tabletop"));
+        assert_eq!(r.choice, None);
+        assert!(r.validate().is_ok());
+    }
+
+    #[test]
+    fn relation_parse_choice_target_succeeds() {
+        let yaml = "choice: '0020'\ntype: respects\nreason: r\n";
+        let r: Relation = serde_yaml::from_str(yaml).unwrap();
+        assert_eq!(r.card, None);
+        assert_eq!(r.choice.as_deref(), Some("0020"));
+        assert!(r.validate().is_ok());
+    }
+
+    #[test]
+    fn relation_validate_rejects_both_set() {
+        let r = Relation {
+            card: Some("c".into()),
+            choice: Some("0020".into()),
+            kind: RelationKind::Respects,
+            reason: "r".into(),
+        };
+        let err = r.validate().expect_err("both-set must reject");
+        assert!(err.to_string().contains("both"), "got: {err}");
+    }
+
+    #[test]
+    fn relation_validate_rejects_neither_set() {
+        let r = Relation {
+            card: None,
+            choice: None,
+            kind: RelationKind::Feeds,
+            reason: "r".into(),
+        };
+        let err = r.validate().expect_err("neither-set must reject");
+        assert!(err.to_string().contains("neither"), "got: {err}");
+    }
+
+    #[test]
+    fn relation_parse_unknown_field_still_rejected() {
+        // deny_unknown_fields stays in force across the schema change —
+        // adding `choice:` as a legal field doesn't open the door to arbitrary
+        // sibling fields.
+        let yaml = "card: c\ntype: feeds\nreason: r\nrogue: x\n";
+        let result: Result<Relation, _> = serde_yaml::from_str(yaml);
+        assert!(result.is_err(), "deny_unknown_fields should reject `rogue:`");
+    }
+
+    #[test]
+    fn relation_round_trip_omits_unset_target_field() {
+        // Backward-compat guarantee per spec ac-05(f): card-target relations
+        // emit YAML with NO `choice:` key, choice-target relations emit YAML
+        // with NO `card:` key. Option::is_none + skip_serializing_if.
+        let card_rel = Relation {
+            card: Some("c".into()),
+            choice: None,
+            kind: RelationKind::Feeds,
+            reason: "r".into(),
+        };
+        let yaml = serde_yaml::to_string(&card_rel).unwrap();
+        assert!(!yaml.contains("choice:"), "card-target leaked choice key: {yaml}");
+
+        let choice_rel = Relation {
+            card: None,
+            choice: Some("0020".into()),
+            kind: RelationKind::Respects,
+            reason: "r".into(),
+        };
+        let yaml = serde_yaml::to_string(&choice_rel).unwrap();
+        assert!(!yaml.contains("card:"), "choice-target leaked card key: {yaml}");
+    }
+
+    #[test]
+    fn card_validate_relations_propagates_first_error() {
+        let card = Card {
+            id: Some("0001-x".into()),
+            feature: "f".into(),
+            as_a: None,
+            i_want: None,
+            so_that: None,
+            goal: "g".into(),
+            maturity: CardMaturity::Planned,
+            park: None,
+            scenarios: vec![],
+            specs: vec![],
+            relations: vec![Relation {
+                card: None,
+                choice: None,
+                kind: RelationKind::Feeds,
+                reason: "r".into(),
+            }],
+            references: vec![],
+            notes: vec![],
+        };
+        let err = card.validate_relations().expect_err("invalid relation must propagate");
+        assert!(err.to_string().contains("neither"), "got: {err}");
     }
 
     #[test]

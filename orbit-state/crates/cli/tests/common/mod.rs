@@ -960,3 +960,70 @@ pub fn expected_envelope_for_spec_promote_fixture_dry_run() -> String {
     });
     envelope_ok_string(&response).expect("infallible")
 }
+
+// ---------------------------------------------------------------------------
+// card.show with mixed relations (per spec
+// 2026-05-25-relation-schema-choice-targets ac-06) — fixture has BOTH a
+// card-target relation and a choice-target relation. Asserts the new schema
+// serialises through the wire envelope correctly on both surfaces.
+// ---------------------------------------------------------------------------
+
+pub fn populate_card_with_mixed_relations(root: &std::path::Path) {
+    let cards_dir = root.join(".orbit/cards");
+    std::fs::create_dir_all(&cards_dir).unwrap();
+    // Sibling card so the card-target relation references a real id.
+    std::fs::write(
+        cards_dir.join("0099-sibling.yaml"),
+        "id: 0099-sibling\nfeature: sibling\ngoal: a sibling\nmaturity: planned\n",
+    )
+    .unwrap();
+    // Subject card carrying both kinds of relation.
+    std::fs::write(
+        cards_dir.join("0050-mixed.yaml"),
+        "id: 0050-mixed\n\
+         feature: mixed-relations fixture\n\
+         goal: hold one card-target and one choice-target relation\n\
+         maturity: planned\n\
+         relations:\n\
+         - card: 0099-sibling\n  type: feeds\n  reason: feeds the sibling\n\
+         - choice: '0020'\n  type: respects\n  reason: honours the policy\n",
+    )
+    .unwrap();
+}
+
+pub fn expected_envelope_for_card_show_mixed_relations() -> String {
+    use orbit_state_core::schema::{Card, CardMaturity, Relation, RelationKind};
+    use orbit_state_core::{envelope_ok_string, CardShowResult, VerbResponse};
+    let response = VerbResponse::CardShow(CardShowResult {
+        slug: "0050-mixed".into(),
+        card: Card {
+            id: Some("0050-mixed".into()),
+            feature: "mixed-relations fixture".into(),
+            as_a: None,
+            i_want: None,
+            so_that: None,
+            goal: "hold one card-target and one choice-target relation".into(),
+            maturity: CardMaturity::Planned,
+            park: None,
+            scenarios: vec![],
+            specs: vec![],
+            relations: vec![
+                Relation {
+                    card: Some("0099-sibling".into()),
+                    choice: None,
+                    kind: RelationKind::Feeds,
+                    reason: "feeds the sibling".into(),
+                },
+                Relation {
+                    card: None,
+                    choice: Some("0020".into()),
+                    kind: RelationKind::Respects,
+                    reason: "honours the policy".into(),
+                },
+            ],
+            references: vec![],
+            notes: vec![],
+        },
+    });
+    envelope_ok_string(&response).expect("infallible")
+}

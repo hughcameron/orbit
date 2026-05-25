@@ -1,0 +1,49 @@
+id: 2026-05-25-relation-schema-choice-targets
+goal: Relation schema gains choice-target support + a Respects kind — additive change keeping byte-equal serialisation for existing card-target relations. Writes the deferred relations:respects → choice 0020 edges on cards 0005-drive and 0006-rally.
+cards:
+- 0020-orbit-state
+- 0005-drive
+- 0006-rally
+status: closed
+labels: []
+acceptance_criteria:
+- id: ac-01
+  description: 'Relation struct at `orbit-state/crates/core/src/schema.rs:549` gains a `choice: Option<String>` field, and its `card: String` softens to `card: Option<String>`. Both carry `#[serde(default, skip_serializing_if = "Option::is_none")]`. Existing card-target relations on disk parse byte-equal (the `default` keeps absent fields parseable; the `skip_serializing_if` keeps written YAML identical to today''s shape — `card: <id>` not `card: <id>` followed by `choice: null`)'
+  gate: true
+  checked: true
+- id: ac-02
+  description: 'Validation: a `Relation` with both `card` and `choice` set, OR with neither set, is rejected at parse time. Two paths, both viable, picking carefully because custom `Deserialize` loses derive''s `deny_unknown_fields` (it''s derive-only — hand-rolled impls must re-implement the check). (a) **Custom `Deserialize` on Relation that ALSO manually validates known-fields-only** — single hook, fires everywhere, but requires explicit unknown-field rejection to preserve ac-05(e). (b) **`validate_relation_target` helper invoked from a wrapper around every `parse_yaml::<Card>` call site** — keeps derive-driven `deny_unknown_fields` cleanly, costs a call-site sweep (~3-5 sites currently). **Pre-recommendation: (b)** — the call-site sweep is cheaper than re-implementing unknown-field rejection by hand. The error carries a descriptive message naming the offending entry (e.g. card id + relation index)'
+  gate: false
+  checked: true
+- id: ac-03
+  description: '`RelationKind` enum at `orbit-state/crates/core/src/schema.rs:558` gains a `Respects` variant. Per the existing `#[serde(rename_all = "kebab-case")]`, it serialises as `respects`. No validation that `Respects` only pairs with choice-target relations — v1 is permissive; kind-vs-target coherence is deferred to a follow-up if needed'
+  gate: false
+  checked: true
+- id: ac-04
+  description: '`orbit verify` returns clean against the orbit substrate after canonicalise. Existing card-target relations across `.orbit/cards/*.yaml` round-trip byte-identically — this is the load-bearing backward-compat guarantee'
+  gate: true
+  checked: true
+- id: ac-05
+  description: 'Unit tests in `crates/core` cover: (a) parse existing card-target relation succeeds, (b) parse new choice-target relation succeeds, (c) parse with both `card:` and `choice:` set returns malformed, (d) parse with neither set returns malformed, (e) parse with an unknown sibling field still rejected (`deny_unknown_fields` preserved), (f) round-trip backward compat — serialise a card-target relation produces YAML with NO `choice:` key (Option::is_none skip works), and serialise a choice-target relation produces YAML with NO `card:` key (symmetric). The byte-equal backward-compat guarantee is the load-bearing contract; field-ordering within an entry is whatever the canonical writer emits today'
+  gate: false
+  checked: true
+- id: ac-06
+  description: CLI/MCP parity test pinned to `card.show` — both surfaces emit byte-equal envelopes for a fixture card carrying BOTH a card-target relation AND a choice-target relation. Asserts the new schema serialises through the wire envelope correctly on both surfaces. Pinning the verb (not "at least one") prevents vacuous closure against a verb that doesn't carry relations
+  gate: false
+  checked: true
+- id: ac-07
+  description: '`.orbit/cards/0005-drive.yaml` gains a `relations:` entry `{choice: ''0020'', type: respects, reason: "drive''s promote stage consumes the orbit spec promote Rust verb that this choice authorised the shell-script migration to (per choice 0020 Consequences)"}` appended to the existing list. Choice id form is bare numeric (`''0020''`, matching `Choice.id` on disk) — NOT full slug — per `.orbit/conventions/id-conventions.md`. `orbit canonicalise` then normalises byte form; `orbit verify` clean'
+  gate: false
+  checked: true
+- id: ac-08
+  description: '`.orbit/cards/0006-rally.yaml` gains the analogous `relations:` entry — same shape with `rally''s promote stage` substituted in the reason; choice id form bare numeric. Existing card relations untouched'
+  gate: false
+  checked: true
+- id: ac-09
+  description: 'Two-axis consumer audit — both must be clean before tests will compile. (1) READ-SITE AUDIT: `rg ''\.card\b|relation\.card|Relation \{ card'' orbit-state/` enumerates every Rust call site that reads `relation.card` as a `String`. Each site updated to handle the new `Option<String>` shape (typical fix: `if let Some(card_id) = &r.card { ... }` to skip choice-target relations, or widen the projection). (2) TYPE-SYSTEM AUDIT: the `Relation::FIELDS` constant at `orbit-state/crates/core/src/schema.rs:144-146` and its drift test at `1245-1257` (unknown-field detection) need the new `choice` field added; the exhaustive `match` over `RelationKind` in `relation_kind_str()` at `orbit-state/crates/core/src/verbs.rs:3849-3857` needs a new arm for `Respects`. The set of touched sites is captured as a spec note before close'
+  gate: true
+  checked: true
+- id: ac-10
+  description: '`cargo test` passes across the orbit-state workspace; `orbit verify` returns zero drift; the orbit-state workspace version bumped by one patch from whatever the working-tree `orbit-state/Cargo.toml` carries at implement-stage start (rebase resolves any version collision on main at PR-creation time); top-level `CHANGELOG.md` (the repo-root file, not orbit-state/) gains an entry under that bumped version naming the schema change, the Respects variant, the two card edges, and the consumer-audit findings'
+  gate: false
+  checked: true
