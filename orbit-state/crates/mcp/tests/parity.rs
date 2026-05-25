@@ -1024,3 +1024,101 @@ fn card_show_mcp_envelope_matches_canonical_envelope_with_mixed_relations() {
         common::expected_envelope_for_card_show_mixed_relations()
     );
 }
+
+// ---------------------------------------------------------------------------
+// setup.files parity (per spec 2026-05-25-port-setup-method-sh ac-06) — MCP.
+// ---------------------------------------------------------------------------
+
+fn run_setup_files_mcp(
+    project_root: &std::path::Path,
+    plugin_root: &std::path::Path,
+    legacy_action: &str,
+    method_drift_action: &str,
+    style_drift_action: &str,
+) -> Value {
+    let (method, style) = common::write_setup_files_canonicals(plugin_root);
+    run_mcp_tools_call(
+        project_root,
+        json!({
+            "name": "setup.files",
+            "arguments": {
+                "project_root": project_root.display().to_string(),
+                "legacy_action": legacy_action,
+                "method_drift_action": method_drift_action,
+                "style_drift_action": style_drift_action,
+                "canonical_method_path": method.display().to_string(),
+                "canonical_style_path": style.display().to_string(),
+            }
+        }),
+    )
+}
+
+#[test]
+fn setup_files_mcp_greenfield_envelope_matches() {
+    let project = tempfile::tempdir().unwrap();
+    let plugin = tempfile::tempdir().unwrap();
+    common::populate_setup_files_greenfield(project.path());
+    let inner = run_setup_files_mcp(project.path(), plugin.path(), "migrate", "keep", "keep");
+    let envelope = inner_envelope_text(&inner);
+    assert_eq!(envelope, common::expected_envelope_for_setup_files_greenfield());
+}
+
+#[test]
+fn setup_files_mcp_legacy_migrate_envelope_matches() {
+    let project = tempfile::tempdir().unwrap();
+    let plugin = tempfile::tempdir().unwrap();
+    common::populate_setup_files_legacy(project.path());
+    let inner = run_setup_files_mcp(project.path(), plugin.path(), "migrate", "keep", "keep");
+    let envelope = inner_envelope_text(&inner);
+    assert_eq!(envelope, common::expected_envelope_for_setup_files_legacy_migrate());
+}
+
+#[test]
+fn setup_files_mcp_legacy_refuse_envelope_matches() {
+    let project = tempfile::tempdir().unwrap();
+    let plugin = tempfile::tempdir().unwrap();
+    common::populate_setup_files_legacy(project.path());
+    let inner = run_setup_files_mcp(project.path(), plugin.path(), "refuse", "keep", "keep");
+    let envelope = inner_envelope_text(&inner);
+    assert_eq!(envelope, common::expected_envelope_for_setup_files_legacy_refuse());
+}
+
+#[test]
+fn setup_files_mcp_method_drift_overwrite_envelope_matches() {
+    let project = tempfile::tempdir().unwrap();
+    let plugin = tempfile::tempdir().unwrap();
+    common::populate_setup_files_method_drift(project.path());
+    let inner = run_setup_files_mcp(project.path(), plugin.path(), "migrate", "overwrite", "keep");
+    let envelope = inner_envelope_text(&inner);
+    assert_eq!(envelope, common::expected_envelope_for_setup_files_method_overwrite());
+}
+
+#[test]
+fn setup_files_mcp_method_drift_keep_envelope_matches() {
+    let project = tempfile::tempdir().unwrap();
+    let plugin = tempfile::tempdir().unwrap();
+    common::populate_setup_files_method_drift(project.path());
+    let inner = run_setup_files_mcp(project.path(), plugin.path(), "migrate", "keep", "keep");
+    let envelope = inner_envelope_text(&inner);
+    assert_eq!(envelope, common::expected_envelope_for_setup_files_method_keep());
+}
+
+#[test]
+fn setup_files_mcp_style_drift_overwrite_envelope_matches() {
+    let project = tempfile::tempdir().unwrap();
+    let plugin = tempfile::tempdir().unwrap();
+    common::populate_setup_files_style_drift(project.path());
+    let inner = run_setup_files_mcp(project.path(), plugin.path(), "migrate", "keep", "overwrite");
+    let envelope = inner_envelope_text(&inner);
+    assert_eq!(envelope, common::expected_envelope_for_setup_files_style_overwrite());
+}
+
+#[test]
+fn setup_files_mcp_style_drift_keep_envelope_matches() {
+    let project = tempfile::tempdir().unwrap();
+    let plugin = tempfile::tempdir().unwrap();
+    common::populate_setup_files_style_drift(project.path());
+    let inner = run_setup_files_mcp(project.path(), plugin.path(), "migrate", "keep", "keep");
+    let envelope = inner_envelope_text(&inner);
+    assert_eq!(envelope, common::expected_envelope_for_setup_files_style_keep());
+}

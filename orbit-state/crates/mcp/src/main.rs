@@ -289,6 +289,23 @@ fn tool_descriptors() -> Vec<Value> {
             }
         }),
         json!({
+            "name": "setup.files",
+            "description": "Run /orb:setup §6 — atomic CLAUDE.md legacy-block migration, byte-compare-and-copy of canonical METHOD.md + STYLE.md into <project-root>/.orbit/, idempotent @-import appends. Interactive prompts live at the CLI layer; MCP callers always pass typed Action enums. Native port of plugins/orb/scripts/setup-method.sh per spec 2026-05-25-port-setup-method-sh.",
+            "inputSchema": {
+                "type": "object",
+                "required": ["project_root", "legacy_action", "method_drift_action", "style_drift_action"],
+                "properties": {
+                    "project_root":        { "type": "string", "description": "Project root containing CLAUDE.md and .orbit/." },
+                    "legacy_action":       { "type": "string", "enum": ["migrate", "refuse"], "description": "Action when CLAUDE.md contains legacy workflow blocks." },
+                    "method_drift_action": { "type": "string", "enum": ["overwrite", "keep"], "description": "Action when .orbit/METHOD.md exists and drifts from canonical." },
+                    "style_drift_action":  { "type": "string", "enum": ["overwrite", "keep"], "description": "Action when .orbit/STYLE.md exists and drifts." },
+                    "canonical_method_path": { "type": "string", "description": "Override canonical METHOD.md source." },
+                    "canonical_style_path":  { "type": "string", "description": "Override canonical STYLE.md source." }
+                },
+                "additionalProperties": false
+            }
+        }),
+        json!({
             "name": "task.open",
             "description": "Open a new task under a spec.",
             "inputSchema": {

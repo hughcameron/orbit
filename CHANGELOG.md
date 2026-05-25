@@ -2,6 +2,35 @@
 
 All notable changes to orbit are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.4.37] - 2026-05-25
+
+Third (and final-named) opportunistic migration under choice 0020 — `plugins/orb/scripts/setup-method.sh` ports into a native `orbit setup files` verb. The policy's enumerated candidates list now reaches zero; only `code-investigate-mark.sh` (which post-dates the choice and sits on the substrate-vs-tooling boundary) remains as an unresolved discrimination decision.
+
+### Added
+
+- **`orbit setup` verb family + `setup.files` verb** at `orbit-state/crates/core/src/verbs.rs`. The verb performs all three §6 sub-steps from the shim in one batch: legacy CLAUDE.md detection + migration (when `legacy_action: migrate`), byte-compare-and-copy of canonical METHOD.md + STYLE.md into `<project-root>/.orbit/` per the supplied `DriftAction`, idempotent @-import appends to CLAUDE.md.
+- **Typed `LegacyAction` and `DriftAction` enums** on `SetupFilesArgs` (kebab-case-serialised). `LegacyAction::{Migrate, Refuse}` controls what happens when the three legacy section markers (`## Workflow (orbit)`, `## Orbit vocabulary`, `## Current Sprint`) are detected; `DriftAction::{Overwrite, Keep}` controls per-canonical drift response. MCP callers always pass typed args; CLI translates `--answer-*` flags or stdin prompts to these enums before dispatching.
+- **Structured `SetupFilesResult`** returns a flat audit record: `legacy_migrated: bool`, two `FileAction` enums (`Created` / `Overwritten` / `KeptDrift` / `Identical`) for the canonicals, three bools tracking CLAUDE.md operations (`method_import_added`, `style_import_added`, `claude_md_created`). Surfaces enough state for an agent to confirm what happened without re-reading the filesystem.
+- **CLI interactive-prompt layer** at `orbit-state/crates/cli/src/main.rs::build_setup_files_request`. Detects legacy markers + per-canonical drift up front, then prompts via stdin only when a `--answer-*` flag is absent AND the answer is actually needed (matches shim conditional-prompt UX at lines 121-182). Production SKILL.md calls pass explicit `--answer-*` flags so prompts never fire mid-pipeline.
+- **CLI + MCP parity tests** — 15 new tests covering all seven AC-06 scenarios (greenfield, legacy-migrate, legacy-refuse with filesystem-snapshot equality, METHOD.md drift overwrite + keep, STYLE.md drift overwrite + keep) plus an idempotency test asserting filesystem byte-equality across run-twice invocations. Shared fixtures (`populate_setup_files_*`) use injected canonical contents so tests don't depend on the real in-plugin METHOD.md / STYLE.md.
+- **`relations:respects → choice '0020'` edge on card 0017-setup-is-orbit-state-aware.** Choice 0020's Consequences clause has been promising edges on cards 0005 + 0006 + 0017 since 2026-05-09; with PRs #32 → #33 → #34 → this PR, all three are now written. The promise is fully kept.
+
+### Changed
+
+- **`plugins/orb/skills/setup/SKILL.md` §6** call site rewritten from `plugins/orb/scripts/setup-method.sh --project-root <project>` to `orbit setup files --project-root <project>` — the only call site (verified by `rg --no-heading 'setup-method\.sh' plugins/orb/skills/` returning zero). The surrounding prose updates to name the verb's typed-args contract for MCP callers.
+- **Choice 0020's "in-scope migration candidates" table** updated — the `setup-method.sh` row marked MIGRATED with this spec id cited. All three named-candidate rows now strike-through.
+
+### Removed
+
+- **`plugins/orb/scripts/setup-method.sh`** (244 lines) — the shim. Deleted same-commit as the SKILL.md call-site rewrite per AC-08's no-orphaned-wrapper invariant.
+- **`plugins/orb/scripts/tests/test-setup-method.sh`** — the shim's dedicated test. Coverage moves to the Rust parity suite per choice 0020's test-vs-prod parity clause.
+
+### Notes
+
+- Tests: 539 → 554 (+15 across 8 CLI + 7 MCP setup_files parity assertions).
+- Driven from a session stacked on clean main (post-#32/#33/#34 merges). No further rebase work expected.
+- Choice 0020's named-candidate list is now exhausted. `code-investigate-mark.sh` still awaits its discrimination `/orb:choice` before any port; `test-sidecar-layout.sh` cleanup (which references deleted shims from prior PRs) is a separate hygiene spec.
+
 ## [0.4.36] - 2026-05-25
 
 Lands the deferred `relations:respects → choice 0020` edges that PRs #32 + #33 noted as out-of-scope: the `Relation` schema gains additive choice-target support and a `Respects` kind, then cards 0005-drive and 0006-rally each gain the edge. Smallest possible schema-additive change — existing card-target relations across the entire substrate round-trip byte-identically.

@@ -60,6 +60,7 @@ pub use verbs::{
     SpecPromoteArgs, SpecPromoteResult, SpecResolveArgs, SpecResolveCandidate,
     SpecResolveResult, SpecShowArgs, SpecShowResult, SpecSummary, SpecUncheckArgs,
     SpecUncheckResult, SpecUpdateArgs, SpecUpdateResult, BlockingGate, NextAc,
+    DriftAction, FileAction, LegacyAction, SetupFilesArgs, SetupFilesResult,
     TaskClaimArgs, TaskDoneArgs,
     TaskEventResult, TaskListArgs, TaskListResult, TaskOpenArgs, TaskOpenResult, TaskReadyArgs,
     TaskShowArgs, TaskShowResult, TaskState, TaskUpdateArgs, VerbRequest, VerbResponse,

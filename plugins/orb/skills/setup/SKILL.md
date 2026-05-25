@@ -240,13 +240,13 @@ The `.orbit/` layout is already in place. The filesystem needs no changes:
 
 The canonical orbit substrate files live in the plugin source: `plugins/orb/skills/setup/METHOD.md` (workflow overview — vocabulary, pipeline, substrate rules, four pillars) and `plugins/orb/skills/setup/STYLE.md` (agent prose discipline — the contract loaded into every author-facing response). Card 0026 (`.orbit/cards/0026-agent-prose-discipline.yaml`) owns the prose discipline; STYLE.md is its canonical surface. Setup copies both into the project and ensures CLAUDE.md @-imports them. Never inline either file's content into CLAUDE.md.
 
-The operations in 6a/6b/6c below are also implemented as a single shell script for one-step execution and testing:
+The operations in 6a/6b/6c below are also implemented as a single native verb for one-step execution and testing:
 
 ```
-plugins/orb/scripts/setup-method.sh --project-root <project>
+orbit setup files --project-root <project>
 ```
 
-The script performs the same steps in the same order with the same atomic semantics. Use it directly for non-interactive runs (the script supports `--answer-legacy y|n`, `--answer-method-drift y|n`, and `--answer-style-drift y|n` for scripted contexts; `--answer-drift` is preserved as an alias for `--answer-method-drift`).
+The verb performs the same steps in the same order with the same atomic semantics. Use it directly for non-interactive runs (the verb supports `--answer-legacy y|n`, `--answer-method-drift y|n`, and `--answer-style-drift y|n` for scripted contexts). Interactive prompts at the CLI layer only — MCP callers pass typed `legacy_action` / `method_drift_action` / `style_drift_action` enums on the args struct.
 
 Run the steps below **in order**. Legacy detection runs before any file is written so a refused migration leaves no orphan canonical files.
 
