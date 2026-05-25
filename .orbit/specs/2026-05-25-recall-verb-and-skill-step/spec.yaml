@@ -60,6 +60,20 @@ acceptance_criteria:
 
     Default ordering: results sorted by score descending, ties broken by
     type (memory > choice > card > spec > memo) then by id ascending.
+
+    Wire verb name (for the MCP envelope and the canonical-CLI/MCP parity
+    test) is `substrate.recall`, following the existing namespaced-verb
+    convention (`spec.*`, `memory.*`, `substrate.classify`, etc.). The
+    CLI invocation surface is `orbit recall <topic>` (top-level convenience
+    name; routed internally to the substrate.recall verb).
+
+    Zero-match behaviour: when a type returns no per-type matches, no
+    tuples for that type appear in the merged result — the type is
+    simply absent. Min-max normalisation does not divide by zero because
+    it operates only on the populated per-type result set. A type with
+    zero matches contributes zero rows; the overall result may have
+    fewer than five types represented.
+
     Verification: `cargo test --workspace rcall_returns_substrate_wide_results`
     passes; manual smoke test `orbit recall recall` returns ≥1 result across
     at least 3 of the 5 types against this repo's substrate.
@@ -82,13 +96,13 @@ acceptance_criteria:
 - id: ac-03
   description: |
     `orbit recall <topic> --json` returns the canonical JSON envelope
-    matching MCP wire shape (verb name `recall`, ok/data/result wrapper,
-    `result.matches[]` carries the tuples). The envelope is byte-identical
-    to what MCP's `tools/call` would return for the same query — preserving
-    the existing CLI/MCP parity contract that other orbit verbs honour
-    (per spec 2026-05-24-port-acceptance-shim and predecessors). Default
-    (no --json flag) is human-readable tabular output sorted by the ac-01
-    ordering rule.
+    matching MCP wire shape (verb name `substrate.recall`, ok/data/result
+    wrapper, `result.matches[]` carries the tuples). The envelope is
+    byte-identical to what MCP's `tools/call` would return for the same
+    query — preserving the existing CLI/MCP parity contract that other
+    orbit verbs honour (per spec 2026-05-24-port-acceptance-shim and
+    predecessors). Default (no --json flag) is human-readable tabular
+    output sorted by the ac-01 ordering rule.
     Verification: `cargo test --workspace rcall_json_envelope_parity`
     passes; smoke test `orbit --json recall recall | jq .data.result`
     returns a parseable object with `matches` array.
