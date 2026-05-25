@@ -1,0 +1,65 @@
+id: 2026-05-25-verify-surfaces-migration-errors
+goal: |
+  Fix verify.rs's silent discard of ensure_current errors so `orbit verify`
+  returns a non-zero outcome with a ParseFailed round-trip-failure when the
+  on-disk schema-version file is unrunnable by the current binary (future
+  version, or migration runner returns Err for any other reason). The
+  load-bearing value is diagnostic honesty — every downstream verify-clean
+  gate is conditioned on the same lie when verify reports clean on an
+  unrunnable tree.
+
+  Approach (from .orbit/specs/2026-05-25-verify-surfaces-migration-errors/tabletop.md):
+  reuse the existing RoundTripFailure channel. The synthetic-error wrapper
+  is acceptable per Q3 trade-offs; a dedicated VerifyOutcome.migration_failures
+  field is held in reserve as the Q10 K1 pivot if the wrapper breaks caller
+  assumptions.
+
+  Halt / escalation / kill conditions live in the tabletop sidecar.
+
+  Test prefix for this spec: verfy.
+cards:
+- 0020-orbit-state
+status: closed
+labels:
+- spec
+acceptance_criteria:
+- id: ac-01
+  description: |
+    verify.rs no longer discards ensure_current(layout)'s return value. On
+    Err, the migration-runner error is wrapped as
+    RoundTripFailure { path: layout.schema_version_file(), kind:
+    RoundTripFailureKind::ParseFailed(msg) } and pushed onto
+    outcome.round_trip_failures. The wrapped msg includes the underlying
+    error's Display so operators see the migration runner's diagnosis.
+    Verification: read verify.rs at the ensure_current call site; the
+    `let _ = ensure_current(layout);` discard is gone, replaced by a match
+    that pushes a synthetic RoundTripFailure on the Err arm. The Ok arm
+    is a no-op.
+  gate: true
+  checked: true
+- id: ac-02
+  description: |
+    A new unit test in verify.rs's test module covers the future-version
+    case end-to-end. Given a layout whose schema-version file contains an
+    unknown version (e.g. version: '0.99'), verify_all returns an outcome
+    where has_failures() == true AND outcome.round_trip_failures contains
+    at least one entry with path == layout.schema_version_file() and kind
+    matching RoundTripFailureKind::ParseFailed. The test name carries the
+    verfy test-prefix and a descriptive slug — e.g.
+    verfy_surfaces_unrunnable_schema_version_as_round_trip_failure.
+    Verification: cargo test -p orbit-state --test … (or workspace test
+    suite) reports the new test passing on a clean tree.
+  gate: true
+  checked: true
+- id: ac-03
+  description: |
+    No regression on existing verify_all coverage. The full workspace test
+    suite (cargo test --workspace) reports the same number of failures it
+    reported before this change (zero — green baseline of 509 tests as of
+    the rally-brownfield-migration-hardening close). New AC-02 test is the
+    only addition; any previously-green test that turns red is a halt
+    condition per the tabletop sidecar.
+    Verification: cargo test --workspace passes with ≥510 tests green,
+    zero failures.
+  gate: true
+  checked: true

@@ -84,14 +84,25 @@ pub enum RoundTripFailureKind {
 /// 4. Open or create `state.db`, rebuild from files, diff.
 pub fn verify_all(layout: &OrbitLayout) -> std::io::Result<VerifyOutcome> {
     layout.ensure_dirs()?;
+    let mut outcome = VerifyOutcome::default();
+
     // ensure_current is idempotent: initialises the schema-version file if
     // missing, advances any pending migrations to CURRENT_SCHEMA_VERSION
-    // (spec 2026-05-16-ac-taxonomy ac-04 wire). Errors here surface as
-    // round-trip failures on the schema-version path so the caller sees a
-    // single channel of diagnostics rather than a mid-run abort.
-    let _ = ensure_current(layout);
-
-    let mut outcome = VerifyOutcome::default();
+    // (spec 2026-05-16-ac-taxonomy ac-04 wire). On Err — typically a
+    // future-version or otherwise-unrunnable schema-version file — we
+    // surface the migration runner's diagnosis as a synthetic
+    // RoundTripFailure on the schema-version path. This keeps the caller's
+    // single-channel diagnostics contract while preventing the previous
+    // silent discard, which let `orbit verify` return clean on an
+    // unrunnable tree (spec 2026-05-25-verify-surfaces-migration-errors).
+    if let Err(e) = ensure_current(layout) {
+        outcome.round_trip_failures.push(RoundTripFailure {
+            path: layout.schema_version_file(),
+            kind: RoundTripFailureKind::ParseFailed(format!(
+                "schema-version unrunnable: {e}"
+            )),
+        });
+    }
 
     // 1. schema-version (single file).
     if layout.schema_version_file().exists() {
@@ -456,6 +467,44 @@ mystery_field: ohno
         })
         .unwrap();
         assert_eq!(on_disk, canonical_form);
+    }
+
+    #[test]
+    fn verfy_surfaces_unrunnable_schema_version_as_round_trip_failure() {
+        // spec 2026-05-25-verify-surfaces-migration-errors ac-02:
+        // when ensure_current returns Err (e.g. on-disk schema-version
+        // carries a future or otherwise-unknown version), verify_all
+        // surfaces the failure through outcome.round_trip_failures on
+        // the schema-version path so verify reports non-zero instead of
+        // misleadingly green. Companion to
+        // verify_repairs_known_schema_version_drift_via_migration above
+        // — that test covers the known-older-version repair path; this
+        // one covers the unrunnable-version diagnostic path.
+        let (_dir, layout) = fresh_layout();
+        // Write a schema-version file with a version unknown to the
+        // current binary's migration registry. The migration runner's
+        // is_known_version check rejects this and returns Err.
+        std::fs::write(
+            layout.schema_version_file(),
+            "version: '0.99'\nnote:\n",
+        )
+        .unwrap();
+
+        let outcome = verify_all(&layout).unwrap();
+        assert!(
+            outcome.has_failures(),
+            "unrunnable schema-version must fail verify: {outcome:?}"
+        );
+        let schema_failure = outcome
+            .round_trip_failures
+            .iter()
+            .find(|f| f.path == layout.schema_version_file())
+            .expect("expected a round_trip_failure on the schema-version path");
+        assert!(
+            matches!(schema_failure.kind, RoundTripFailureKind::ParseFailed(_)),
+            "expected ParseFailed kind, got {:?}",
+            schema_failure.kind
+        );
     }
 
     // ----- Config verify wiring (spec 2026-05-18-documentation-topology ac-04) -----
