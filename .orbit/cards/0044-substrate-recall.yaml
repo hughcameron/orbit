@@ -1,0 +1,61 @@
+id: 0044-substrate-recall
+feature: Substrate recall — relevant artefact (memory, choice, card, spec, memo) surfaces at the moment that matters
+as_a: agent working in an orbit project
+i_want: a single verb that returns substrate-wide results (across memories, choices, cards, specs, memos) ranked by topic-match — plus structural pull at skill entry and substrate push during mid-flow — so the relevant prior artefact is in front of me when I need it, not after I've already typed a workaround
+so_that: substrate accreted across sessions is not silently ignored because the agent didn't think to look in the right place; cards, choices, memories, specs, memos all become recall surfaces under one verb, with cite-rate trending up in agent output as the post-ship signal
+goal: substrate-cite rate in agent output (PR bodies, spec goals, design notes, AC verifications) rises significantly against pre-ship baseline; every pipeline skill carries a mandatory recall step at entry; mid-flow PreToolUse hook nudges when topic-match fires
+maturity: planned
+scenarios:
+- name: orbit recall returns substrate-wide results
+  given: an agent invokes `orbit recall <topic>` with a topic string
+  when: the verb runs
+  then: returns ranked tuples (id, type, score, snippet) drawn from memories, choices, cards, specs, and memos in a single response; each result carries its artefact type so the agent can drill into the relevant entity
+  gate: true
+- name: Pipeline skills run recall at entry
+  given: an agent enters /orb:tabletop, /orb:implement, /orb:design, /orb:spec, /orb:review-spec, /orb:review-pr, or /orb:researcher
+  when: the skill opens (before any work loop fires)
+  then: the skill runs `orbit recall <topic>` as a mandatory structural step, scope drawn from the call context (card slug, spec id, AC description, or PR-changed paths), per SKILL.md prose — mirrors the structural-investigation pattern from spec 2026-05-25-investigation-as-pipeline-step
+  gate: true
+- name: Mid-flow substrate-push hook fires on topic-match
+  given: the agent is mid-conversation or executing tool calls (Bash, Edit, Skill) without an explicit recall invocation
+  when: a PreToolUse hook detects strong topic-match between tool input and substrate artefacts
+  then: 'the hook emits a `consider: <id> (<type>)` nudge via stderr; the agent decides whether to drill in or proceed'
+  gate: false
+- name: Substrate-cite rate is measurable
+  given: a session's agent output (PR bodies, spec goals, design notes, AC verifications, conversation turns) is captured
+  when: a substrate-cite audit runs over the window
+  then: the audit grep counts `card NNNN` / `choice NNNN` / `[[memory-key]]` / spec-id patterns and emits a cite-rate metric; pre-ship baseline + post-ship trend is the recall-improvement signal
+  gate: false
+- name: Existing per-type verbs coexist with recall
+  given: the substrate-wide recall verb ships
+  when: an agent wants targeted lookup against one type
+  then: per-type verbs (`orbit memory match`, `orbit card search`, `orbit choice search`) remain available and unchanged; recall is the umbrella, per-type verbs stay for specific drill-down
+  gate: false
+- name: Result filtering by artefact type
+  given: an agent wants recall results from a subset of types
+  when: it invokes `orbit recall <topic> --type memory,choice` (or similar)
+  then: results are filtered to the named types only; default is all five types
+  gate: false
+- name: Recall results are canonical-yaml-friendly
+  given: '`orbit recall` returns results'
+  when: agents or scripts consume the output
+  then: the response shape is uniform across types — id, type, score, snippet, path — parseable as YAML or JSON via `--json`; the per-type verbs' own response shapes are not changed
+  gate: false
+specs: []
+relations:
+- card: 0023-memory-loop
+  type: depends-on
+  reason: 0023's `orbit memory match` is one fan-out target of the recall verb; recall extends the recall-half framing substrate-wide without changing the memory-loop's narrow project-scoped-fact boundary
+- card: 0037-memory-gates-decisions
+  type: depends-on
+  reason: 0037's `memories_considered` close-time enforcement is the gate; substrate-recall is the visibility verb at open-time. Both surfaces coexist — recall surfaces relevant artefacts when work begins; 0037 enforces reconciliation when work closes
+- card: 0020-orbit-state
+  type: depends-on
+  reason: the recall verb is an orbit-state CLI primitive; fan-out queries hit existing per-type match/search verbs which are themselves orbit-state primitives
+- card: 0025-codebase-mastery
+  type: feeds
+  reason: codebase mastery (tree-sitter, ast-grep, rg) is the *code-domain* recall capability; substrate-recall is the *substrate-domain* equivalent — agents should reach for substrate-recall before extrapolating from code, mirroring code-investigate's discipline
+references:
+- '.orbit/specs/2026-05-25-recall-capability/interview.md: distillation source — discovery session 2026-05-25, six questions converging on substrate-wide pull+push hybrid'
+- '.orbit/memos/2026-05-17-read-the-cited-source.md: processing-discipline memo (follow-up under 0023 or this card once cite-shape convention is designed) — not addressed in this card''s first spec'
+notes: []
