@@ -1,0 +1,161 @@
+id: 2026-05-25-recall-verb-and-skill-step
+goal: |
+  Ship substrate-wide recall as a first-class orbit capability — `orbit recall
+  <topic>` is a new top-level CLI verb that fans across the five substrate
+  artefact types (memory, card, choice, spec, memo), returning ranked tuples
+  (id, type, score, snippet, path) so the agent can drill into the relevant
+  prior artefact at the moment that matters. The verb composes existing
+  per-type queries (`orbit memory match`, `orbit card search`, `orbit choice
+  search`) plus new substring-search paths for specs (spec.yaml goal + AC
+  descriptions) and memos (.md bodies). Per-type verbs remain unchanged and
+  callable independently — recall is the umbrella; per-type verbs stay for
+  drill-down.
+
+  Alongside the verb, 6 pipeline SKILL.md files gain a mandatory "Recall
+  pre-flight" section in the canonical position (between pre-flight context
+  and the work loop): /orb:tabletop, /orb:implement, /orb:spec,
+  /orb:review-spec, /orb:review-pr, /orb:researcher. Each skill calls
+  `orbit recall <topic>` as a structural step at open, scope drawn from the
+  call context (card slug, spec id, AC description, PR-changed paths) per
+  SKILL.md prose. Mirrors the structural-investigation pattern from spec
+  2026-05-25-investigation-as-pipeline-step ac-01.
+
+  The mid-flow PreToolUse hook (substrate-push surface) is spec 2 — out of
+  scope. BM25 ranker upgrade is spec 2026-05-20-memory-match-bm25 (deferred,
+  orthogonal). Substrate-cite rate baseline + audit is spec 3 — this spec
+  ships the capability that future audits will measure.
+
+  Halt / escalation / kill conditions live in the tabletop sidecar at
+  .orbit/specs/2026-05-25-recall-verb-and-skill-step/tabletop.md.
+  Discovery interview at .orbit/specs/2026-05-25-recall-capability/interview.md.
+
+  Test prefix for this spec: rcall.
+cards:
+- 0044-substrate-recall
+status: open
+labels:
+- spec
+acceptance_criteria:
+- id: ac-01
+  description: |
+    `orbit recall <topic>` is a new top-level CLI subcommand in the orbit
+    binary. Given a topic string, it returns ranked tuples drawn from all
+    five substrate artefact types (memory, card, choice, spec, memo) in a
+    single response. Each tuple carries: id (artefact identifier — memory
+    key, card slug, choice slug, spec id, memo filename without extension),
+    type (one of: memory, card, choice, spec, memo), score (numeric — the
+    per-type ranker's relevance score for this query, normalised to a
+    comparable scale across types), snippet (≤200 chars of the matched
+    body), path (repo-relative filesystem path to the artefact for
+    drill-down).
+
+    Fan-out implementation: the verb composes existing per-type queries
+    where they exist (`orbit memory match` for memory; `orbit card search`
+    for cards; `orbit choice search` for choices) and adds new substring
+    searches for specs (against spec.yaml's goal + acceptance_criteria
+    descriptions) and memos (against .md file bodies). Per-type score
+    normalisation: each type's results are re-scored to a 0.0-1.0 scale
+    via min-max within that type's matches, so a high-overlap memory and
+    a high-overlap card carry comparable scores in the merged result.
+
+    Default ordering: results sorted by score descending, ties broken by
+    type (memory > choice > card > spec > memo) then by id ascending.
+    Verification: `cargo test --workspace rcall_returns_substrate_wide_results`
+    passes; manual smoke test `orbit recall recall` returns ≥1 result across
+    at least 3 of the 5 types against this repo's substrate.
+  gate: true
+  checked: false
+- id: ac-02
+  description: |
+    `orbit recall <topic> --type <list>` filters results to the named
+    artefact types only. `<list>` is comma-separated, values drawn from
+    {memory, card, choice, spec, memo}. Default (no flag) is all five.
+    An invalid type token in the list errors with the canonical
+    `Error::malformed` shape naming the offending token and listing
+    valid values. Empty list (`--type ""`) is treated as default
+    (all-five) — explicit narrowing requires at least one valid token.
+    Verification: `cargo test --workspace rcall_filter_by_type` passes;
+    smoke test `orbit recall recall --type memory,choice` returns only
+    memory + choice results against this repo.
+  gate: true
+  checked: false
+- id: ac-03
+  description: |
+    `orbit recall <topic> --json` returns the canonical JSON envelope
+    matching MCP wire shape (verb name `recall`, ok/data/result wrapper,
+    `result.matches[]` carries the tuples). The envelope is byte-identical
+    to what MCP's `tools/call` would return for the same query — preserving
+    the existing CLI/MCP parity contract that other orbit verbs honour
+    (per spec 2026-05-24-port-acceptance-shim and predecessors). Default
+    (no --json flag) is human-readable tabular output sorted by the ac-01
+    ordering rule.
+    Verification: `cargo test --workspace rcall_json_envelope_parity`
+    passes; smoke test `orbit --json recall recall | jq .data.result`
+    returns a parseable object with `matches` array.
+  gate: true
+  checked: false
+- id: ac-04
+  description: |
+    No regression on existing per-type verbs. `orbit memory match`,
+    `orbit memory search`, `orbit card search`, `orbit choice search`,
+    `orbit spec list`, `orbit spec show` retain unchanged behaviour
+    and existing tests. The recall verb composes these — it does not
+    refactor their shared code paths. Per-type verbs remain callable
+    independently for targeted drill-down.
+    Verification: `cargo test --workspace` reports the post-recall
+    baseline (555 + new rcall_ tests, zero pre-existing failures).
+    Specifically, the existing memory-match / card-search / choice-search
+    test modules pass with no test removed or modified.
+  gate: true
+  checked: false
+- id: ac-05
+  description: |
+    Six pipeline SKILL.md files gain a "Recall pre-flight" section
+    immediately before their existing pre-flight / work-loop content:
+    plugins/orb/skills/tabletop/SKILL.md,
+    plugins/orb/skills/implement/SKILL.md,
+    plugins/orb/skills/spec/SKILL.md,
+    plugins/orb/skills/review-spec/SKILL.md,
+    plugins/orb/skills/review-pr/SKILL.md,
+    plugins/orb/skills/researcher/SKILL.md.
+
+    Each "Recall pre-flight" section instructs the agent to run
+    `orbit recall <topic>` as a mandatory structural step at skill
+    entry, with scope derived from substrate the agent is already
+    reading at the call site:
+    - tabletop: scope from cluster cards' references[] entries + the
+      cluster cards' goal/scenarios
+    - implement: scope from the AC description + tabletop.md sidecar
+    - spec: scope from the interview.md or tabletop.md being
+      crystallised
+    - review-spec: scope from the spec's goal + AC descriptions
+    - review-pr: scope from the PR's changed paths + the spec id
+    - researcher: scope from the topic argument
+
+    Each skill includes a brief rationale paragraph naming card 0044
+    and citing this spec id. Prose mirrors the
+    investigation-orchestration pattern in spec
+    2026-05-25-investigation-as-pipeline-step ac-01 (scope-derivation
+    rule swapped from investigation to recall).
+    Verification: grep -l "Recall pre-flight" plugins/orb/skills/*/SKILL.md
+    returns the six files; grep "orbit recall" in each returns ≥1 match.
+    Each skill file passes a smoke read — invoking the skill against a
+    test argument loads cleanly (no broken prose, no dangling section
+    headers).
+  gate: true
+  checked: false
+  ac_type: doc
+- id: ac-06
+  description: |
+    Recall result tuples expose the `path` field as a usable filesystem
+    path for drill-down. For each artefact type, path resolves to:
+    memory → .orbit/memories/<key>.yaml; card → .orbit/cards/<slug>.yaml;
+    choice → .orbit/choices/<slug>.yaml; spec → .orbit/specs/<id>/spec.yaml;
+    memo → .orbit/memos/<filename>.md. Paths are repo-relative (matching
+    existing canonical-file references in conformance findings) — not
+    absolute. The agent reads via the path field to inspect the matched
+    artefact in full after seeing the snippet.
+    Verification: `cargo test --workspace rcall_path_field_format` passes,
+    asserting each type's path shape matches the above pattern via fixture.
+  gate: false
+  checked: false

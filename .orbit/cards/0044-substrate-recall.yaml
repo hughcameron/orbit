@@ -41,7 +41,8 @@ scenarios:
   when: agents or scripts consume the output
   then: the response shape is uniform across types — id, type, score, snippet, path — parseable as YAML or JSON via `--json`; the per-type verbs' own response shapes are not changed
   gate: false
-specs: []
+specs:
+- .orbit/specs/2026-05-25-recall-verb-and-skill-step/spec.yaml
 relations:
 - card: 0023-memory-loop
   type: depends-on

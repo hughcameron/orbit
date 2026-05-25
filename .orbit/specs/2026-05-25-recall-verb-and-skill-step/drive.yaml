@@ -1,0 +1,10 @@
+spec_id: 2026-05-25-recall-verb-and-skill-step
+card_path: .orbit/cards/0044-substrate-recall.yaml
+autonomy: guided
+iteration: 1
+stage: review-spec
+review_spec_cycle: 0
+review_spec_date: 2026-05-25
+review_pr_cycle: 0
+review_pr_date: null
+iteration_history: []
