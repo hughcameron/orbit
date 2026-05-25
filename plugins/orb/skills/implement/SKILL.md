@@ -8,7 +8,7 @@ description: Pre-flight check + work loop for an orbit-state spec — surface AC
 Drive a single spec from claim to close. This skill is the agent's working
 contract for the duration of an in-flight spec: pre-flight context, AC
 tracking, gate enforcement, detour escalation, and close-out are all
-expressed as concrete `orbit` and `orbit-acceptance.sh` commands.
+expressed as concrete `orbit` commands.
 
 ## Why This Exists
 
@@ -107,7 +107,7 @@ Before any code is written, the agent runs the following sequence:
 2. **Enumerate ACs.**
 
    ```bash
-   plugins/orb/scripts/orbit-acceptance.sh acs <spec-id>
+   orbit spec acs <spec-id>
    ```
 
    This emits one tab-separated tuple per AC:
@@ -118,7 +118,7 @@ Before any code is written, the agent runs the following sequence:
 3. **Identify the next AC.**
 
    ```bash
-   plugins/orb/scripts/orbit-acceptance.sh next-ac <spec-id>
+   orbit spec next-ac <spec-id>
    ```
 
    This emits `<ac-id>\t<is_gate>` — the first unchecked AC that is not
@@ -152,7 +152,7 @@ Run `/orb:code-investigate` (broad mode) on the module the next AC touches befor
 
 For each AC, in `next-ac` order:
 
-1. **Confirm the next AC** with `orbit-acceptance.sh next-ac <spec-id>`.
+1. **Confirm the next AC** with `orbit spec next-ac <spec-id>`.
    This is the authoritative gate — if a gate AC is unchecked,
    `next-ac` will return that gate; the agent must complete it first.
 
@@ -162,7 +162,7 @@ For each AC, in `next-ac` order:
 3. **Mark the AC done.**
 
    ```bash
-   plugins/orb/scripts/orbit-acceptance.sh check <spec-id> <ac-id>
+   orbit spec check <spec-id> <ac-id>
    ```
 
    This calls `orbit spec update --ac-check <ac-id>` internally,
@@ -174,7 +174,7 @@ For each AC, in `next-ac` order:
 
 ### Gate enforcement
 
-Gate enforcement is delegated entirely to `orbit-acceptance.sh next-ac`.
+Gate enforcement is delegated entirely to `orbit spec next-ac`.
 By convention (see `.orbit/conventions/acceptance-field.md`), an
 unchecked AC with `gate: true` blocks all subsequent ACs by declaration
 order. The parser implements this — the agent does not re-check gates
@@ -183,7 +183,7 @@ inline.
 If the agent suspects a gate is blocking, it can confirm with:
 
 ```bash
-plugins/orb/scripts/orbit-acceptance.sh blocking-gate <spec-id>
+orbit spec blocking-gate <spec-id>
 ```
 
 This emits the first unchecked gate's `<ac-id>\t<description>` (or
@@ -234,7 +234,7 @@ Resume the parent spec:
 
 ```bash
 orbit spec show <current-spec-id>
-plugins/orb/scripts/orbit-acceptance.sh next-ac <current-spec-id>
+orbit spec next-ac <current-spec-id>
 ```
 
 `orbit spec show <spec>` reloads the spec context; `next-ac` returns
@@ -319,7 +319,7 @@ the constant and assert the emitted marker matches byte-for-byte.
 When all ACs are checked the spec is ready to close.
 
 ```bash
-plugins/orb/scripts/orbit-acceptance.sh has-unchecked <spec-id>
+orbit spec has-unchecked <spec-id>
 ```
 
 Exit status 1 means no ACs remain unchecked — the spec is done. The
@@ -377,14 +377,14 @@ orbit spec list --status open                   # see what's open
 orbit spec show 2026-05-08-foo                  # read goal + ACs
 
 # 2. Pre-flight
-plugins/orb/scripts/orbit-acceptance.sh acs 2026-05-08-foo
-plugins/orb/scripts/orbit-acceptance.sh next-ac 2026-05-08-foo
+orbit spec acs 2026-05-08-foo
+orbit spec next-ac 2026-05-08-foo
 # → ac-01    1   (gate, unchecked, must close first)
 
 # 3. Implement loop — close each AC
 # (work the AC, then mark it done)
-plugins/orb/scripts/orbit-acceptance.sh check 2026-05-08-foo ac-01
-plugins/orb/scripts/orbit-acceptance.sh next-ac 2026-05-08-foo
+orbit spec check 2026-05-08-foo ac-01
+orbit spec next-ac 2026-05-08-foo
 # → ac-02    0   (now startable — ac-01 gate cleared)
 
 # ... repeat for ac-02, ac-03, ... ac-09 ...
@@ -392,17 +392,17 @@ plugins/orb/scripts/orbit-acceptance.sh next-ac 2026-05-08-foo
 # 4. (If a detour is discovered mid-AC)
 orbit task open \
   --spec-id 2026-05-08-foo \
-  --body "detour: fix flaky orbit-acceptance.sh test under bash 3.2 \
-(surfaced while implementing ac-04; check fails silently under macOS default bash 3.2)"
+  --body "detour: fix flaky tempdir cleanup in cli parity tests \
+(surfaced while implementing ac-04; race between drop guard and test runner leaves stale dirs)"
 # → orbit task open returns task id, e.g. 0001
 orbit task claim 0001
 # ... fix it ...
 orbit task done 0001
 orbit spec show 2026-05-08-foo
-plugins/orb/scripts/orbit-acceptance.sh next-ac 2026-05-08-foo
+orbit spec next-ac 2026-05-08-foo
 
 # 5. Completion
-plugins/orb/scripts/orbit-acceptance.sh has-unchecked 2026-05-08-foo
+orbit spec has-unchecked 2026-05-08-foo
 # (exit 1 → all done)
 orbit spec close 2026-05-08-foo
 ```
@@ -410,7 +410,7 @@ orbit spec close 2026-05-08-foo
 ## Integration with other skills
 
 - **`/orb:review-pr`** reads the spec's `acceptance_criteria` field
-  (via `orbit-acceptance.sh acs`) to cross-reference AC coverage
+  (via `orbit spec acs`) to cross-reference AC coverage
   against the implementation diff. The cold-fork review architecture
   (decision 0011 D2) is preserved — the reviewer reads the spec, not a
   legacy file.

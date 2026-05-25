@@ -57,7 +57,7 @@ orbit --json spec list
 For each spec, fetch its acceptance_criteria via:
 
 ```bash
-plugins/orb/scripts/orbit-acceptance.sh acs <spec-id>
+orbit spec acs <spec-id>
 ```
 
 The parser emits one tab-separated tuple per AC: `<ac-id>\t<status>\t<description>\t<is_gate>`. The `<is_gate>` flag mirrors the spec's `acceptance_criteria[].gate` boolean.
@@ -163,7 +163,7 @@ After the report, suggest concrete next steps:
 ## Integration with Other Skills
 
 - **`/orb:review-pr`** runs a subset of this audit (AC coverage check) during PR review.
-- **`/orb:implement`** flips spec ACs to `checked: true` via `orbit-acceptance.sh check` (which calls `orbit spec update --ac-check`); this audit cross-references those `[x]` flags against actual tests.
+- **`/orb:implement`** flips spec ACs to `checked: true` via `orbit spec check`; this audit cross-references those `[x]` flags against actual tests.
 - **`/orb:spec`** and `/orb:spec-architect` generate the AC ids and descriptions that this audit reads.
 
 ---

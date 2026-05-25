@@ -61,6 +61,7 @@ specs:
 - .orbit/archive/specs/2026-04-20-drive-live-visibility/spec.yaml
 - .orbit/specs/2026-05-09-promote-orbit-state-port/spec.yaml
 - .orbit/specs/2026-05-09-drive-rally-sidecar-layout/spec.yaml
+- .orbit/specs/2026-05-24-port-acceptance-shim/spec.yaml
 relations:
 - card: 0019-tabletop
   type: depends-on

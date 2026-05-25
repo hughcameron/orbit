@@ -715,3 +715,160 @@ pub fn expected_envelope_for_spec_close_only_deferrable() -> String {
     });
     envelope_ok_string(&response).expect("infallible")
 }
+// ---------------------------------------------------------------------------
+// spec.acs / next-ac / blocking-gate / has-unchecked / check / uncheck parity
+// (per spec 2026-05-24-port-acceptance-shim ac-07).
+// ---------------------------------------------------------------------------
+
+/// Populate `<root>/.orbit/specs/0010/spec.yaml` with a mixed AC roster —
+/// one unchecked gate (ac-01), one unchecked non-gate (ac-02), one checked
+/// non-gate (ac-03), one checked gate (ac-04). Exercises every traversal
+/// branch of the new verbs.
+pub fn populate_spec_acs_mixed_fixture(root: &std::path::Path) {
+    let spec_dir = root.join(".orbit/specs/0010");
+    std::fs::create_dir_all(&spec_dir).unwrap();
+    std::fs::write(
+        spec_dir.join("spec.yaml"),
+        "id: '0010'\n\
+         goal: mixed roster\n\
+         status: open\n\
+         acceptance_criteria:\n\
+         - id: ac-01\n  description: first\n  gate: true\n  checked: false\n\
+         - id: ac-02\n  description: second\n  gate: false\n  checked: false\n\
+         - id: ac-03\n  description: third\n  gate: false\n  checked: true\n\
+         - id: ac-04\n  description: fourth\n  gate: true\n  checked: true\n",
+    )
+    .unwrap();
+}
+
+/// Populate `<root>/.orbit/specs/0011/spec.yaml` with every AC checked —
+/// drives the `has-unchecked: false` branch (CLI exit 1).
+pub fn populate_spec_acs_all_checked_fixture(root: &std::path::Path) {
+    let spec_dir = root.join(".orbit/specs/0011");
+    std::fs::create_dir_all(&spec_dir).unwrap();
+    std::fs::write(
+        spec_dir.join("spec.yaml"),
+        "id: '0011'\n\
+         goal: all done\n\
+         status: open\n\
+         acceptance_criteria:\n\
+         - id: ac-01\n  description: first\n  gate: false\n  checked: true\n\
+         - id: ac-02\n  description: second\n  gate: false\n  checked: true\n",
+    )
+    .unwrap();
+}
+
+fn mixed_acs() -> Vec<orbit_state_core::schema::AcceptanceCriterion> {
+    use orbit_state_core::schema::{AcType, AcceptanceCriterion};
+    vec![
+        AcceptanceCriterion {
+            id: "ac-01".into(),
+            description: "first".into(),
+            gate: true,
+            checked: false,
+            verification: None,
+            ac_type: AcType::Code,
+        },
+        AcceptanceCriterion {
+            id: "ac-02".into(),
+            description: "second".into(),
+            gate: false,
+            checked: false,
+            verification: None,
+            ac_type: AcType::Code,
+        },
+        AcceptanceCriterion {
+            id: "ac-03".into(),
+            description: "third".into(),
+            gate: false,
+            checked: true,
+            verification: None,
+            ac_type: AcType::Code,
+        },
+        AcceptanceCriterion {
+            id: "ac-04".into(),
+            description: "fourth".into(),
+            gate: true,
+            checked: true,
+            verification: None,
+            ac_type: AcType::Code,
+        },
+    ]
+}
+
+pub fn expected_envelope_for_spec_acs_mixed() -> String {
+    use orbit_state_core::{envelope_ok_string, SpecAcsResult, VerbResponse};
+    let response = VerbResponse::SpecAcs(SpecAcsResult { acs: mixed_acs() });
+    envelope_ok_string(&response).expect("infallible")
+}
+
+pub fn expected_envelope_for_spec_next_ac_mixed() -> String {
+    use orbit_state_core::{envelope_ok_string, NextAc, SpecNextAcResult, VerbResponse};
+    let response = VerbResponse::SpecNextAc(SpecNextAcResult {
+        next: Some(NextAc {
+            id: "ac-01".into(),
+            gate: true,
+        }),
+    });
+    envelope_ok_string(&response).expect("infallible")
+}
+
+pub fn expected_envelope_for_spec_blocking_gate_mixed() -> String {
+    use orbit_state_core::{
+        envelope_ok_string, BlockingGate, SpecBlockingGateResult, VerbResponse,
+    };
+    let response = VerbResponse::SpecBlockingGate(SpecBlockingGateResult {
+        blocking: Some(BlockingGate {
+            id: "ac-01".into(),
+            description: "first".into(),
+        }),
+    });
+    envelope_ok_string(&response).expect("infallible")
+}
+
+pub fn expected_envelope_for_spec_has_unchecked_true() -> String {
+    use orbit_state_core::{envelope_ok_string, SpecHasUncheckedResult, VerbResponse};
+    let response = VerbResponse::SpecHasUnchecked(SpecHasUncheckedResult { has_unchecked: true });
+    envelope_ok_string(&response).expect("infallible")
+}
+
+pub fn expected_envelope_for_spec_has_unchecked_false() -> String {
+    use orbit_state_core::{envelope_ok_string, SpecHasUncheckedResult, VerbResponse};
+    let response = VerbResponse::SpecHasUnchecked(SpecHasUncheckedResult { has_unchecked: false });
+    envelope_ok_string(&response).expect("infallible")
+}
+
+/// Expected envelope after `spec check 0010 ac-02` against the mixed fixture
+/// — ac-02 is now checked, the rest of the spec is unchanged.
+pub fn expected_envelope_for_spec_check_ac02() -> String {
+    use orbit_state_core::schema::{AcType, AcceptanceCriterion, Spec, SpecStatus};
+    use orbit_state_core::{envelope_ok_string, SpecCheckResult, VerbResponse};
+    let mut acs = mixed_acs();
+    acs[1].checked = true;
+    let response = VerbResponse::SpecCheck(SpecCheckResult {
+        spec: Spec {
+            id: "0010".into(),
+            goal: "mixed roster".into(),
+            cards: vec![],
+            status: SpecStatus::Open,
+            labels: vec![],
+            acceptance_criteria: acs,
+            memories_considered: vec![],
+        },
+    });
+    envelope_ok_string(&response).expect("infallible")
+}
+
+/// Expected error envelope: `spec check 0010 ac-99` (AC missing).
+pub fn expected_envelope_for_spec_check_missing() -> String {
+    use orbit_state_core::{envelope_err_string, Error};
+    let err = Error::not_found("spec.check", "AC ac-99 not found on spec 0010");
+    envelope_err_string(&err)
+}
+
+/// Expected error envelope: `spec check 0010 ac-03` (AC already checked).
+pub fn expected_envelope_for_spec_check_already_checked() -> String {
+    use orbit_state_core::{envelope_err_string, Error};
+    let err = Error::conflict("spec.check", "AC ac-03 is already checked");
+    envelope_err_string(&err)
+}

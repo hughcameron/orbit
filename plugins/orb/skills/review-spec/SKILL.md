@@ -45,7 +45,7 @@ A reviewer who watched you build something has confirmation bias. A fresh agent 
     surface the message verbatim. The verb owns the two canonical
     halt templates; do not paraphrase.
 - Run `orbit --json spec show <spec-id>` to read the spec's `goal`, `cards` (linked capability cards), `labels`, and `acceptance_criteria`.
-- Run `plugins/orb/scripts/orbit-acceptance.sh acs <spec-id>` to enumerate the AC list. The parser emits one tab-separated tuple per AC: `<ac-id>\t<status>\t<description>\t<is_gate>` where `<status>` is `[ ]` or `[x]` and `<is_gate>` is `1` if the AC's `gate` field is true, `0` otherwise.
+- Run `orbit spec acs <spec-id>` to enumerate the AC list. The parser emits one tab-separated tuple per AC: `<ac-id>\t<status>\t<description>\t<is_gate>` where `<status>` is `[ ]` or `[x]` and `<is_gate>` is `1` if the AC's `gate` field is true, `0` otherwise.
 - The spec's `goal` and parsed AC list together are the authoritative source for this review. Design intent lives in the goal; supporting context (constraint history, prior decisions, related cards) is reachable via the linked card files (`orbit card show <id>`) and prior memories (`orbit memory search <keyword>`).
 
 ### 2. Progressive Review
@@ -60,7 +60,7 @@ Quick check of spec integrity:
 2. **Constraint conflicts**: Do any constraints contradict each other or make ACs unreachable?
 3. **Scope vs goal**: Does the scope match the goal? Over-specified (ACs beyond what the goal needs)? Under-specified (goal claims more than ACs deliver)?
 4. **Obvious gaps**: Error handling mentioned? Rollback plan? Monitoring? Edge cases?
-5. **Gate-AC description check (deterministic — no LLM judgement).** For every AC where `orbit-acceptance.sh acs` reports `is_gate=1` (column 4 of the tab-separated output — the AC's `gate` field is true), the AC's description text (column 3 of the parser output — the AC's `description` field) must pass **all three** of the following deterministic rules. Flag a MEDIUM finding naming the gate's id and the specific rule violated if any fail:
+5. **Gate-AC description check (deterministic — no LLM judgement).** For every AC where `orbit spec acs` reports `is_gate=1` (column 4 of the tab-separated output — the AC's `gate` field is true), the AC's description text (column 3 of the parser output — the AC's `description` field) must pass **all three** of the following deterministic rules. Flag a MEDIUM finding naming the gate's id and the specific rule violated if any fail:
    - **Non-empty**: the description text is present and contains at least one non-whitespace character.
    - **Not a placeholder token**: the trimmed value is not (case-insensitive) in the set `{TBD, TODO, FIXME, PLACEHOLDER, XXX, ???}`. Match the trimmed value against the literal token — a sentence that happens to contain `TBD` as a word is not a failure of this rule.
    - **Minimum length**: the trimmed value is at least 20 characters long.
