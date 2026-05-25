@@ -146,7 +146,49 @@ Per spec 2026-05-19-act-when-authorised.
 
 ## Code investigation discipline
 
-Run `/orb:code-investigate` (broad mode) on the module the next AC touches before proposing any non-trivial change. The skill gathers a synthesised neighbourhood picture — directory shape, hot files, where complexity clusters, what sits adjacent to the change surface — cheap enough to default to. For specific structural questions that surface mid-implementation — *where is X*, *what calls Y*, *how many Z* — invoke narrow mode rather than approximating with grep. The agent owns the code; reach for evidence cheaply enough that you actually reach.
+Investigation is a structural step at the entry of each AC, BEFORE edits
+land for that AC — not advisory. Per choice 0029, `/orb:code-investigate`
+fires per-AC via Skill-tool orchestration; the agent doesn't decide
+when to investigate, the loop does. The agent owns the code; this is
+how that ownership becomes cheap.
+
+**Scope is agent-typed at each AC entry.** Read the current AC's
+description for file paths it cites, the spec's `tabletop.md`
+Adjacent-code section (when present), and the spec's cards'
+`references[]` for any file-path entries — this is what to investigate
+for *this* AC.
+
+**Write scope to spec note BEFORE the Skill call** (defence against
+Skill-tool args-drop per memory `slash-command-args-vs-skill-tool-args`
+— args can drop, leaving the called skill with empty scope):
+
+```bash
+orbit spec note <spec-id> "investigation scope [<ac-id>]: <paths>"
+```
+
+Then invoke `/orb:code-investigate` (narrow mode) via the Skill tool
+with that scope. The called skill writes a marker entry at
+`.orbit/.code-investigate-recent` and emits prose. **Quote a 5-10 line
+summary of the return inline into your working context** before
+proceeding to edits — marker-write alone is insufficient because you
+won't re-read the marker without prompting; re-quoting the prose is
+what makes the investigation load-bearing for the edit.
+
+**Bypass shape.** If investigation isn't needed for this AC (a trivial
+typo fix, a single-line config change, a doc-only AC where the
+adjacent code is already in your working context), call AskUserQuestion
+with two options:
+- (a) Run `/orb:code-investigate` now
+- (b) Skip with logged reason
+
+If (b), log the reason via:
+
+```bash
+orbit spec note <spec-id> "investigation bypass [<ac-id>]: <reason>"
+```
+
+Then proceed to edits. The notes.jsonl record is the audit trail —
+positional pairing means N ACs produce N scope-or-bypass lines.
 
 ## Implement loop
 
@@ -156,10 +198,17 @@ For each AC, in `next-ac` order:
    This is the authoritative gate — if a gate AC is unchecked,
    `next-ac` will return that gate; the agent must complete it first.
 
-2. **Implement the AC.** Write code, edit deliverables, run tests as
+2. **Investigate this AC's adjacent code.** Per the discipline above,
+   derive scope from the AC's description + spec's tabletop.md (if
+   present) + cards' references[]. Write the scope to spec note,
+   then invoke `/orb:code-investigate` (narrow) via Skill tool with
+   that scope. Quote a 5-10 line summary inline. Or bypass via AUQ
+   with logged reason for trivial ACs.
+
+3. **Implement the AC.** Write code, edit deliverables, run tests as
    needed.
 
-3. **Mark the AC done.**
+4. **Mark the AC done.**
 
    ```bash
    orbit spec check <spec-id> <ac-id>
@@ -170,7 +219,7 @@ For each AC, in `next-ac` order:
    canonical writer. The spec's `acceptance_criteria` field is the only
    place AC status lives.
 
-4. **Loop** — re-run `next-ac` and continue.
+5. **Loop** — re-run `next-ac` and continue.
 
 ### Gate enforcement
 

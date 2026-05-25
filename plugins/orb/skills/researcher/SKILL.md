@@ -17,7 +17,23 @@ Stop coding and start investigating when the problem is unclear. Most bugs and b
 
 ## Your Approach
 
-**Before any research thread that touches code, run `/orb:code-investigate` (broad mode) on the relevant area.** The skill returns a synthesised neighbourhood picture — directory shape, hot files, complexity clusters — cheap enough to default to. The agent owns the code; this is how that ownership becomes cheap.
+**Orchestrate `/orb:code-investigate` (broad mode) BEFORE the research thread opens.** Per choice 0029 (pipeline-orchestrates-investigation), researcher is a pipeline-stage moment where investigation must fire structurally, not as advice. The orchestrated invocation seeds the research thread with empirical context rather than working-memory inference.
+
+**Scope is the topic argument passed at invocation.** `/orb:researcher <topic>` carries the topic in its argument; that string is the broad-mode scope. If no argument was passed (`/orb:researcher` with no topic), invoke the bypass path with reason `"researcher invoked without topic argument"` rather than guessing scope.
+
+**Write the topic-scope to memory BEFORE the Skill call** (args-drop guard per memory `slash-command-args-vs-skill-tool-args` — Skill tool args can drop on forked invocations). Researcher is session-bound (no spec binds it), so the scope lands as a labelled memory:
+
+```bash
+orbit memory remember researcher-investigation-scope-<date>-<topic-slug> "<topic>" --label code-investigate
+```
+
+Then invoke `/orb:code-investigate` (broad mode) via the Skill tool with that scope. **Quote a 5-10 line summary of the return inline** into your working context before opening the research thread — marker-write alone is insufficient; re-quoting the prose is what makes the investigation load-bearing for the research thinking that follows.
+
+**Bypass shape.** If invoked without a topic argument (see above), or the topic is unambiguously non-code (e.g. a research thread purely about external docs, history, or design rationale), call AskUserQuestion with:
+- (a) Run `/orb:code-investigate` now (proceed with the orchestrated invocation; agent picks scope)
+- (b) Skip with logged reason
+
+If (b), log via `orbit memory remember researcher-investigation-bypass-<date>-<topic-slug> "<reason>" --label code-investigate` and proceed.
 
 1. **Define What's Unknown**
    Before any fix, articulate what you DON'T know:

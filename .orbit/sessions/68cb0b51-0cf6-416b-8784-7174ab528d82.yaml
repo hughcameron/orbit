@@ -1,0 +1,44 @@
+id: 68cb0b51-0cf6-416b-8784-7174ab528d82
+started_at: 2026-05-24T10:14:56.646265949Z
+ended_at: 2026-05-24T10:14:56.646265949Z
+distillate: |-
+  ## Shell-script audit — scope of work per choice 0020
+
+  **Lead.** Four shell scripts live under `plugins/orb/scripts/` (not three — `code-investigate-mark.sh` joined post-policy on 2026-05-17). Zero ports have shipped in the 15 days since choice 0020 was filed. Three of the four are unambiguous substrate-shaped migration candidates per the policy; one is mixed.
+
+  ### Inventory
+
+  | Script | Lines | Verdict | Suggested Rust verb |
+  |---|---|---|---|
+  | `orbit-acceptance.sh` | 182 | substrate-shaped | `orbit spec acs` + four sub-verbs (`next-ac`, `blocking-gate`, `has-unchecked`, `check`) |
+  | `promote.sh` | 197 | substrate-shaped | `orbit spec promote <card-path>` |
+  | `setup-method.sh` | 244 | substrate-shaped | `orbit setup method --project-root <path>` (verb family `setup` does not exist yet) |
+  | `code-investigate-mark.sh` | 74 | mixed — session-scoped marker, not canonical artefact | TBD: file a tiny `/orb:choice` first |
+
+  ### Call-site burden (this is what each port costs to migrate)
+
+  | Script | SKILL.md call sites | Other | Total |
+  |---|---|---|---|
+  | `orbit-acceptance.sh` | implement 17, drive 9, audit 2, review-spec 2, review-pr 1 = **31** | tests 5 | 36 |
+  | `promote.sh` | drive 3, card 2, rally 1 = **6** | tests 15 | 21 |
+  | `setup-method.sh` | setup 1 | tests 4 | 5 |
+  | `code-investigate-mark.sh` | code-investigate 1, hook 1 | — | 2 |
+
+  CHANGELOG references are historical and not migration work.
+
+  ### Recommended sequence (one spec per migration per choice 0020's "opportunistic" rule)
+
+  1. **Spec 1: port `orbit-acceptance.sh` → `orbit spec` sub-verbs.** Highest leverage (31 prose call sites). Lowest novel logic — the script already shells back into `orbit spec show --json` / `orbit spec update --ac-check`; the missing pieces are the AC-traversal helpers. Land the verbs, leave the shell as a thin shim, decommission after grep confirms zero call sites.
+  2. **Spec 2: port `promote.sh` → `orbit spec promote`.** Six SKILL.md call sites. Denser logic (card parse, scenario→AC fanout, canonicalise). Also wires card 0005 (drive) and card 0006 (rally) with a `relations:respects → choice 0020` edge — currently missing.
+  3. **Spec 3: port `setup-method.sh` → `orbit setup method`.** One SKILL.md call site, but trickiest verb (interactive drift/legacy prompts, atomic CLAUDE.md regex surgery). Requires designing the `orbit setup` verb family. Also wires card 0017 with a `relations:respects → choice 0020` edge.
+  4. **Decision before spec 4 — file a `/orb:choice` for `code-investigate-mark.sh`.** It post-dates the policy and sits on the discrimination boundary (session-scoped marker file vs canonical substrate). Decide whether it ports or stays before committing to a spec.
+
+  ### Off-policy debt to clean up alongside
+
+  - Cards 0005, 0006, 0017 do not carry the `relations:respects → choice 0020` edge the choice's Consequences names. Fold the edge writes into specs 2 and 3 above (no separate spec needed).
+  - Tests under `plugins/orb/scripts/tests/*.sh` move when their script-under-test ports, per choice 0020 — no separate test-migration spec needed.
+
+  ### One action to take now
+
+  Promote `orbit-acceptance.sh` migration first via `/orb:card` (or extend an existing card) → tabletop → spec. It's the highest-call-site, lowest-novel-logic of the four, and decommissioning the heaviest shim first frees the implement loop from a python3-in-bash layer that's read on every AC tick.
+labels: []
