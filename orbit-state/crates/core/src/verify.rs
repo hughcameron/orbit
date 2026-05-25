@@ -470,7 +470,7 @@ mystery_field: ohno
     }
 
     #[test]
-    fn verify_surfaces_unrunnable_schema_version_as_round_trip_failure() {
+    fn verfy_surfaces_unrunnable_schema_version_as_round_trip_failure() {
         // spec 2026-05-25-verify-surfaces-migration-errors ac-02:
         // when ensure_current returns Err (e.g. on-disk schema-version
         // carries a future or otherwise-unknown version), verify_all
