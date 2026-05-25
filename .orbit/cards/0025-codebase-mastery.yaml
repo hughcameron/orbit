@@ -43,6 +43,7 @@ scenarios:
   gate: false
 specs:
 - .orbit/specs/2026-05-17-code-investigate-skill/spec.yaml
+- .orbit/specs/2026-05-25-investigation-as-pipeline-step/spec.yaml
 relations:
 - card: 0019-tabletop
   type: feeds

@@ -1,0 +1,204 @@
+id: 2026-05-25-investigation-as-pipeline-step
+goal: |
+  Lift code-investigation from an opt-in slash command to a structural step inside the
+  orbit pipeline skills. Pick mechanism A (orchestrate) per the 2026-05-25 tabletop:
+  each pipeline skill (tabletop / implement / review-pr / researcher) invokes
+  /orb:code-investigate with a stage-derived scope as part of its prose-driven flow.
+  drive / rally acknowledge that investigation fires at routed stages, not at the
+  orchestrator level. Logged bypass with reason is the canonical relief valve.
+  Ship the integration to all four pipeline skills as one spec; phased rollout to
+  just /orb:implement is available as halt-revert per the tabletop's budget guard.
+  Implementation notes, halt conditions, escalation triggers, kill conditions,
+  budget guard, and per-stage scope-derivation strategy live in the tabletop
+  sidecar at .orbit/specs/2026-05-25-investigation-as-pipeline-step/tabletop.md.
+  Test prefix for this spec: pipinv.
+cards:
+- 0025-codebase-mastery
+status: open
+labels:
+- spec
+acceptance_criteria:
+- id: ac-01
+  description: |
+    Choice file at .orbit/choices/0029-pipeline-orchestrates-investigation.yaml filed
+    as MADR with status accepted. Pins orchestrate (mechanism A) as the integration
+    shape. Cites the 2026-05-25 empirical audit's 610-fires-zero-conversions and
+    1725-edits-42%-baseline-unchanged as load-bearing evidence. Names the per-stage
+    derivation strategy (tabletop=broad on cluster cards' adjacent code; implement=
+    narrow on the spec's adjacent_files or the current AC's named files; review-pr=
+    narrow on the PR's changed paths; researcher=broad on the topic argument).
+    Names the canonical bypass shape — agent calls AskUserQuestion with options
+    (a) run /orb:code-investigate now, (b) skip with logged reason — and the
+    bypass reason lands as a one-line entry in the spec folder's progress.md (for
+    spec-bound stages) or the session-card's notes (for session-bound stages).
+    Names the hook decision (retire vs retain as backstop) and its rationale.
+    Recommended lead per tabletop: retire (610/0 evidence is conclusive that
+    post-hoc warnings don't move behaviour); orchestration is upstream.
+  gate: true
+  checked: false
+  verification: |
+    File exists at .orbit/choices/0029-pipeline-orchestrates-investigation.yaml.
+    orbit choice show 29 returns the choice cleanly. Status field is "accepted".
+    Body cites both the 610/0 and the baseline-unchanged numbers. Per-stage
+    derivation strategy enumerates all four pipeline skills with mode + scope rule.
+    Bypass shape names AUQ pattern + reason-log location. Hook decision is explicit
+    (retired or retained-with-rationale).
+  ac_type: doc
+- id: ac-02
+  description: |
+    plugins/orb/skills/implement/SKILL.md gains a structural pre-flight step that
+    orchestrates /orb:code-investigate (narrow mode) on the spec's adjacent_files
+    (or, if absent, the current AC's named files derived from the AC description's
+    file:line citations). The step fires BEFORE AC-traversal begins. Prose is
+    imperative, not advisory ("Invoke /orb:code-investigate ..." not "Consider
+    /orb:code-investigate ..."), and names the bypass path per ac-01's canonical
+    shape. The existing line-149 advisory ("Run /orb:code-investigate (broad mode)
+    on the module ...") is replaced or absorbed by the structural step — no
+    duplication. The orchestration is a Skill tool call from implement's flow,
+    not standalone prose. Phased-rollout note: this AC is part of the minimum
+    shippable subset (ac-01 + ac-02 + ac-07); the other integration ACs may
+    split to follow-on specs under budget pressure.
+  gate: true
+  checked: false
+  verification: |
+    Grep plugins/orb/skills/implement/SKILL.md for the structural step prose
+    naming /orb:code-investigate as an orchestrated invocation (not advisory).
+    Manual smoke: invoke /orb:implement on a spec with adjacent_files populated;
+    confirm the pre-flight invokes /orb:code-investigate before reading the
+    first AC; confirm the bypass AUQ surfaces and accepts a logged reason; the
+    bypass-reason appears in progress.md.
+- id: ac-03
+  description: |
+    plugins/orb/skills/tabletop/SKILL.md Q8 gains a structural step that
+    orchestrates /orb:code-investigate (broad mode) on the cluster cards'
+    adjacent code. The step fires BEFORE the Q8 prose walk begins, providing
+    the layer-level enumeration with empirical grounding rather than agent
+    inference. Q8's existing prose ("intent-shaped at the layer level but
+    implementation-shaped at the file level") is preserved; the orchestrated
+    investigation feeds it. Current state: zero mentions of /orb:code-investigate
+    in tabletop SKILL.md (verified 2026-05-25 via grep).
+  gate: true
+  checked: false
+  verification: |
+    Grep plugins/orb/skills/tabletop/SKILL.md Q8 section for the orchestrated
+    investigation step. Post-ship state is at least one structural-step mention
+    at Q8 with the broad-mode + cluster-scope derivation. Manual smoke: invoke
+    /orb:tabletop on a card cluster; confirm Q8 fires investigation before
+    walking layers.
+- id: ac-04
+  description: |
+    plugins/orb/skills/review-pr/SKILL.md gains a structural step that
+    orchestrates /orb:code-investigate (narrow mode) on the PR's changed
+    paths (derived from `git diff --name-only $(git merge-base origin/main HEAD) HEAD`).
+    The step fires BEFORE the AC-coverage / call-site / related-doc checklist
+    begins. Existing line-55 advisory is replaced or absorbed by the structural step.
+  gate: true
+  checked: false
+  verification: |
+    Grep plugins/orb/skills/review-pr/SKILL.md for the orchestrated step
+    naming /orb:code-investigate. Manual smoke: invoke /orb:review-pr on a
+    branch with non-trivial diff; confirm investigation fires on the changed
+    paths before the checklist; confirm bypass path works.
+- id: ac-05
+  description: |
+    plugins/orb/skills/researcher/SKILL.md gains a structural step that
+    orchestrates /orb:code-investigate (broad mode) on the topic argument
+    (or the named area passed at invocation). The step fires BEFORE the
+    research thread opens. Existing line-20 advisory is replaced or absorbed.
+  gate: true
+  checked: false
+  verification: |
+    Grep plugins/orb/skills/researcher/SKILL.md for the orchestrated step.
+    Manual smoke: invoke /orb:researcher with a topic touching code;
+    confirm broad-mode investigation fires before research begins.
+- id: ac-06
+  description: |
+    plugins/orb/skills/drive/SKILL.md and plugins/orb/skills/rally/SKILL.md gain
+    one-line acknowledgements that investigation fires at the routed stage
+    (tabletop / implement / review-pr) rather than at the orchestrator level.
+    No separate investigation step at the drive or rally layer — the pattern
+    is that drive routes into implement; implement orchestrates the investigation.
+    This AC prevents accidental double-fire and clarifies the contract.
+  gate: false
+  checked: false
+  verification: |
+    Grep both drive/SKILL.md and rally/SKILL.md for the acknowledgement
+    prose. Prose review confirms no orchestration step is added at the
+    drive/rally layer.
+  ac_type: doc
+- id: ac-07
+  description: |
+    Hook decision from ac-01's choice file is implemented. Two paths:
+    (1) retired — plugins/orb/hooks/hooks.json removes the PreToolUse Edit|Write
+        matcher entry pointing at code-investigate-nudge.sh; the script may stay
+        on disk for git history. Rationale: orchestration is upstream of edits;
+        the post-hoc warning is now dead code (610/0 evidence). This is the
+        recommended lead.
+    (2) retained as backstop — hook stays registered, but the warning text is
+        sharpened to suggest the bypass-log path rather than the slash command,
+        and the path filter is tightened to skip paths inside spec/card folders
+        where the pipeline already investigated.
+    The choice file (ac-01) names which path; this AC verifies that the
+    implementation matches.
+  gate: true
+  checked: false
+  verification: |
+    Per choice file ac-01: if retired, grep hooks.json for the matcher
+    entry — absent. If retained, the warning text reflects the bypass-log
+    redirect. /reload-plugins post-change reports the expected hook count.
+  ac_type: config
+- id: ac-08
+  description: |
+    Observation-band audit at ship-date + 4 weeks. Re-runs the 5-repo
+    parallel-subagent JSONL analysis pattern (per memory
+    parallel-subagent-jsonl-analysis) across the same 5 source dirs
+    (arcform, brightfield, finetype, orbit, plus the private repo).
+    Measures four success criteria:
+    (1) investigation-before-edit ratio — target: sustained lift above
+        the 47.1% pre-ship baseline measured on brightfield;
+    (2) hook→action conversion rate, if hook retained — target: above zero
+        materially;
+    (3) /orb:code-investigate invocations per active session — orchestrated
+        invocations now show up in tool_use as Skill calls with input.skill =
+        "orb:code-investigate"; target: non-zero in pipeline-skill-entry
+        sessions;
+    (4) code-investigate-labelled memory generation — memories captured FROM
+        investigation work, not ABOUT the skill; target: at least one per
+        active development week.
+    Audit memo lands at .orbit/memos/<ship-date+4w>-investigation-orchestration-audit.md
+    with data tables and a recommendation (keep mechanism / tune scope-derivation /
+    pivot to lateral B or C per Q5 of the tabletop sidecar).
+  gate: false
+  checked: false
+  verification: |
+    Audit memo exists at the named path on or after ship-date + 4w.
+    Memo includes all four success-criteria measurements as tables.
+    spec.close treats this AC as deferrable per the ac-taxonomy observation
+    band (does not block close).
+  ac_type: observation
+memories_considered:
+- key: parallel-subagent-jsonl-analysis
+  disposition: adopted
+  reason: |
+    ac-08's observation-band audit explicitly re-runs this analysis pattern
+    across the same 5 source dirs. The memory is load-bearing for the
+    success-criteria measurement.
+- key: rg-shimmed-via-rtk-hook
+  disposition: adopted
+  reason: |
+    Implementation note for tool routing — per-stage scope-derivation uses
+    rg via Bash, which routes through rtk-grep. ast-grep + ripgrep feature
+    use cases must invoke /home/linuxbrew/.linuxbrew/bin/rg directly.
+- key: rg-substrate-misleading-prose-keyword-scan-code-investigate
+  disposition: partially-adopted
+  reason: |
+    The existing /orb:code-investigate SKILL.md has misleading rg prose.
+    Orchestrate mechanism doesn't fix that prose by itself, but invocations
+    from pipeline skills should not propagate the misleading framing. Fix
+    candidate for a follow-on SKILL.md tightening pass.
+- key: audit-conformance-cwd-dependent
+  disposition: partially-adopted
+  reason: |
+    ac-08's audit runs orbit verbs; the analysis script must run from
+    repo root (or pass --root). Captured as a method note in the
+    audit pattern memory.
