@@ -19,7 +19,7 @@ goal: |
   Test prefix for this spec: verfy.
 cards:
 - 0020-orbit-state
-status: open
+status: closed
 labels:
 - spec
 acceptance_criteria:
