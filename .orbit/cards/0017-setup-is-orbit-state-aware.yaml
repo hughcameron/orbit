@@ -54,6 +54,7 @@ scenarios:
 specs:
 - .orbit/specs/2026-05-09-orbit-method-md/spec.yaml
 - .orbit/specs/2026-05-24-setup-is-orbit-state-aware/spec.yaml
+- .orbit/specs/2026-05-25-port-setup-method-sh/spec.yaml
 relations:
 - card: 0008-consolidated-orbit-artefact-folder
   type: feeds

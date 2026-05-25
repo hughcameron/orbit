@@ -45,6 +45,7 @@ specs:
 - .orbit/specs/2026-05-24-port-acceptance-shim/spec.yaml
 - .orbit/specs/2026-05-25-port-promote-sh/spec.yaml
 - .orbit/specs/2026-05-25-relation-schema-choice-targets/spec.yaml
+- .orbit/specs/2026-05-25-port-setup-method-sh/spec.yaml
 relations:
 - card: 0018-two-artefact-contract
   type: feeds

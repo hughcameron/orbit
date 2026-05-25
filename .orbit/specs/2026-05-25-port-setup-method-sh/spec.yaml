@@ -3,7 +3,7 @@ goal: 'Port plugins/orb/scripts/setup-method.sh into a native orbit setup files 
 cards:
 - 0017-setup-is-orbit-state-aware
 - 0020-orbit-state
-status: open
+status: closed
 labels: []
 acceptance_criteria:
 - id: ac-01
