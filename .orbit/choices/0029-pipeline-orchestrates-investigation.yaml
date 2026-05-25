@@ -1,0 +1,130 @@
+id: '0029'
+title: Pipeline skills orchestrate /orb:code-investigate as a structural step
+status: accepted
+date_created: 2026-05-25
+date_modified: 2026-05-25
+body: |
+  # 0029. Pipeline skills orchestrate /orb:code-investigate as a structural step
+
+  ## Context and Problem Statement
+
+  The 2026-05-25 empirical audit across 5 repos and 35 sessions found:
+
+  - **1,725 edits**, **610 PreToolUse Edit|Write hook fires**, **0 invocations of `/orb:code-investigate`** in the same windows.
+  - **47.1% investigation-before-edit ratio** pre-ship (brightfield, clean baseline) versus **~42% post-ship aggregate** — the intervention (shipped 2026-05-17 as `/orb:code-investigate` skill + `code-investigate-nudge.sh` hook + ac-04 advisory prose embedded in `implement`/`review-pr`/`researcher` SKILL.md files) has not moved behaviour.
+
+  Three integration attempts had been made: (1) standalone slash command, (2) post-hoc PreToolUse hook on `Edit|Write`, (3) advisory prose embedded in pipeline skills. All three failed on the same axis: agents do not reach for the skill, prose advice is skim-able, and the post-hoc hook fires too late to change pre-Edit behaviour.
+
+  Five repos sampled (arcform, orbit, brightfield, finetype, plus one private). Methodology: parallel-subagent JSONL analysis pattern (memory key `parallel-subagent-jsonl-analysis`). Pre-ship per-repo baseline locked in `.orbit/memos/2026-05-25-investigation-orchestration-preship-baseline.md`.
+
+  Tabletop sidecar at `.orbit/specs/2026-05-25-investigation-as-pipeline-step/tabletop.md` walked Q1-Q10 and landed the load-bearing value: **behaviour-changing, not advice-shaped**. The simplest cut: **pipeline-as-actuator + derived-scope + logged-bypass** — mechanism-agnostic. This choice files the mechanism pick.
+
+  ## Considered Options
+
+  Tabletop Q5 named five laterals (A/B/C live; D/E held as fallback paths):
+
+  - **A. Orchestrate.** Each pipeline skill (tabletop / implement / review-pr / researcher) invokes `/orb:code-investigate` as a structural step in its prose-driven flow. The agent doesn't decide; the parent skill drives. Standalone `/orb:code-investigate` remains invocable for manual / debug use.
+  - **B. Marker-gate.** Pipeline skill's pre-flight reads `.orbit/.code-investigate-recent`; AskUserQuestion-blocks if absent for relevant files. (a) run now, (b) waive with reason.
+  - **C. Compose.** Fold investigation discipline directly into pipeline skills' prose + behaviour. No standalone invocable surface. Hook tracks "did adequate investigation occur" rather than "did `/orb:code-investigate` fire".
+  - **D. Defer entirely** until consumer-repo data accumulates (originally scheduled as ac-07 of `2026-05-17-code-investigate-skill` at +4 weeks). *Rejected per tabletop Q5* — the in-repo signal across 35 sessions is already conclusive; ac-07's audit will refine, not reverse.
+  - **E. Contained scope** — pick just `/orb:implement` as the proving ground; fan out to other pipeline skills via follow-on specs. *Held as halt-revert lateral per the tabletop's budget guard* — fires if implementation overruns.
+
+  ## Decision Outcome
+
+  Chosen option: **A — orchestrate.**
+
+  Rationale:
+
+  1. **610/0 evidence rules out post-hoc shapes (B at the marker-gate moment, C at the hook level).** The marker-gate variant of B reuses the same warning surface that has converted 0 times in 610 fires; the bypass path would default to "waive" given that track record.
+  2. **C drops the discoverable invocable surface.** The standalone `/orb:code-investigate` slash command exists as the discipline's manual home. Removing it loses the manual / debug / educational entry point even though pipeline-mediated invocation becomes the default.
+  3. **A preserves the existing skill's investment.** The `code-investigate-mark.sh` writer, `code-investigate-nudge.sh` hook, and the skill's own prose discipline all stay load-bearing. The mechanism change is *upstream* — the parent skill causes the invocation to fire — without rebuilding the downstream.
+
+  ## Per-stage scope-derivation principle
+
+  Scope is **agent-typed at the call site** from substrate the agent is already reading. No new typed field on `Spec` or `Card`. The scope-derivation prose lives in each pipeline skill's SKILL.md and follows these rules per stage:
+
+  | Pipeline skill | Mode | Cadence | Scope source |
+  |---|---|---|---|
+  | `tabletop` Q8 | broad | one-shot at Q8 entry | cluster cards' `references[]` entries that resolve to file paths in the repo |
+  | `implement` | narrow | **per-AC**, at the entry of each AC, before edits land for that AC | the current AC's description (file paths cited there) + the spec's `tabletop.md` Adjacent-code section (when present) + the spec's cards' `references[]` |
+  | `review-pr` | narrow | one-shot at checklist entry | the PR's changed paths — `gh pr view --json files,baseRefName` when a PR exists, falling back to `git diff --name-only $(git merge-base $BASE HEAD) HEAD` where $BASE comes from gh metadata or the branch's tracking ref |
+  | `researcher` | broad | one-shot at research-thread entry | the topic argument passed at invocation; no argument → bypass with reason |
+
+  Earlier tabletop Q1-Q5 do not enumerate code areas (Q8 is the question that does); scope-derivation for Q8 is therefore the cards' references[] alone, with no circular dependency on Q8's own output.
+
+  ## Canonical bypass shape
+
+  At any orchestrated call site, the agent calls AskUserQuestion with two options:
+
+  - **(a) Run `/orb:code-investigate` now** (proceed with the orchestrated invocation as designed)
+  - **(b) Skip with logged reason** (bypass; the reason is captured to substrate)
+
+  Bypass persistence:
+
+  - **Spec-bound stages (implement, review-pr):** `orbit spec note <spec-id> "investigation bypass: <reason>"`. Writes to `notes.jsonl`, the canonical durable-state surface. `progress.md` is deprecated (per `implement` SKILL.md lines 26-30); do not target it.
+  - **Session-bound stages (tabletop pre-spec, researcher):** `orbit memory remember <bypass-key> "<reason>" --label code-investigate`. Memories are the only session-bridging persistence available; the label keeps bypasses surfaceable in the +4w audit (ac-08 of the parent spec).
+
+  ## Args-drop guard
+
+  Per memory `slash-command-args-vs-skill-tool-args` (empirically observed: the Skill tool's args parameter is not reliable for forked skills — args can drop, leaving the called skill running with empty scope).
+
+  Defence-in-depth: **before** every orchestrated Skill call, the parent skill writes the intended scope to substrate so the ground truth exists outside the args channel:
+
+  - **Spec-bound:** `orbit spec note <spec-id> "investigation scope: <paths>"`
+  - **Session-bound:** `orbit memory remember <scope-key> "<paths>" --label code-investigate`
+
+  Verification then cross-checks (a) the recorded intended scope against (b) the marker entries in `.orbit/.code-investigate-recent`. Mismatch means args dropped — failure surfaces in-cycle, not at +4w.
+
+  For per-AC orchestration (implement only), pairing is positional: N ACs produce N scope-note lines AND N marker entry-sets, paired in `notes.jsonl` order.
+
+  ## Skill-tool return contract
+
+  The orchestrating pipeline skill invokes `/orb:code-investigate` via the Skill tool. The called skill writes the marker file at `.orbit/.code-investigate-recent` AND emits prose. The calling pipeline skill **must quote a 5-10 line summary** of the called skill's return inline into the agent's working context before proceeding to the next step. Marker-write alone is insufficient — the agent does not re-read the marker without prompting.
+
+  ## Hook decision: retain as backstop
+
+  `code-investigate-nudge.sh` stays registered as a `PreToolUse Edit|Write` hook. Justification:
+
+  - The 610/0 evidence justifies retiring the warning *for pipeline-mediated edits*. But the audit population (1725 edits) is not decomposed by "entered via a pipeline skill" vs "ad-hoc". An unknown fraction of edits is ad-hoc — direct `Edit` invocations outside `/orb:implement`, memo authoring outside the pipeline, hook bypass via manual editor. Retiring the hook for these leaves them with no nag at all.
+  - The risk of premature retirement: K1 (tabletop kill condition — behaviour-changing claim) needs a pivot surface at +2w if the orchestrate mechanism fails to lift the baseline. Retaining the hook keeps that pivot surface available.
+
+  Changes made (per spec ac-07):
+
+  - `hooks.json` keeps the PreToolUse matcher unchanged.
+  - `code-investigate-nudge.sh` warning text is sharpened from "consider /orb:code-investigate before editing <path>" to text pointing at the bypass-log path (`orbit spec note` for spec-bound, `orbit memory remember --label code-investigate` for session-bound) AND noting that pipeline-skill flows already orchestrate the investigation (so the warning is meaningful only for off-pipeline edits).
+  - The existing path filter (`.orbit/*|.claude/*|*.lock`) is unchanged — already correct as an unconditional substrate skip.
+
+  Hook retirement may be reconsidered in a follow-on spec once the +4w audit (ac-08 of the parent spec) settles the ad-hoc-vs-pipeline edit share.
+
+  ## Consequences
+
+  ### Positive
+
+  - Pipeline skills become the canonical entry point for code-investigation discipline. Agents reach for `/orb:implement`, `/orb:tabletop`, etc. ~95 times across 35 sessions in the audit data; the orchestrated invocations now ride those entry points instead of competing with them.
+  - Token cost is bounded by stage: per-AC narrow mode for implement; one-shot broad mode for tabletop/researcher; PR-diff-bounded narrow mode for review-pr. No SessionStart-wide investigation that would burn tokens on non-coding sessions.
+  - The standalone `/orb:code-investigate` slash command remains available for manual / debug / educational invocation. The discipline lives in two surfaces (orchestrated by pipeline + invocable by hand); the data shows the former is the load-bearing one.
+
+  ### Negative
+
+  - Six SKILL.md files (`implement`, `tabletop`, `review-pr`, `researcher`, `drive`, `rally`) gain awareness of the orchestration contract. Refactoring the investigation surface (e.g. swapping the tool taxonomy in `/orb:code-investigate` itself) requires touching all four of the invoking SKILL.mds for prose consistency.
+  - Per-AC implement-stage cadence means N investigations per spec implementation — token spend rises versus a one-shot pre-flight. Halt H3 (token compounding) is the guard; the +4w audit measures whether the spend stayed within band.
+  - Args-drop risk is real per the cited memory. The defence (write scope to substrate before the Skill call) requires every orchestration site to follow the same shape; drift across sites is a maintainability risk.
+
+  ### Deferred
+
+  - **Centralised entry point (EH1 from tabletop):** a Rust `orbit code investigate <scope>` verb that the pipeline skills call could replace the per-SKILL.md prose. Not in this choice's scope; deferred to a follow-on spec only if the per-stage scope-derivation prose grows beyond what SKILL.md comfortably carries.
+  - **Auto-derivation of scope from spec/card structured fields:** would require new typed fields on `Spec` (e.g. `adjacent_files`) or `Card` (e.g. structured `code_area`). Reviewed in cycle-1 of `2026-05-25-investigation-as-pipeline-step` review-spec and explicitly rejected as out-of-scope for this iteration — the agent-typed scope source is sufficient.
+  - **Hook retirement:** held until +4w audit data settles ad-hoc-vs-pipeline edit decomposition.
+
+  ## References
+
+  - `.orbit/specs/2026-05-25-investigation-as-pipeline-step/spec.yaml` — the parent spec implementing this choice
+  - `.orbit/specs/2026-05-25-investigation-as-pipeline-step/tabletop.md` — Q1-Q10 walk plus halts/escalations/kills
+  - `.orbit/memos/2026-05-25-code-investigate-empirical-audit.md` — the 5-repo audit with 610/0
+  - `.orbit/memos/2026-05-25-code-investigate-stage-bound.md` — the stage-bound principle predecessor
+  - `.orbit/memos/2026-05-17-codebase-mastery-audit.md` — narrowed audit at original ship
+  - `.orbit/memos/2026-05-25-investigation-orchestration-preship-baseline.md` — per-repo T-zero baselines
+  - `.orbit/memories/parallel-subagent-jsonl-analysis.yaml` — methodology for the +4w audit
+  - `.orbit/memories/slash-command-args-vs-skill-tool-args.yaml` — args-drop risk motivating the guard
+  - `.orbit/cards/0025-codebase-mastery.yaml` — the capability card this choice serves
+references: []

@@ -174,6 +174,24 @@ Choice 0017 binds: laterals are *named*, not picked. The decision goes to the sp
 
 This question is intent-shaped at the layer level (which layers are in scope) but implementation-shaped at the file level. Surface the layer set; route file-level questions to **Implementation Notes** in the sidecar.
 
+**Orchestrate `/orb:code-investigate` (broad mode) at Q8 entry, BEFORE walking the layer enumeration.** Per choice 0029 (pipeline-orchestrates-investigation), tabletop's Q8 is a pipeline-stage moment where investigation must fire structurally, not as advice. The orchestrated invocation feeds Q8's layer enumeration with empirical grounding rather than agent inference.
+
+**Scope is agent-typed from the cluster cards' references[].** Iterate the cluster's cards (the `Cards in scope:` set locked at Q1), read each card's `references[]` field, and collect entries that resolve to file paths in the repo (drop URLs, freeform descriptions, and pointer-only references). That set is the broad-mode scope. Earlier Q1-Q5 do not enumerate code areas — Q8 is the question that does — so derivation cannot depend on Q8's own output; cards' references[] is the only source.
+
+**Write scope to memory BEFORE the Skill call** (args-drop guard per memory `slash-command-args-vs-skill-tool-args` — Skill tool args can drop on forked invocations, leaving the called skill with empty scope). Tabletop is session-bound (no spec exists yet), so the scope lands as a labelled memory:
+
+```bash
+orbit memory remember tabletop-investigation-scope-<date>-<slug> "<paths>" --label code-investigate
+```
+
+Then invoke `/orb:code-investigate` (broad mode) via the Skill tool with that scope. The called skill writes a marker entry at `.orbit/.code-investigate-recent` and emits prose. **Quote a 5-10 line summary of the return inline** into your working context before walking the Q8 layer prose — marker-write alone is insufficient; re-quoting the prose is what makes the investigation load-bearing for Q8's enumeration.
+
+**Bypass shape.** If the cluster has no cards with file-path references[] (e.g. greenfield work on a non-existent module), call AskUserQuestion with:
+- (a) Proceed with broad-mode investigation on the repo root (budget-capped)
+- (b) Skip with logged reason
+
+If (b), log via `orbit memory remember tabletop-investigation-bypass-<date>-<slug> "<reason>" --label code-investigate` and proceed to the layer enumeration prose unaided.
+
 ### Q9 — Budget
 
 **Role:** name the working-day budget at Claude-execution pace, not at conservative-engineering quotes.

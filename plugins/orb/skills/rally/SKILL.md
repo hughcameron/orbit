@@ -510,6 +510,12 @@ greenlight before proceeding to implementation.
 
 ## Stage 5: Implementation
 
+**Investigation fires at the routed stage, not here.** Per choice 0029
+(pipeline-orchestrates-investigation), each rally child runs `/orb:drive`,
+which routes into `/orb:implement` / `/orb:review-spec` / `/orb:review-pr`
+— those routed skills orchestrate `/orb:code-investigate` themselves.
+Rally does not add an orchestrator-level investigation step.
+
 The implementation queue is the **claimable set** computed from
 `rally.yaml.children` (§Stage 1 rule). The shape of the queue
 (single-head chain vs flat fan-out) is determined entirely by the

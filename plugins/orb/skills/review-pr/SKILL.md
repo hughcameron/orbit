@@ -52,7 +52,27 @@ The skill takes an orbit-state spec id — the spec's `acceptance_criteria` are 
 
 ### 3. Phase 2: Run Tests + AC Coverage Check
 
-**Reach for `/orb:code-investigate` (narrow mode) when probing call sites, test coverage, and related-doc presence.** The skill returns precise answers — *what calls X*, *where's the test for ac-04*, *is feature Y documented in METHOD.md* — without the grep-and-eyeball cost. Quote stats accurately rather than approximating.
+**Orchestrate `/orb:code-investigate` (narrow mode) at Phase 2 entry, BEFORE the AC-coverage / call-site / related-doc checklist begins.** Per choice 0029 (pipeline-orchestrates-investigation), review-pr is a pipeline-stage moment where investigation must fire structurally, not as advice. The orchestrated invocation surfaces precise answers — *what calls X*, *where's the test for ac-04*, *is feature Y documented in METHOD.md* — to feed Phase 2's checks rather than approximating mid-review.
+
+**Scope is the PR's changed paths.** Resolve in this order:
+
+1. Preferred: `gh pr view --json files,baseRefName` when a PR exists. The `files[].path` array is the scope; `baseRefName` carries the base branch.
+2. Fallback (no PR yet, or `gh` unavailable): `git diff --name-only $(git merge-base $BASE HEAD) HEAD` where $BASE comes from gh metadata or, absent gh, from the branch's tracking ref via `git rev-parse --abbrev-ref $BRANCH@{upstream}`.
+3. Base-resolution failure: if both paths fail (no PR, no upstream tracking, no gh access), invoke the bypass path with reason `"review-pr base resolution failed"` rather than silently skipping.
+
+**Write scope to spec note BEFORE the Skill call** (args-drop guard per memory `slash-command-args-vs-skill-tool-args` — Skill tool args can drop on forked invocations):
+
+```bash
+orbit spec note <spec-id> "investigation scope [review-pr]: <changed-paths>"
+```
+
+Then invoke `/orb:code-investigate` (narrow mode) via the Skill tool with that scope. **Quote a 5-10 line summary of the return inline** into your working context before walking the AC-coverage checklist — the marker write alone won't change your behaviour mid-review; re-quoting the prose is what makes the investigation load-bearing.
+
+**Bypass shape.** If the diff is trivial (single-line README fix, a typo, a comment-only change) or base resolution fails (see (3) above), call AskUserQuestion with:
+- (a) Run `/orb:code-investigate` now (proceed with the orchestrated invocation)
+- (b) Skip with logged reason
+
+If (b), log via `orbit spec note <spec-id> "investigation bypass [review-pr]: <reason>"` and proceed to the checklist.
 
 1. Run the project's test suite. Record pass/fail with output.
 2. **AC-to-test coverage check**: For every AC parsed in Phase 1, search the project's test sources for a test bearing the bare AC identifier (`ac<NN>` or `ac-NN`).

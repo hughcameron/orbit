@@ -49,7 +49,27 @@ marker=".orbit/.code-investigate-recent"
 session_id_file=".orbit/.session-id"
 
 warn() {
-  echo "consider /orb:code-investigate before editing $rel_path" >&2
+  # Per choice 0029 (pipeline-orchestrates-investigation): pipeline-mediated
+  # edits already orchestrate /orb:code-investigate at their stage entry, so
+  # this warning fires only for off-pipeline edits (ad-hoc fixes, memo
+  # authoring outside /orb:implement, direct CLI edits). If you entered via
+  # /orb:implement, /orb:tabletop, /orb:review-pr, or /orb:researcher, the
+  # investigation should have already fired — re-check.
+  cat <<EOF >&2
+off-pipeline edit on $rel_path without recent investigation.
+
+If you're inside a pipeline skill (implement / tabletop / review-pr /
+researcher), the investigation should have fired at stage entry per
+choice 0029. Re-check that the orchestrated /orb:code-investigate
+step ran.
+
+For genuine off-pipeline edits, either:
+  (a) Run /orb:code-investigate before this edit, OR
+  (b) Log a bypass — for spec-bound work:
+        orbit spec note <spec-id> "investigation bypass: <reason>"
+      For session-bound work:
+        orbit memory remember <key> "<reason>" --label code-investigate
+EOF
 }
 
 if [ ! -f "$marker" ]; then

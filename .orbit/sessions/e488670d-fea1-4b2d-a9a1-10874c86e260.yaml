@@ -1,0 +1,21 @@
+id: e488670d-fea1-4b2d-a9a1-10874c86e260
+started_at: 2026-05-24T06:27:37.107684267Z
+ended_at: 2026-05-24T06:27:37.107684267Z
+distillate: |-
+  Drive closed end-to-end.
+
+  **Spec 2026-05-24-setup-is-orbit-state-aware — CLOSED, 21/21 ACs APPROVE in review-pr cycle 1.**
+
+  Shipped on PR [#29](https://github.com/meridian-online/orbit/pull/29) (merged squash):
+  - `SubstrateLayoutState` 6-variant enum + `classify_substrate_layout` helper as single source of truth for setup's state-machine AND audit_conformance's wrapped-undotted suppression
+  - `plugin_repo` config-gated topology seeds — substrate-typed entries only fire in the orbit-plugin source repo (with `canonical_code` path validation); downstream projects get a one-line README
+  - `decisions_md_unmigrated` conformance finding family — surfaces unconverted MADR markdown
+  - Wrapped-undotted suppression of `canonical-files-missing` (rally lockdown contract delivered ahead of sister drive)
+  - New `substrate classify` CLI+MCP verb with byte-equal parity tests
+  - Setup SKILL.md preconditions + §3.W wrapped-undotted arm + §4 mixed-state refusal + decisions/ → .orbit/decisions/ migration
+  - Drive SKILL.md input-contract pre-check for uninitialised substrate
+
+  Tests: 497/497 pass (+51 new). Card 0017 bumped planned → emerging. Two non-blocking review findings (LOW: retype ac-01..ac-09 to `doc`; INFO: mixed-* refusal in SKILL.md prose).
+
+  Next moves unblocked: sister rally child [2026-05-24-workflow-conformance](.orbit/specs/2026-05-24-workflow-conformance/spec.yaml) (predecessor satisfied), and independently [2026-05-24-brownfield-spec-migration](.orbit/specs/2026-05-24-brownfield-spec-migration/spec.yaml). Both can be resumed via `/orb:drive <spec-id>` in fresh top-level sessions (this one validated that the rally's parking reason was about parallel-worktree fan-out, not single drives).
+labels: []

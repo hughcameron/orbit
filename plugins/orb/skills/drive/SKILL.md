@@ -384,6 +384,13 @@ If NO-GO or `block` → §NO-GO. If `request changes` → increment
 
 ## Stage 2: Implement
 
+**Investigation fires at the routed stage, not here.** Per choice 0029
+(pipeline-orchestrates-investigation), `/orb:implement` orchestrates
+`/orb:code-investigate` per-AC; drive does not add a separate
+orchestrator-level investigation step. Same applies to Stage 1
+(review-spec) and Stage 3 (review-pr) — investigation is the routed
+skill's responsibility, not drive's.
+
 Drive sets `stage: implement` in `drive.yaml` and delegates entirely to
 `/orb:implement`:
 

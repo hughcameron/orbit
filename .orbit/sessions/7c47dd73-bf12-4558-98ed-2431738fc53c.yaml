@@ -1,0 +1,18 @@
+id: 7c47dd73-bf12-4558-98ed-2431738fc53c
+started_at: 2026-05-24T01:33:11.06706884Z
+ended_at: 2026-05-24T01:33:11.06706884Z
+distillate: |-
+  Four improvements visible in that transcript, ranked by leverage:
+
+  **1. The prioritise output misled.** Conformance reported "METHOD.md/STYLE.md missing → run `orbit setup`" — but the root cause was `orbit/` vs `.orbit/` layout mismatch, and running setup naïvely would have made it worse (two parallel substrate folders). Fix: `orbit audit conformance` should detect an undotted `orbit/` folder containing substrate and emit a HIGH finding "substrate in non-canonical location" instead of letting the dotted-folder check fire MEDIUM. The agent had to discover the real problem manually.
+
+  **2. Topology seeds point at orbit-plugin paths.** Setup wrote 5 seed entries referencing `orbit-state/crates/core/src/schema.rs` etc. into a repo that doesn't contain that tree, generating 21 stale-pointer drift entries the moment setup completed. Setup should either write empty placeholders or write `TODO: point at <subsystem>` strings rather than canonical-looking paths that fail audit immediately.
+
+  **3. Reconcile fails on common brownfield `maturity` values.** Five cards needed hand-edits to map `active → established` and `in_design → emerging` before reconcile would run. These values are likely common across older orbit repos — reconcile should auto-map them with a one-line "mapped legacy maturity" log entry, the same way it synthesises missing `id` and `status`.
+
+  **4. `decisions/` vs `choices/` naming is unmigrated.** Setup migrated `orbit/ → .orbit/` but left `.orbit/decisions/` (MADR markdown) alongside the canonical `.orbit/choices/` (YAML). `orbit choice list` returns nothing despite 16 decisions sitting there. Either setup should detect `decisions/` and offer the same migration prompt, or the docs need to be explicit that MADR-markdown projects need a separate conversion pass.
+
+  My pick if you only do one: **#1** — it's the trust-builder. The whole `/orb:prioritise → single-verb remediation` contract breaks if a MEDIUM finding can recommend an action that makes things worse. Worth a memo now while the evidence is fresh; the other three can become cards if the pattern repeats.
+
+  Want me to file a memo capturing all four, or a card on the conformance-finding-blindness specifically?
+labels: []

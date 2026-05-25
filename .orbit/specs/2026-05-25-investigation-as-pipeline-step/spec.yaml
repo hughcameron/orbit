@@ -84,12 +84,14 @@ acceptance_criteria:
     Names the hook decision: RETAIN as backstop (path 2 — lead per cycle-2
     reframe). The 610/0 evidence justifies retiring for pipeline-mediated edits
     but not for ad-hoc / off-pipeline edits which are unmeasured. Warning text
-    is sharpened to point at the bypass path; path filter is tightened to skip
-    paths inside spec/card folders where the pipeline already invokes the
-    investigation step. Hook retirement may be reconsidered in a follow-on
-    spec once ac-08's audit settles the ad-hoc-vs-pipeline edit share.
+    is sharpened to point at the bypass path (orbit spec note for spec-bound,
+    orbit memory remember --label code-investigate for off-spec). The existing
+    path filter (`.orbit/*|.claude/*|*.lock`) is unchanged — already correct
+    as an unconditional substrate skip. Hook retirement may be reconsidered
+    in a follow-on spec once ac-08's audit settles the ad-hoc-vs-pipeline
+    edit share.
   gate: true
-  checked: false
+  checked: true
   verification: |
     File exists at .orbit/choices/0029-pipeline-orchestrates-investigation.yaml.
     orbit choice show 29 returns the choice cleanly. Status field is "accepted".
@@ -97,8 +99,8 @@ acceptance_criteria:
     scope-derivation principle enumerates all four pipeline skills with mode +
     agent-typed scope source. Bypass shape names AUQ pattern + reason-log
     location. Skill-tool return contract is explicit (quote 5-10 line summary
-    inline). Hook decision is explicit (retain-as-backstop, with sharpened text
-    and tightened filter).
+    inline). Hook decision is explicit (retain-as-backstop, warning-text
+    sharpened only — existing path filter unchanged).
   ac_type: doc
 - id: ac-02
   description: |
@@ -122,7 +124,7 @@ acceptance_criteria:
     (ac-01 + ac-02 + ac-07); the other integration ACs may split to follow-on
     specs under budget pressure.
   gate: true
-  checked: false
+  checked: true
   verification: |
     (1) Grep plugins/orb/skills/implement/SKILL.md for the structural step
     prose naming /orb:code-investigate as an orchestrated invocation
@@ -153,7 +155,7 @@ acceptance_criteria:
     Current state: zero mentions of /orb:code-investigate in tabletop
     SKILL.md (verified 2026-05-25 via grep).
   gate: true
-  checked: false
+  checked: true
   verification: |
     (1) Grep plugins/orb/skills/tabletop/SKILL.md Q8 section for the orchestrated
     investigation step naming the agent-typed scope source (cluster cards'
@@ -181,7 +183,7 @@ acceptance_criteria:
     invokes the bypass path with reason "review-pr base resolution failed"
     rather than silently skipping.
   gate: true
-  checked: false
+  checked: true
   verification: |
     (1) Grep plugins/orb/skills/review-pr/SKILL.md for the orchestrated step
     naming /orb:code-investigate AND naming both PR-diff resolution paths
@@ -202,7 +204,7 @@ acceptance_criteria:
     "researcher invoked without topic argument" rather than guessing scope.
     Existing line-20 advisory is replaced or absorbed.
   gate: true
-  checked: false
+  checked: true
   verification: |
     (1) Grep plugins/orb/skills/researcher/SKILL.md for the orchestrated step
     naming /orb:code-investigate AND the no-argument bypass AND the args-drop
@@ -227,7 +229,7 @@ acceptance_criteria:
     scope here (no enforcement substrate exists yet; building it would dwarf
     this AC's value).
   gate: false
-  checked: false
+  checked: true
   verification: |
     Grep both drive/SKILL.md and rally/SKILL.md for the acknowledgement prose
     naming "fires at routed stage" or equivalent. Prose review confirms no
@@ -258,7 +260,7 @@ acceptance_criteria:
     Hook retirement is deferred to a follow-on spec once ac-08's +4w audit
     settles the ad-hoc-vs-pipeline edit share.
   gate: true
-  checked: false
+  checked: true
   verification: |
     Grep plugins/orb/hooks/code-investigate-nudge.sh for the sharpened warning
     text mentioning the bypass-log path (`orbit spec note` for spec-bound,
