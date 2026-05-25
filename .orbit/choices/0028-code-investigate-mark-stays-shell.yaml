@@ -1,0 +1,67 @@
+id: '0028'
+title: code-investigate-mark.sh stays as shell — project-tooling, not substrate
+status: accepted
+date_created: 2026-05-25
+date_modified: 2026-05-25
+body: |
+  # 0028. code-investigate-mark.sh stays as shell — project-tooling, not substrate
+
+  ## Context and Problem Statement
+
+  Choice 0020 (`shell-scripts-to-rust-verbs`) declared a default direction: substrate-shaped scripts under `plugins/orb/scripts/` migrate into orbit Rust verbs. As of 2026-05-25 the three named migration candidates have shipped (`promote.sh`, `setup-method.sh`, `orbit-acceptance.sh`), each in its own spec, each deleting its shim on landing. The named-candidate table in choice 0020 is fully struck through.
+
+  One adjacent script remains: `plugins/orb/scripts/code-investigate-mark.sh` (74 lines). It post-dates choice 0020 — it shipped 2026-05-17 alongside the `/orb:code-investigate` skill. It writes a session-scoped marker file at `.orbit/.code-investigate-recent` recording recent `/orb:code-investigate` invocations; the marker is read by `plugins/orb/hooks/code-investigate-nudge.sh` (a `PreToolUse` hook) which emits a soft warning when a file is edited without a recent investigation.
+
+  Marker shape: line 1 is the session id, lines 2..N are `<unix-ts>\t<kind>\t<path>` entries. Session-scoped — stale-session markers (header mismatches `.orbit/.session-id`) are overwritten on the next mark. No clock TTL.
+
+  The discrimination question is whether `code-investigate-mark.sh` meets choice 0020's "substrate-shaped → Rust verb" criterion, or whether it is *project-tooling-shaped* and therefore covered by the exception clause that closes choice 0020:
+
+  > substrate-shaped → Rust verb; project-tooling-shaped (orchestration, dev experience) → shell stays valid.
+
+  This choice files the discrimination explicitly so future similar tools (sentinel-file writers, hook-adjacent scripts, dev-experience telemetry) have a precedent to cite.
+
+  ## Considered Options
+
+  - **A. Port to Rust verb** (`orbit code-investigate mark <kind> <path>`). Pro: every Rust verb gets MCP exposure for free; test coverage moves to the orbit-state suite; consistent surface with the migrated trio. Con: ports only the writer — the reader (`code-investigate-nudge.sh`) is a bash hook and must shell out either way, so the round-trip stays cross-language; the marker file is session-scoped runtime telemetry, not substrate `orbit verify` claims over; no MCP consumer needs to mark investigations (only the agent inside Claude Code does).
+
+  - **B. Keep as shell** — explicitly classify as project-tooling per choice 0020's exception clause. Pro: matches the actual shape (hook-adjacent sentinel writer, not substrate operation); avoids re-implementing a 74-line straight-line bash script that has no python3-in-bash duplication of substrate logic; leaves the reader/writer language pair coherent (both bash); preserves the exception-clause boundary as a real boundary, not a vestigial one. Con: the script stays in shell forever — but that is the point.
+
+  ## Decision Outcome
+
+  Chosen option: **B — keep as shell, classified as project-tooling-shaped per choice 0020's exception clause.**
+
+  The four discrimination signals split cleanly:
+
+  **Favouring port (A):**
+
+  1. Writes under `.orbit/` — surface-level looks substrate-shaped.
+  2. Could be exposed via MCP — every Rust verb gets it for free.
+  3. Test coverage would move to the Rust suite.
+  4. (No fourth — these three are the pull.)
+
+  **Favouring keep-as-shell (B):**
+
+  1. The marker is a session-scoped sentinel file, not canonical substrate. `orbit verify` makes no claim over it. It is runtime telemetry, comparable to `.orbit/.session-id` itself — neither is substrate the way cards, specs, choices, and memories are.
+  2. The reader is a bash hook. Porting just the writer leaves the reader still in bash, so a Rust verb buys no language-uniformity — it adds a cross-language hop where one currently does not exist.
+  3. No MCP consumer needs to mark investigations. Only the agent inside Claude Code invokes `/orb:code-investigate`, and that invocation happens through the SKILL.md prose, not through tool fan-out. MCP exposure is a benefit only when there is a consumer outside Claude Code; here there is not.
+  4. The script is 74 lines of straightforward bash with no python3-in-bash duplication of substrate logic. The "thin shim that shells out to orbit and post-processes JSON via inline python3" pattern that choice 0020 names as the smell does not apply — `code-investigate-mark.sh` does not call `orbit` at all.
+
+  The fourth signal is decisive: choice 0020's named smell is bash duplicating orbit-core work via inline python3. `code-investigate-mark.sh` does not do that. It is a sentinel writer that reads `.orbit/.session-id`, manipulates a small text file, and exits.
+
+  ### Precedent set
+
+  Future shell scripts under `plugins/orb/scripts/` are classified by the same four-signal test:
+
+  - Does it call `orbit` and post-process JSON via inline python3? → substrate-shaped, port to a Rust verb.
+  - Does it write a session-scoped sentinel / telemetry file read by a bash hook, with no MCP consumer and no orbit-core duplication? → project-tooling-shaped, shell stays valid.
+
+  The boundary is the four signals together — not "writes under `.orbit/`" alone (signal 1 is necessary but not sufficient; the marker file is under `.orbit/` but is not substrate).
+
+  ## Consequences
+
+  - `code-investigate-mark.sh` remains shell indefinitely. Maintenance happens in place.
+  - The reader/writer pair (`code-investigate-mark.sh` ↔ `code-investigate-nudge.sh`) stays language-coherent. Future changes to the marker format land as paired bash edits.
+  - Choice 0020's exception clause has a precedent file to cite, so the substrate-vs-tooling boundary is concrete rather than abstract.
+  - The named-candidate list in choice 0020 is fully struck through; this choice closes the housekeeping arc on that migration without reopening it for sentinel-file tools.
+references:
+- '0020'
