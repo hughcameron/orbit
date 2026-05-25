@@ -37,10 +37,12 @@ acceptance_criteria:
     scope at the call site from substrate they are already reading):
     - tabletop Q8: broad mode; agent picks scope from the cluster cards'
       references[] entries that resolve to file paths in the repo.
-    - implement pre-flight: narrow mode; agent picks scope from the spec's
-      tabletop.md Adjacent-code section (Q8 output, when present), the spec's
-      cards' references[], and the current AC's description text (any file paths
-      cited there).
+    - implement per-AC entry: narrow mode; fires at the entry of each AC
+      (not one-shot pre-flight). Agent picks scope from the current AC's
+      description (file paths cited there), the spec's tabletop.md
+      Adjacent-code section (Q8 output, when present), and the spec's
+      cards' references[]. Per-AC preserves the existing line-149
+      discipline ("the module the next AC touches") in structural form.
     - review-pr call-site check: narrow mode; scope is the PR's changed paths,
       resolved by `gh pr view --json files,baseRefName` when a PR exists,
       falling back to `git diff --name-only $(git merge-base $BASE HEAD) HEAD`
@@ -100,12 +102,16 @@ acceptance_criteria:
   ac_type: doc
 - id: ac-02
   description: |
-    plugins/orb/skills/implement/SKILL.md gains a structural pre-flight step that
-    orchestrates /orb:code-investigate (narrow mode) BEFORE AC-traversal begins.
-    Scope is agent-typed: the prose instructs the agent to read the spec's
-    tabletop.md (if present) for Adjacent-code output, the cards' references[],
-    and the current AC's description, then call /orb:code-investigate with an
-    explicit scope argument summarising what to investigate. The orchestration
+    plugins/orb/skills/implement/SKILL.md gains a structural step that
+    orchestrates /orb:code-investigate (narrow mode) **at the entry of each
+    AC, BEFORE edits land for that AC**. Per-AC, not one-shot pre-flight —
+    this preserves the per-AC investigation discipline currently at
+    line-149 ("the module the next AC touches") while making the call
+    structural rather than advisory. Scope is agent-typed per AC: the
+    prose instructs the agent to read the current AC's description, plus
+    the spec's tabletop.md (if present) for Adjacent-code output, plus
+    the cards' references[], then call /orb:code-investigate with an
+    explicit scope argument summarising what to investigate for *this* AC. The orchestration
     is a Skill tool call from implement's flow; the called skill's return is
     quoted 5-10 lines inline into the agent's working context (per ac-01's
     skill-tool return contract). Prose is imperative ("Invoke /orb:code-investigate
@@ -124,13 +130,15 @@ acceptance_criteria:
     AND the args-drop guard from ac-01 (write scope to `orbit spec note`
     BEFORE the Skill call).
     (2) Smoke-marker verification — beyond prose-grep: invoke /orb:implement
-    on any open spec in a fresh session; confirm `notes.jsonl` carries the
-    "investigation scope: <paths>" line written BEFORE the Skill call AND
-    `.orbit/.code-investigate-recent` carries marker entries matching those
-    paths. Mismatch between notes.jsonl scope line and marker entries means
-    args dropped — failure surfaces in-cycle. Confirm bypass AUQ surfaces;
-    the bypass-reason appears in notes.jsonl as "investigation bypass:
-    <reason>" when (b) is picked.
+    on any open spec with ≥2 ACs in a fresh session; confirm `notes.jsonl`
+    carries one "investigation scope: <paths>" line per AC (written BEFORE
+    that AC's Skill call) AND `.orbit/.code-investigate-recent` carries one
+    or more marker entries per AC matching those paths. Pairing is positional
+    in notes.jsonl order: N ACs → N scope lines → N marker entry-sets.
+    Mismatch between any AC's notes.jsonl scope line and its marker entries
+    means args dropped — failure surfaces in-cycle. Confirm bypass AUQ
+    surfaces for any AC; the bypass-reason appears in notes.jsonl as
+    "investigation bypass [ac-NN]: <reason>" when (b) is picked.
 - id: ac-03
   description: |
     plugins/orb/skills/tabletop/SKILL.md Q8 gains a structural step that
