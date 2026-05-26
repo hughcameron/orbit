@@ -1,0 +1,11 @@
+key: drive-substrate-recall-iter1
+body: |-
+  NO-GO on first drive iteration of card 0044 (spec 2026-05-25-recall-verb-and-skill-step). All 6 ACs technically passed both review forks (spec APPROVE cycle 2, PR APPROVE cycle 1), code shipped to branch drive/recall-substrate-wide, PR #39 opened — then closed without merge on operator inspection.
+
+  Constraint carried forward: search verbs ship with the real ranker (FTS5/BM25 via SQLite) or not at all. Placeholder rankers (substring counts + min-max-normalisation that collapses to 1.0 for single-bucket matches) are technical debt that won't be retired by follow-up — every session ships exactly what its spec demands, no more. Verb proliferation (memory.search, memory.match, card.search, choice.search, recall — five synonyms with different signatures) is the smell, not the feature. Replacement direction: one verb 'orbit search <topic>', one ranker, one return shape, subsuming all five existing search verbs plus the deferred BM25 spec 2026-05-20-memory-match-bm25.
+
+  Failure mode this iteration exhibited (now captured as card 0045-scope-discipline): ambitious card-level claim ('substrate-cite rate rises significantly against pre-ship baseline') paired with narrow AC verifications (substring count, ≥1 result floor, ≥3 of 5 types, grep returns N files). Gap visible in AC text at spec-write time; tabletop/spec/review-spec/review-pr forks all passed; operator caught at PR-creation. Card 0045's three mechanisms (tabletop posture flip, implement scope-adequacy gate, conformance card-coverage finding) are the systemic response.
+timestamp: 2026-05-26T02:52:44.984033593Z
+labels:
+- drive
+- scope-discipline
