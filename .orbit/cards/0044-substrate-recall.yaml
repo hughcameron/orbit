@@ -4,7 +4,7 @@ as_a: agent working in an orbit project
 i_want: a single verb that returns substrate-wide results (across memories, choices, cards, specs, memos) ranked by topic-match — plus structural pull at skill entry and substrate push during mid-flow — so the relevant prior artefact is in front of me when I need it, not after I've already typed a workaround
 so_that: substrate accreted across sessions is not silently ignored because the agent didn't think to look in the right place; cards, choices, memories, specs, memos all become recall surfaces under one verb, with cite-rate trending up in agent output as the post-ship signal
 goal: substrate-cite rate in agent output (PR bodies, spec goals, design notes, AC verifications) rises significantly against pre-ship baseline; every pipeline skill carries a mandatory recall step at entry; mid-flow PreToolUse hook nudges when topic-match fires
-maturity: planned
+maturity: emerging
 scenarios:
 - name: orbit recall returns substrate-wide results
   given: an agent invokes `orbit recall <topic>` with a topic string
