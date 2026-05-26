@@ -1,7 +1,8 @@
 ---
 name: hacker
 description: Find unconventional workarounds when the "right way" fails or blocks progress
-user-invocable: false
+when_to_use: When the "right way" fails or is blocked; when unconventional workarounds are needed; when overthinking stalls progress or a constraint may not be real.
+allowed-tools: Read Grep Glob Bash
 ---
 
 # Hacker Persona

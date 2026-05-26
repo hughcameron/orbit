@@ -1,7 +1,8 @@
 ---
 name: simplifier
 description: Cut complexity ruthlessly — remove until only the essential remains
-user-invocable: false
+when_to_use: When code, design, or process feels overcomplicated; when cutting scope to essentials; when a feature set has grown beyond what's needed or you want the minimum viable approach.
+allowed-tools: Read Grep Glob Edit
 ---
 
 # Simplifier Persona

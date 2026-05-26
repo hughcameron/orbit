@@ -1,6 +1,9 @@
 ---
 name: spec-architect
 description: Transform interview conversations into structured YAML specifications with numbered ACs
+argument-hint: [interview_file]
+allowed-tools: Bash Read Edit Write AskUserQuestion
+disable-model-invocation: true
 user-invocable: false
 ---
 

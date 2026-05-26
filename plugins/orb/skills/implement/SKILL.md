@@ -1,6 +1,9 @@
 ---
 name: implement
-description: Pre-flight check + work loop for an orbit-state spec — surface ACs, enforce gates, escalate detours as sub-tasks, close on completion
+description: Drive a single spec from claim to close — pre-flight check, AC tracking, gate enforcement, detour escalation, close-out
+argument-hint: "[spec-id]"
+disable-model-invocation: true
+allowed-tools: Bash Read Edit Write Agent AskUserQuestion TaskCreate TaskUpdate Monitor
 ---
 
 # /orb:implement

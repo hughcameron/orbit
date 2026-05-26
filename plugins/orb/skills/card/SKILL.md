@@ -1,6 +1,9 @@
 ---
 name: card
 description: Write a feature card — capture who needs what, why, and expected behaviours as scenarios
+argument-hint: "[card-id]"
+disable-model-invocation: true
+allowed-tools: Bash Read Edit Write AskUserQuestion
 ---
 
 # /orb:card
