@@ -61,6 +61,7 @@ impl Spec {
         "labels",
         "acceptance_criteria",
         "memories_considered",
+        "closed_at",
     ];
 }
 
@@ -286,6 +287,20 @@ pub struct Spec {
     /// materialises when memories were actually considered.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub memories_considered: Vec<MemoryReconciliation>,
+    /// ISO-8601 / RFC 3339 timestamp recorded by `spec.close` when the
+    /// spec transitions to `closed`. `None` on open specs and on closed
+    /// specs that predate this field (no backfill — see spec
+    /// 2026-05-26-scope-discipline-front-loaded ac-10). Read by the
+    /// card-coverage audit family (ac-04 / ac-05) to gate the
+    /// audit-window: closed specs with `None` or `closed_at` strictly
+    /// before the introduction-date constant are excluded.
+    ///
+    /// `#[serde(default, skip_serializing_if = "Option::is_none")]`
+    /// preserves byte-identical canonical output for the dominant
+    /// pre-shipped case — older closed specs deserialise as `None` and
+    /// re-serialise without an empty field.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub closed_at: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -899,6 +914,7 @@ unknown_field: oops
                 disposition: ReconciliationDisposition::Adopted,
                 reason: "r".into(),
             }],
+            closed_at: Some("2026-05-26T00:00:00Z".into()),
         };
         let value = serde_yaml::to_value(&spec).unwrap();
         let got = top_level_keys(&value);
@@ -1436,6 +1452,7 @@ unknown_field: oops
                 ac_type: AcType::Code,
             }],
             memories_considered: vec![],
+            closed_at: None,
         };
         let yaml = serde_yaml::to_string(&spec).unwrap();
         let parsed: Spec = serde_yaml::from_str(&yaml).unwrap();

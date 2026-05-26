@@ -548,6 +548,7 @@ mod tests {
                 ac_type: AcType::Code,
             }],
             memories_considered: vec![],
+            closed_at: None,
         };
         layout.ensure_spec_dir("0001").unwrap();
         write_yaml(layout.spec_file("0001"), &spec);
@@ -706,6 +707,7 @@ mod tests {
             labels: vec![],
             acceptance_criteria: vec![],
             memories_considered: vec![],
+            closed_at: None,
         };
         layout.ensure_spec_dir("0002").unwrap();
         write_yaml(layout.spec_file("0002"), &new_spec);

@@ -2144,6 +2144,7 @@ fn spec_create(layout: &OrbitLayout, args: &SpecCreateArgs) -> Result<SpecCreate
         labels: args.labels.clone(),
         acceptance_criteria: args.acceptance_criteria.clone(),
         memories_considered: Vec::new(),
+        closed_at: None,
     };
     let yaml = serialise_yaml(&spec).map_err(|mut e| {
         e.verb = VERB.into();
@@ -2457,6 +2458,17 @@ fn spec_close(layout: &OrbitLayout, args: &SpecCloseArgs) -> Result<SpecCloseRes
 
     // Phase 3: write the closed spec. If this fails, roll back cards.
     spec.status = SpecStatus::Closed;
+    // Record the close-time timestamp on the spec. RFC 3339 in UTC,
+    // matching the shape used by note/task event timestamps elsewhere
+    // in the schema. Per spec 2026-05-26-scope-discipline-front-loaded
+    // ac-10 — the audit-window gate (ac-05) reads this field to decide
+    // whether a closed spec falls inside the card-coverage finding's
+    // post-ship window.
+    spec.closed_at = Some(
+        OffsetDateTime::now_utc()
+            .format(&Rfc3339)
+            .unwrap_or_default(),
+    );
     let new_yaml = match serialise_yaml(&spec) {
         Ok(y) => y,
         Err(mut e) => {
@@ -3012,6 +3024,7 @@ fn spec_promote(layout: &OrbitLayout, args: &SpecPromoteArgs) -> Result<SpecProm
         labels: vec![],
         acceptance_criteria,
         memories_considered: vec![],
+        closed_at: None,
     };
 
     // 5. Dry-run short-circuits before any disk write — succeeds even when
@@ -4974,6 +4987,25 @@ const MEMO_STALENESS_THRESHOLD_DAYS: i64 = 7;
 /// `audit.conformance`. Per spec 2026-05-22-routine-proposals ac-07.
 const ROUTINE_STALENESS_THRESHOLD_DAYS: i64 = 30;
 
+/// Card-coverage deferral threshold. A card fires the `card_coverage_gap`
+/// finding when its closed specs accumulate this many deferred scenarios
+/// without a follow-up spec landing. Per spec
+/// 2026-05-26-scope-discipline-front-loaded ac-04.
+const CARD_COVERAGE_DEFERRAL_THRESHOLD: usize = 2;
+
+/// Canonical prefix for deferred-scenario spec notes. The audit walks
+/// each closed spec's notes.jsonl, matches lines whose body starts with
+/// this prefix, and parses the tuple `<card-id>:<scenario-name> -- <rationale>`.
+/// Per spec 2026-05-26-scope-discipline-front-loaded ac-03 / ac-04.
+const DEFERRED_SCENARIO_PREFIX: &str = "deferred-scenario:";
+
+/// Introduction-date constant for the `card_coverage_gap` finding's
+/// audit-window gate. Specs whose `closed_at` is strictly before this
+/// date (or `None`) are EXCLUDED from the finding; specs on or after are
+/// INCLUDED. Set to 2026-05-26 UTC midnight — the date the discipline
+/// ships. Per spec 2026-05-26-scope-discipline-front-loaded ac-05.
+const CARD_COVERAGE_INTRODUCTION_DATE: &str = "2026-05-26T00:00:00Z";
+
 /// Plugin-canonical-file inventory — `(operator_relative_path,
 /// canonical_bytes)` pairs. The bytes are pulled at compile time via
 /// `include_str!`, which means they always match the orbit-state
@@ -5064,6 +5096,14 @@ fn audit_conformance_at(
 
         // ac-02: card-state findings.
         findings.extend(card_state_findings(layout)?);
+
+        // Card-coverage gap findings (spec
+        // 2026-05-26-scope-discipline-front-loaded ac-04 / ac-05).
+        // Fires on cards whose closed specs accumulated >=2 deferred
+        // scenarios with no open follow-up spec. Audit-window gated by
+        // each spec's `closed_at` against
+        // `CARD_COVERAGE_INTRODUCTION_DATE` — pre-ship closes excluded.
+        findings.extend(card_coverage_findings(layout)?);
 
         // ac-03: memo-staleness findings.
         findings.extend(memo_staleness_findings(layout, today)?);
@@ -5175,6 +5215,260 @@ fn numeric_id_from_card_id(id: &str) -> String {
     } else {
         trimmed.to_string()
     }
+}
+
+/// One parsed deferred-scenario note. Built by
+/// `card_coverage_findings` while walking each closed spec's
+/// notes.jsonl. Malformed notes (missing `--` separator, unknown card,
+/// scenario not on the card) are silently skipped.
+struct DeferredScenario {
+    card: String,
+    scenario: String,
+    rationale: String,
+    spec_id: String,
+}
+
+/// Parse one note body of shape
+/// `deferred-scenario: <card-id>:<scenario-name> -- <rationale>`. Returns
+/// `None` for any structural failure (missing `--`, missing `:` in the
+/// card:scenario portion, empty fields). Silent-skip is the contract per
+/// spec 2026-05-26-scope-discipline-front-loaded ac-04.
+fn parse_deferred_scenario(body: &str, spec_id: &str) -> Option<DeferredScenario> {
+    let rest = body.strip_prefix(DEFERRED_SCENARIO_PREFIX)?.trim_start();
+    let (left, rationale) = rest.split_once(" -- ")?;
+    let (card, scenario) = left.trim().split_once(':')?;
+    let card = card.trim();
+    let scenario = scenario.trim();
+    let rationale = rationale.trim();
+    if card.is_empty() || scenario.is_empty() || rationale.is_empty() {
+        return None;
+    }
+    Some(DeferredScenario {
+        card: card.to_string(),
+        scenario: scenario.to_string(),
+        rationale: rationale.to_string(),
+        spec_id: spec_id.to_string(),
+    })
+}
+
+/// ac-04 / ac-05: walk every card; for each card with one or more
+/// closed specs in its `specs` array AND no currently-open follow-up
+/// spec, scan each closed spec's notes for `deferred-scenario:` lines,
+/// parse them, anchor scenario-name against the card's scenarios[].name,
+/// and emit one `card_coverage_gap` finding per card whose cumulative
+/// deferral count meets `CARD_COVERAGE_DEFERRAL_THRESHOLD`. The
+/// audit-window gate (ac-05) excludes specs whose `closed_at` is
+/// strictly before `CARD_COVERAGE_INTRODUCTION_DATE` (or `None`).
+fn card_coverage_findings(layout: &OrbitLayout) -> Result<Vec<ConformanceFinding>> {
+    let mut findings = Vec::new();
+    let card_files = layout.list_card_files().unwrap_or_default();
+
+    // Pre-compute the set of card slugs that currently have at least one
+    // OPEN spec referencing them (via spec.cards). Suppresses the
+    // finding per condition (c).
+    let open_followup_cards = open_spec_cards(layout);
+
+    for path in card_files {
+        let raw = match std::fs::read_to_string(&path) {
+            Ok(r) => r,
+            Err(_) => continue,
+        };
+        let card: crate::schema::Card = match serde_yaml::from_str(&raw) {
+            Ok(c) => c,
+            Err(_) => continue,
+        };
+        let card_id = card.id.clone().unwrap_or_else(|| {
+            path.file_stem()
+                .and_then(|s| s.to_str())
+                .unwrap_or("")
+                .to_string()
+        });
+        if card_id.is_empty() {
+            continue;
+        }
+        // Condition (a): at least one closed spec in card.specs[].
+        // Condition (c): no follow-up spec is currently open against
+        // this card. The pre-computed set short-circuits the walk.
+        if card.specs.is_empty() {
+            continue;
+        }
+        if open_followup_cards.contains(&card_id) {
+            continue;
+        }
+
+        let scenario_names: BTreeSet<&str> =
+            card.scenarios.iter().map(|s| s.name.as_str()).collect();
+
+        let mut deferred: Vec<DeferredScenario> = Vec::new();
+        for spec_ref in &card.specs {
+            // spec_ref shape: ".orbit/specs/<id>/spec.yaml" — extract id.
+            let spec_id = match spec_id_from_ref(spec_ref) {
+                Some(s) => s,
+                None => continue,
+            };
+            let spec_path = layout.spec_file(&spec_id);
+            let spec_text = match std::fs::read_to_string(&spec_path) {
+                Ok(t) => t,
+                Err(_) => continue,
+            };
+            let spec: crate::schema::Spec = match serde_yaml::from_str(&spec_text) {
+                Ok(s) => s,
+                Err(_) => continue,
+            };
+            if !matches!(spec.status, crate::schema::SpecStatus::Closed) {
+                continue;
+            }
+            // ac-05: audit-window gate. None and pre-introduction
+            // closes are both excluded. Strict-before semantics — equal
+            // is inclusive.
+            if !closed_at_in_window(spec.closed_at.as_deref()) {
+                continue;
+            }
+            // Walk the notes stream, parse each candidate body.
+            let notes_path = layout.notes_stream(&spec_id);
+            let stream = match std::fs::read_to_string(&notes_path) {
+                Ok(s) => s,
+                Err(_) => continue,
+            };
+            for line in stream.lines() {
+                let note: crate::schema::NoteEvent =
+                    match serde_json::from_str(line.trim()) {
+                        Ok(n) => n,
+                        Err(_) => continue,
+                    };
+                if !note.body.starts_with(DEFERRED_SCENARIO_PREFIX) {
+                    continue;
+                }
+                let parsed = match parse_deferred_scenario(&note.body, &spec_id) {
+                    Some(p) => p,
+                    None => continue, // malformed — silently skipped
+                };
+                // Anchor scenario name against the card's scenarios[].
+                if parsed.card != card_id {
+                    continue; // wrong card — silently skipped
+                }
+                if !scenario_names.contains(parsed.scenario.as_str()) {
+                    continue; // unknown scenario name — silently skipped
+                }
+                deferred.push(parsed);
+            }
+        }
+
+        if deferred.len() < CARD_COVERAGE_DEFERRAL_THRESHOLD {
+            continue;
+        }
+
+        let mut deferred_yaml = Vec::with_capacity(deferred.len());
+        for d in &deferred {
+            let mut entry = serde_yaml::Mapping::new();
+            entry.insert(
+                serde_yaml::Value::String("card".into()),
+                serde_yaml::Value::String(d.card.clone()),
+            );
+            entry.insert(
+                serde_yaml::Value::String("scenario".into()),
+                serde_yaml::Value::String(d.scenario.clone()),
+            );
+            entry.insert(
+                serde_yaml::Value::String("rationale".into()),
+                serde_yaml::Value::String(d.rationale.clone()),
+            );
+            entry.insert(
+                serde_yaml::Value::String("spec_id".into()),
+                serde_yaml::Value::String(d.spec_id.clone()),
+            );
+            deferred_yaml.push(serde_yaml::Value::Mapping(entry));
+        }
+        let mut evidence = serde_yaml::Mapping::new();
+        evidence.insert(
+            serde_yaml::Value::String("deferred_scenarios".into()),
+            serde_yaml::Value::Sequence(deferred_yaml),
+        );
+        evidence.insert(
+            serde_yaml::Value::String("cumulative_count".into()),
+            serde_yaml::Value::Number((deferred.len() as i64).into()),
+        );
+
+        let numeric_id = numeric_id_from_card_id(&card_id);
+        findings.push(ConformanceFinding {
+            severity: "medium".into(),
+            subsystem: "cards".into(),
+            subject: card_id.clone(),
+            state: "card_coverage_gap".into(),
+            evidence: Some(serde_yaml::Value::Mapping(evidence)),
+            remediation: Remediation {
+                verb: format!("/orb:tabletop {numeric_id}"),
+                rationale: Some(
+                    "deferred scenarios accumulated on closed specs without follow-up — \
+                     re-walk tabletop to scope the gap"
+                        .into(),
+                ),
+            },
+        });
+    }
+
+    Ok(findings)
+}
+
+/// Compare a spec's `closed_at` against the introduction-date constant.
+/// `None` → false (excluded). String parse failure → false (treated as
+/// pre-window per the documented silent-skip posture). Strict-before is
+/// exclusion; equal-or-after is inclusion (boundary inclusive).
+fn closed_at_in_window(closed_at: Option<&str>) -> bool {
+    let s = match closed_at {
+        Some(s) => s,
+        None => return false,
+    };
+    let parsed = match OffsetDateTime::parse(s, &Rfc3339) {
+        Ok(t) => t,
+        Err(_) => return false,
+    };
+    let cutoff = match OffsetDateTime::parse(CARD_COVERAGE_INTRODUCTION_DATE, &Rfc3339) {
+        Ok(t) => t,
+        Err(_) => return false,
+    };
+    parsed >= cutoff
+}
+
+/// Extract `<id>` from `.orbit/specs/<id>/spec.yaml`. Returns `None` for
+/// any path shape the audit can't decode (malformed entries silently
+/// skipped — see ac-04 silent-skip contract).
+fn spec_id_from_ref(spec_ref: &str) -> Option<String> {
+    let trimmed = spec_ref.strip_prefix(".orbit/specs/")?;
+    let id = trimmed.strip_suffix("/spec.yaml")?;
+    if id.is_empty() || id.contains('/') {
+        return None;
+    }
+    Some(id.to_string())
+}
+
+/// Collect the set of card slugs that currently have at least one OPEN
+/// spec referencing them (via `spec.cards`). Used by
+/// `card_coverage_findings` to suppress the finding on cards with a
+/// follow-up spec in flight (condition (c) of ac-04).
+fn open_spec_cards(layout: &OrbitLayout) -> BTreeSet<String> {
+    let mut out = BTreeSet::new();
+    let spec_files = match layout.list_spec_files() {
+        Ok(v) => v,
+        Err(_) => return out,
+    };
+    for path in spec_files {
+        let raw = match std::fs::read_to_string(&path) {
+            Ok(r) => r,
+            Err(_) => continue,
+        };
+        let spec: crate::schema::Spec = match serde_yaml::from_str(&raw) {
+            Ok(s) => s,
+            Err(_) => continue,
+        };
+        if !matches!(spec.status, crate::schema::SpecStatus::Open) {
+            continue;
+        }
+        for card in spec.cards {
+            out.insert(card);
+        }
+    }
+    out
 }
 
 /// ac-03: walk `.orbit/memos/*.md`; emit a finding for each memo whose
@@ -7543,6 +7837,7 @@ mod tests {
             labels: vec![],
             acceptance_criteria: vec![],
             memories_considered: vec![],
+            closed_at: None,
         };
         layout.ensure_spec_dir(id).unwrap();
         std::fs::write(layout.spec_file(id), serialise_yaml(&spec).unwrap()).unwrap();
@@ -7778,6 +8073,7 @@ mod tests {
             labels: vec![],
             acceptance_criteria: vec![],
             memories_considered: vec![],
+            closed_at: None,
         };
         layout.ensure_spec_dir(id).unwrap();
         std::fs::write(layout.spec_file(id), serialise_yaml(&spec).unwrap()).unwrap();
@@ -8440,6 +8736,7 @@ mod tests {
                 ac_type: AcType::Code,
             }],
             memories_considered: vec![],
+            closed_at: None,
         };
         layout.ensure_spec_dir("0001").unwrap();
         std::fs::write(
@@ -8516,6 +8813,7 @@ mod tests {
             labels: vec![],
             acceptance_criteria: vec![],
             memories_considered: vec![],
+            closed_at: None,
         };
         layout.ensure_spec_dir("0001").unwrap();
         std::fs::write(
@@ -8589,6 +8887,7 @@ mod tests {
             labels: vec![],
             acceptance_criteria: vec![],
             memories_considered: vec![],
+            closed_at: None,
         };
         layout.ensure_spec_dir("0001").unwrap();
         std::fs::write(
@@ -8645,6 +8944,7 @@ mod tests {
             labels: vec![],
             acceptance_criteria: vec![],
             memories_considered: vec![],
+            closed_at: None,
         };
         layout.ensure_spec_dir("0001").unwrap();
         std::fs::write(
@@ -9005,6 +9305,7 @@ mod tests {
             labels: vec![],
             acceptance_criteria: vec![],
             memories_considered: vec![],
+            closed_at: None,
         };
         layout.ensure_spec_dir("0001").unwrap();
         std::fs::write(
@@ -9511,6 +9812,7 @@ mod tests {
             labels: vec![],
             acceptance_criteria: vec![],
             memories_considered: vec![],
+            closed_at: None,
         };
         layout.ensure_spec_dir(&spec.id).unwrap();
         std::fs::write(layout.spec_file(&spec.id), serialise_yaml(&spec).unwrap()).unwrap();
@@ -9581,6 +9883,7 @@ mod tests {
                 disposition: ReconciliationDisposition::Adopted,
                 reason: "wired the close-time gate as described".into(),
             }],
+            closed_at: None,
         };
         layout.ensure_spec_dir(&spec.id).unwrap();
         std::fs::write(layout.spec_file(&spec.id), serialise_yaml(&spec).unwrap()).unwrap();
@@ -9642,6 +9945,7 @@ mod tests {
             labels: vec![],
             acceptance_criteria: vec![],
             memories_considered: vec![],
+            closed_at: None,
         };
         layout.ensure_spec_dir(&spec.id).unwrap();
         std::fs::write(layout.spec_file(&spec.id), serialise_yaml(&spec).unwrap()).unwrap();
@@ -9692,6 +9996,7 @@ mod tests {
             labels: vec![],
             acceptance_criteria: vec![],
             memories_considered: vec![],
+            closed_at: None,
         };
         layout.ensure_spec_dir(&spec.id).unwrap();
         std::fs::write(layout.spec_file(&spec.id), serialise_yaml(&spec).unwrap()).unwrap();
@@ -10112,6 +10417,7 @@ mod tests {
             labels: vec![],
             acceptance_criteria: acs,
             memories_considered: vec![],
+            closed_at: None,
         };
         layout.ensure_spec_dir(id).unwrap();
         std::fs::write(
@@ -11190,6 +11496,7 @@ mod tests {
             labels: vec!["foo".into(), "bar".into()],
             acceptance_criteria: vec![],
             memories_considered: vec![],
+            closed_at: None,
         };
         layout.ensure_spec_dir("0010").unwrap();
         std::fs::write(layout.spec_file("0010"), serialise_yaml(&spec).unwrap()).unwrap();
@@ -11241,6 +11548,7 @@ mod tests {
             labels: vec!["xyz".into()],
             acceptance_criteria: vec![],
             memories_considered: vec![],
+            closed_at: None,
         };
         layout.ensure_spec_dir("0011").unwrap();
         std::fs::write(layout.spec_file("0011"), serialise_yaml(&spec).unwrap()).unwrap();
@@ -11289,6 +11597,7 @@ mod tests {
             labels: vec![],
             acceptance_criteria: vec![],
             memories_considered: vec![],
+            closed_at: None,
         };
         layout.ensure_spec_dir("0012").unwrap();
         std::fs::write(layout.spec_file("0012"), serialise_yaml(&spec).unwrap()).unwrap();
@@ -11755,6 +12064,7 @@ canonical_code:
             labels: vec![],
             acceptance_criteria: vec![],
             memories_considered: vec![],
+            closed_at: None,
         };
         std::fs::write(layout.spec_file(id), serialise_yaml(&spec).unwrap()).unwrap();
         if let Some(body) = interview {
@@ -13669,5 +13979,589 @@ mystery_field: surprise
             assert_ne!(f.state, "pin_ahead");
             assert_ne!(f.state, "decisions_md_unmigrated");
         }
+    }
+
+    // ----- scope discipline tests (spec
+    // 2026-05-26-scope-discipline-front-loaded) -----
+    //
+    // Test prefix `scope_` per spec ac-07 — counted by
+    // `cargo test --workspace -- scope_` to verify coverage rises.
+
+    /// Helper: write a card with a custom scenarios list and closed spec
+    /// refs. Mirrors `write_card_v2` but lets the test name each scenario.
+    fn write_card_with_scenarios(
+        layout: &OrbitLayout,
+        slug: &str,
+        scenario_names: &[&str],
+        spec_refs: Vec<String>,
+    ) {
+        use crate::schema::{Card, Scenario};
+        let scenarios = scenario_names
+            .iter()
+            .map(|name| Scenario {
+                name: (*name).into(),
+                given: "g".into(),
+                when: "w".into(),
+                then: "t".into(),
+                gate: false,
+            })
+            .collect();
+        let card = Card {
+            id: Some(slug.to_string()),
+            feature: "feature".into(),
+            as_a: Some("agent".into()),
+            i_want: Some("want".into()),
+            so_that: Some("because".into()),
+            goal: "goal".into(),
+            maturity: crate::schema::CardMaturity::Emerging,
+            park: None,
+            scenarios,
+            specs: spec_refs,
+            relations: vec![],
+            references: vec![],
+            notes: vec![],
+        };
+        std::fs::create_dir_all(layout.cards_dir()).unwrap();
+        std::fs::write(layout.card_file(slug), serialise_yaml(&card).unwrap()).unwrap();
+    }
+
+    /// Helper: write a closed spec with a given `closed_at` and a list
+    /// of card slugs. Returns the canonical `spec_ref` string for use in
+    /// the card's `specs` array.
+    fn write_closed_spec_with_at(
+        layout: &OrbitLayout,
+        spec_id: &str,
+        cards: Vec<String>,
+        closed_at: Option<&str>,
+    ) -> String {
+        use crate::schema::{Spec, SpecStatus};
+        let spec = Spec {
+            id: spec_id.into(),
+            goal: "g".into(),
+            cards,
+            status: SpecStatus::Closed,
+            labels: vec![],
+            acceptance_criteria: vec![],
+            memories_considered: vec![],
+            closed_at: closed_at.map(|s| s.to_string()),
+        };
+        layout.ensure_spec_dir(spec_id).unwrap();
+        std::fs::write(
+            layout.spec_file(spec_id),
+            serialise_yaml(&spec).unwrap(),
+        )
+        .unwrap();
+        format!(".orbit/specs/{spec_id}/spec.yaml")
+    }
+
+    /// Helper: append one note line to a spec's notes.jsonl. Body is the
+    /// `deferred-scenario: <card>:<scenario> -- <rationale>` shape.
+    fn append_deferred_note(layout: &OrbitLayout, spec_id: &str, body: &str) {
+        use crate::schema::NoteEvent;
+        let event = NoteEvent {
+            spec_id: spec_id.into(),
+            body: body.into(),
+            labels: vec![],
+            timestamp: "2026-05-26T12:00:00Z".into(),
+        };
+        let line = serde_json::to_string(&event).unwrap();
+        let path = layout.notes_stream(spec_id);
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent).unwrap();
+        }
+        let mut existing = std::fs::read_to_string(&path).unwrap_or_default();
+        existing.push_str(&line);
+        existing.push('\n');
+        std::fs::write(&path, existing).unwrap();
+    }
+
+    /// ac-04 positive case: two closed specs each defer one scenario on
+    /// the same card. The card has no open follow-up spec. Asserts one
+    /// `card_coverage_gap` finding fires with the documented evidence
+    /// shape and remediation verb.
+    #[test]
+    fn scope_emits_card_coverage_finding_on_two_deferrals() {
+        let (_dir, layout) = fresh_conformance_layout();
+        write_canonical_files(&layout);
+
+        let card_slug = "0099-scope-fixture";
+        let scenarios = ["scope-test-a", "scope-test-b"];
+
+        let spec_a_ref = write_closed_spec_with_at(
+            &layout,
+            "2026-05-26-spec-a",
+            vec![card_slug.into()],
+            Some("2026-05-26T12:00:00Z"),
+        );
+        append_deferred_note(
+            &layout,
+            "2026-05-26-spec-a",
+            "deferred-scenario: 0099-scope-fixture:scope-test-a -- needs follow-up",
+        );
+
+        let spec_b_ref = write_closed_spec_with_at(
+            &layout,
+            "2026-05-26-spec-b",
+            vec![card_slug.into()],
+            Some("2026-05-26T13:00:00Z"),
+        );
+        append_deferred_note(
+            &layout,
+            "2026-05-26-spec-b",
+            "deferred-scenario: 0099-scope-fixture:scope-test-b -- also needs follow-up",
+        );
+
+        write_card_with_scenarios(
+            &layout,
+            card_slug,
+            &scenarios,
+            vec![spec_a_ref, spec_b_ref],
+        );
+
+        let result = audit_conformance_at(
+            &layout,
+            &AuditConformanceArgs::default(),
+            date(2026, 5, 26),
+        )
+        .unwrap();
+
+        let coverage: Vec<_> = result
+            .findings
+            .iter()
+            .filter(|f| f.state == "card_coverage_gap")
+            .collect();
+        assert_eq!(
+            coverage.len(),
+            1,
+            "expected exactly one card_coverage_gap finding, got {:?}",
+            result.findings,
+        );
+        let f = coverage[0];
+        assert_eq!(f.severity, "medium");
+        assert_eq!(f.subsystem, "cards");
+        assert_eq!(f.subject, card_slug);
+        assert_eq!(f.remediation.verb, "/orb:tabletop 99");
+
+        // Evidence shape: cumulative_count + deferred_scenarios list.
+        let evidence = f.evidence.as_ref().expect("evidence present");
+        let map = evidence.as_mapping().expect("evidence is a mapping");
+        let count = map
+            .get(serde_yaml::Value::String("cumulative_count".into()))
+            .and_then(|v| v.as_i64())
+            .expect("cumulative_count present");
+        assert_eq!(count, 2);
+        let entries = map
+            .get(serde_yaml::Value::String("deferred_scenarios".into()))
+            .and_then(|v| v.as_sequence())
+            .expect("deferred_scenarios present");
+        assert_eq!(entries.len(), 2);
+        // Each entry carries card / scenario / spec_id / rationale.
+        for entry in entries {
+            let m = entry.as_mapping().expect("entry is mapping");
+            assert_eq!(
+                m.get(serde_yaml::Value::String("card".into()))
+                    .and_then(|v| v.as_str()),
+                Some(card_slug),
+            );
+            assert!(m
+                .get(serde_yaml::Value::String("scenario".into()))
+                .and_then(|v| v.as_str())
+                .map(|s| s.starts_with("scope-test-"))
+                .unwrap_or(false));
+            assert!(m
+                .get(serde_yaml::Value::String("spec_id".into()))
+                .and_then(|v| v.as_str())
+                .map(|s| s.starts_with("2026-05-26-spec-"))
+                .unwrap_or(false));
+            assert!(m
+                .get(serde_yaml::Value::String("rationale".into()))
+                .and_then(|v| v.as_str())
+                .map(|s| !s.is_empty())
+                .unwrap_or(false));
+        }
+    }
+
+    /// ac-04 suppression case: same two-deferral fixture plus an open
+    /// follow-up spec referencing the card. The finding must NOT fire —
+    /// condition (c) of the firing rule is the suppression gate.
+    #[test]
+    fn scope_card_coverage_suppressed_by_open_followup_spec() {
+        let (_dir, layout) = fresh_conformance_layout();
+        write_canonical_files(&layout);
+
+        let card_slug = "0099-scope-suppressed";
+        let scenarios = ["scope-test-a", "scope-test-b"];
+
+        let spec_a_ref = write_closed_spec_with_at(
+            &layout,
+            "2026-05-26-supp-a",
+            vec![card_slug.into()],
+            Some("2026-05-26T12:00:00Z"),
+        );
+        append_deferred_note(
+            &layout,
+            "2026-05-26-supp-a",
+            "deferred-scenario: 0099-scope-suppressed:scope-test-a -- todo",
+        );
+
+        let spec_b_ref = write_closed_spec_with_at(
+            &layout,
+            "2026-05-26-supp-b",
+            vec![card_slug.into()],
+            Some("2026-05-26T13:00:00Z"),
+        );
+        append_deferred_note(
+            &layout,
+            "2026-05-26-supp-b",
+            "deferred-scenario: 0099-scope-suppressed:scope-test-b -- todo",
+        );
+
+        // Open follow-up spec referencing the same card.
+        use crate::schema::{Spec, SpecStatus};
+        let followup = Spec {
+            id: "2026-05-26-supp-followup".into(),
+            goal: "g".into(),
+            cards: vec![card_slug.into()],
+            status: SpecStatus::Open,
+            labels: vec![],
+            acceptance_criteria: vec![],
+            memories_considered: vec![],
+            closed_at: None,
+        };
+        layout.ensure_spec_dir(&followup.id).unwrap();
+        std::fs::write(
+            layout.spec_file(&followup.id),
+            serialise_yaml(&followup).unwrap(),
+        )
+        .unwrap();
+
+        write_card_with_scenarios(
+            &layout,
+            card_slug,
+            &scenarios,
+            vec![spec_a_ref, spec_b_ref],
+        );
+
+        let result = audit_conformance_at(
+            &layout,
+            &AuditConformanceArgs::default(),
+            date(2026, 5, 26),
+        )
+        .unwrap();
+
+        let coverage: Vec<_> = result
+            .findings
+            .iter()
+            .filter(|f| f.state == "card_coverage_gap" && f.subject == card_slug)
+            .collect();
+        assert!(
+            coverage.is_empty(),
+            "open follow-up spec must suppress card_coverage_gap; got {:?}",
+            coverage,
+        );
+    }
+
+    /// ac-05 audit-window exclusion: three specs each carrying two
+    /// deferred-scenario notes against the same card. Spec A closes
+    /// strictly before the introduction date; spec B strictly after;
+    /// spec C with `closed_at: None`. Only spec B contributes to a
+    /// finding. Since spec B alone yields >=2 deferrals it fires — A
+    /// and C are excluded by the window gate.
+    #[test]
+    fn scope_audit_window_excludes_pre_ship_specs() {
+        let (_dir, layout) = fresh_conformance_layout();
+        write_canonical_files(&layout);
+
+        let card_slug = "0099-scope-window";
+        let scenarios = ["scope-test-a", "scope-test-b"];
+
+        // Spec A: pre-window (strictly before 2026-05-26).
+        let ref_a = write_closed_spec_with_at(
+            &layout,
+            "2026-05-24-window-a",
+            vec![card_slug.into()],
+            Some("2026-05-24T00:00:00Z"),
+        );
+        append_deferred_note(
+            &layout,
+            "2026-05-24-window-a",
+            "deferred-scenario: 0099-scope-window:scope-test-a -- pre",
+        );
+        append_deferred_note(
+            &layout,
+            "2026-05-24-window-a",
+            "deferred-scenario: 0099-scope-window:scope-test-b -- pre",
+        );
+
+        // Spec B: post-window (strictly after 2026-05-26 midnight).
+        let ref_b = write_closed_spec_with_at(
+            &layout,
+            "2026-05-27-window-b",
+            vec![card_slug.into()],
+            Some("2026-05-27T00:00:00Z"),
+        );
+        append_deferred_note(
+            &layout,
+            "2026-05-27-window-b",
+            "deferred-scenario: 0099-scope-window:scope-test-a -- post",
+        );
+        append_deferred_note(
+            &layout,
+            "2026-05-27-window-b",
+            "deferred-scenario: 0099-scope-window:scope-test-b -- post",
+        );
+
+        // Spec C: closed_at = None (legacy close before ac-10 shipped).
+        let ref_c = write_closed_spec_with_at(
+            &layout,
+            "2026-05-25-window-c",
+            vec![card_slug.into()],
+            None,
+        );
+        append_deferred_note(
+            &layout,
+            "2026-05-25-window-c",
+            "deferred-scenario: 0099-scope-window:scope-test-a -- legacy",
+        );
+        append_deferred_note(
+            &layout,
+            "2026-05-25-window-c",
+            "deferred-scenario: 0099-scope-window:scope-test-b -- legacy",
+        );
+
+        write_card_with_scenarios(
+            &layout,
+            card_slug,
+            &scenarios,
+            vec![ref_a, ref_b, ref_c],
+        );
+
+        let result = audit_conformance_at(
+            &layout,
+            &AuditConformanceArgs::default(),
+            date(2026, 5, 27),
+        )
+        .unwrap();
+
+        let coverage: Vec<_> = result
+            .findings
+            .iter()
+            .filter(|f| f.state == "card_coverage_gap" && f.subject == card_slug)
+            .collect();
+        assert_eq!(
+            coverage.len(),
+            1,
+            "expected one finding (post-window spec contributes 2 deferrals)",
+        );
+        // Cumulative count should be exactly 2 — A and C excluded.
+        let evidence = coverage[0].evidence.as_ref().unwrap();
+        let count = evidence
+            .as_mapping()
+            .unwrap()
+            .get(serde_yaml::Value::String("cumulative_count".into()))
+            .and_then(|v| v.as_i64())
+            .unwrap();
+        assert_eq!(count, 2, "pre-window and None specs must be excluded");
+        // And the entries reference the post-window spec only.
+        let entries = evidence
+            .as_mapping()
+            .unwrap()
+            .get(serde_yaml::Value::String("deferred_scenarios".into()))
+            .and_then(|v| v.as_sequence())
+            .unwrap();
+        for e in entries {
+            let spec_id = e
+                .as_mapping()
+                .unwrap()
+                .get(serde_yaml::Value::String("spec_id".into()))
+                .and_then(|v| v.as_str())
+                .unwrap();
+            assert_eq!(spec_id, "2026-05-27-window-b");
+        }
+    }
+
+    /// ac-05 boundary: a spec with `closed_at` exactly equal to the
+    /// introduction-date constant must be INCLUDED (strict-before is
+    /// exclusion; equal is inclusion).
+    #[test]
+    fn scope_audit_window_boundary_inclusive_on_introduction_date() {
+        let (_dir, layout) = fresh_conformance_layout();
+        write_canonical_files(&layout);
+
+        let card_slug = "0099-scope-boundary";
+        let scenarios = ["scope-test-a", "scope-test-b"];
+
+        let spec_ref = write_closed_spec_with_at(
+            &layout,
+            "2026-05-26-boundary",
+            vec![card_slug.into()],
+            // Exactly the introduction date.
+            Some("2026-05-26T00:00:00Z"),
+        );
+        append_deferred_note(
+            &layout,
+            "2026-05-26-boundary",
+            "deferred-scenario: 0099-scope-boundary:scope-test-a -- at-boundary",
+        );
+        append_deferred_note(
+            &layout,
+            "2026-05-26-boundary",
+            "deferred-scenario: 0099-scope-boundary:scope-test-b -- at-boundary",
+        );
+
+        write_card_with_scenarios(&layout, card_slug, &scenarios, vec![spec_ref]);
+
+        let result = audit_conformance_at(
+            &layout,
+            &AuditConformanceArgs::default(),
+            date(2026, 5, 26),
+        )
+        .unwrap();
+
+        let coverage: Vec<_> = result
+            .findings
+            .iter()
+            .filter(|f| f.state == "card_coverage_gap" && f.subject == card_slug)
+            .collect();
+        assert_eq!(
+            coverage.len(),
+            1,
+            "boundary-equal spec must contribute to the finding",
+        );
+    }
+
+    /// ac-04 silent-skip: malformed deferred-scenario notes (missing
+    /// `--` separator, unknown card-id, scenario-name not on the card)
+    /// must NOT emit findings and must NOT count toward the threshold.
+    /// Documents the silent-skip contract.
+    #[test]
+    fn scope_card_coverage_silently_skips_malformed_notes() {
+        let (_dir, layout) = fresh_conformance_layout();
+        write_canonical_files(&layout);
+
+        let card_slug = "0099-scope-malformed";
+        let scenarios = ["scope-test-a", "scope-test-b"];
+
+        let spec_ref = write_closed_spec_with_at(
+            &layout,
+            "2026-05-26-malformed",
+            vec![card_slug.into()],
+            Some("2026-05-26T12:00:00Z"),
+        );
+        // Three malformed notes — none should count.
+        append_deferred_note(
+            &layout,
+            "2026-05-26-malformed",
+            "deferred-scenario: 0099-scope-malformed:scope-test-a malformed-no-separator",
+        );
+        append_deferred_note(
+            &layout,
+            "2026-05-26-malformed",
+            "deferred-scenario: 0099-other-card:scope-test-a -- wrong card",
+        );
+        append_deferred_note(
+            &layout,
+            "2026-05-26-malformed",
+            "deferred-scenario: 0099-scope-malformed:unknown-scenario-name -- not on card",
+        );
+
+        write_card_with_scenarios(&layout, card_slug, &scenarios, vec![spec_ref]);
+
+        let result = audit_conformance_at(
+            &layout,
+            &AuditConformanceArgs::default(),
+            date(2026, 5, 26),
+        )
+        .unwrap();
+
+        let coverage: Vec<_> = result
+            .findings
+            .iter()
+            .filter(|f| f.state == "card_coverage_gap" && f.subject == card_slug)
+            .collect();
+        assert!(
+            coverage.is_empty(),
+            "malformed notes must be silently skipped; got {:?}",
+            coverage,
+        );
+    }
+
+    /// ac-10: `spec.close` sets `closed_at` to the current UTC time.
+    /// The value must be `Some(t)` and parse as a valid RFC 3339
+    /// timestamp within one minute of the test's `OffsetDateTime::now_utc()`.
+    #[test]
+    fn scope_spec_close_sets_closed_at() {
+        use crate::schema::{Spec, SpecStatus};
+        let (_dir, layout) = fresh_conformance_layout();
+        write_canonical_files(&layout);
+
+        // Write a closeable spec — no acceptance criteria, no linked
+        // cards, no tasks, no memories.
+        let spec = Spec {
+            id: "2026-05-26-close-fixture".into(),
+            goal: "verify closed_at is populated".into(),
+            cards: vec![],
+            status: SpecStatus::Open,
+            labels: vec![],
+            acceptance_criteria: vec![],
+            memories_considered: vec![],
+            closed_at: None,
+        };
+        layout.ensure_spec_dir(&spec.id).unwrap();
+        std::fs::write(layout.spec_file(&spec.id), serialise_yaml(&spec).unwrap()).unwrap();
+
+        let before = OffsetDateTime::now_utc();
+        let result = spec_close(
+            &layout,
+            &SpecCloseArgs {
+                id: spec.id.clone(),
+                force: false,
+            },
+        )
+        .unwrap();
+        let after = OffsetDateTime::now_utc();
+
+        let closed_at = result
+            .spec
+            .closed_at
+            .as_ref()
+            .expect("spec.close must set closed_at");
+        let parsed = OffsetDateTime::parse(closed_at, &Rfc3339)
+            .expect("closed_at must be RFC 3339");
+        assert!(
+            parsed >= before - time::Duration::minutes(1)
+                && parsed <= after + time::Duration::minutes(1),
+            "closed_at {parsed} not within ~1m of test window ({before}..{after})",
+        );
+
+        // Re-read the persisted file to confirm round-trip.
+        let on_disk: Spec =
+            serde_yaml::from_str(&std::fs::read_to_string(layout.spec_file(&spec.id)).unwrap())
+                .unwrap();
+        assert_eq!(on_disk.closed_at.as_deref(), Some(closed_at.as_str()));
+        assert_eq!(on_disk.status, SpecStatus::Closed);
+    }
+
+    /// ac-10 serde round-trip: a spec.yaml lacking `closed_at` parses to
+    /// `None` and re-serialises without an empty field (byte-identical
+    /// per `skip_serializing_if = "Option::is_none"`).
+    #[test]
+    fn scope_spec_closed_at_serde_round_trip_none_default() {
+        use crate::schema::Spec;
+        let yaml = "\
+id: 2026-05-26-legacy
+goal: legacy spec
+cards: []
+status: closed
+labels: []
+acceptance_criteria: []
+";
+        let spec: Spec = serde_yaml::from_str(yaml).unwrap();
+        assert!(spec.closed_at.is_none());
+        let re_yaml = serialise_yaml(&spec).unwrap();
+        assert!(
+            !re_yaml.contains("closed_at"),
+            "None closed_at must be skipped on serialise; got: {re_yaml}",
+        );
     }
 }

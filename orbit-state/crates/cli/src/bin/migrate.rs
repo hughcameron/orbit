@@ -739,6 +739,7 @@ fn bd_issue_to_spec(issue: &BdRecord) -> Spec {
         labels,
         acceptance_criteria: acs,
         memories_considered: Vec::new(),
+        closed_at: None,
     }
 }
 

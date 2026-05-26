@@ -38,6 +38,10 @@ When the work appears trivial — single-line change, typo fix, single-AC scope 
 
 The advisory is **prose, not AskUserQuestion** — the operator chooses by typing or by continuing. The skill does NOT refuse. Per card 0019 scenario 10.
 
+## Before Q1 — name the capability ambition
+
+State the **underlying capability ambition** of the card cluster in one sentence before scope-carving begins. Carving multiple specs out of one cluster requires a concrete defence drawn from {technical dependency, hard budget, operator-bandwidth, parallelism}. "Manage risk" and "ship incrementally" are explicitly rejected as standalone defences — name the dependency, the budget, or the parallelism, or carve as one spec.
+
 ## The 10 questions
 
 Walk these in declared order. Prose opens each question; AskUserQuestion closes the pick when the fork is discrete. Reach for past run-logs before inventing scenarios; flag imagined ones inline with `[imagined]`.
@@ -56,6 +60,10 @@ Walk these in declared order. Prose opens each question; AskUserQuestion closes 
 ### Hot-wash debrief
 
 After Q10, capture meta-observations in prose — what kept coming up, what was unclear, what reframes surfaced. Two to five bullets per category: `recurred`, `surprised`, `friction`, `meta-patterns-for-future-tabletops`. Fresh, before formal write-up sanitises the signal.
+
+### Per-scenario verification classification
+
+Every scenario the resulting spec will cover carries one verification classification line in the tabletop sidecar — `verifies: capability` (the test exercises the underlying capability directly) or `verifies: stand-in (real thing is X), accepted because Y`. **No third option.** The classification lives in a dedicated **Verification posture** section in the sidecar (or, if compact, inline in Trade-offs). /orb:spec carries this verbatim into each AC (see spec SKILL.md halt rule).
 
 ## Output
 
