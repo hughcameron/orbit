@@ -93,7 +93,23 @@ metadata:
   interview_ref: ".orbit/specs/YYYY-MM-DD-<topic>/interview.md"  # or tabletop-note.md for closed-space inputs
 ```
 
-### 4. Record memories considered
+### 4. Carry the tabletop verification classification
+
+Every AC's `verification` clause must end with the per-scenario classification verbatim from the tabletop sidecar's **Verification posture** section (see `/orb:tabletop`) — either `verifies: capability` or `verifies: stand-in (real thing is X), accepted because Y`. The classification is copied as-is, not paraphrased.
+
+**Halt rule.** When an AC's source scenario has no classification in the tabletop sidecar (or closed-mode `tabletop-note.md`, which carries the same convention), /orb:spec halts and routes to **AskUserQuestion** with three picks:
+
+- **rescope inline** — rewrite the AC so it verifies the capability directly; no classification needed.
+- **re-walk tabletop** — short detour back to /orb:tabletop for this one scenario; resume /orb:spec after.
+- **accept-with-rationale** — accept the AC as-is and capture rationale as a spec note using the canonical `deferred-scenario:` prefix so the conformance audit can parse it. Format:
+
+  ```
+  deferred-scenario: <card-id>:<scenario-name> -- <rationale>
+  ```
+
+  `<card-id>` is the full slug (e.g. `0045-scope-discipline`); `<scenario-name>` matches a name from the card's `scenarios[].name`. Persisted via `orbit spec note <spec-id> "deferred-scenario: ..."`. The audit family `card_coverage_gap` (per spec 2026-05-26-scope-discipline-front-loaded) fires when 2+ such deferrals accumulate on a card without a follow-up spec.
+
+### 5. Record memories considered
 
 Lift the tabletop-time memory reconciliations into the spec's `memories_considered` field. The tabletop session ran `orbit memory match <card-slug>` and captured a disposition for each matching memory under **Implementation Notes**. Each entry becomes:
 
@@ -112,13 +128,13 @@ memories_considered:
 
 Per spec 2026-05-19-memory-gates-decisions ac-03 (D3a): `memories_considered` is a top-level `Spec` field — uniform across the spec, not per-AC. `spec.close` reads this field at close time and refuses closure for any matching memory whose key is absent. If the tabletop session found no matching memories, omit the field; it is `skip_serializing_if = "Vec::is_empty"` so absent specs stay byte-identical on disk.
 
-### 5. Save the Spec
+### 6. Save the Spec
 
 Save to: `.orbit/specs/YYYY-MM-DD-<topic-slug>/spec.yaml`
 
 If the interview file exists in a spec directory, save alongside it.
 
-### 6. Update the Card's Specs Array
+### 7. Update the Card's Specs Array
 
 The spec references a card (from the interview's or tabletop note's `Card:` line). After saving `spec.yaml`, append its path to the card's `specs` array so the work trail stays complete.
 

@@ -385,7 +385,11 @@ fn spec_close_mcp_force_proceeds_with_envelope() {
         json!({ "name": "spec.close", "arguments": { "id": "0001", "force": true } }),
     );
     let envelope = inner_envelope_text(&inner);
-    assert_eq!(envelope, common::expected_envelope_for_spec_close_force());
+    // `closed_at` is dynamic (spec.close sets it to current UTC time per
+    // spec 2026-05-26-scope-discipline-front-loaded ac-10) — strip before
+    // the byte-equal compare against the static expected envelope.
+    let envelope_stripped = strip_closed_at(&envelope);
+    assert_eq!(envelope_stripped, common::expected_envelope_for_spec_close_force());
 
     // State parity.
     let spec_text = std::fs::read_to_string(dir.path().join(".orbit/specs/0001/spec.yaml")).unwrap();
@@ -411,10 +415,32 @@ fn spec_close_mcp_deferrable_only_proceeds_without_force() {
         json!({ "name": "spec.close", "arguments": { "id": "0001" } }),
     );
     let envelope = inner_envelope_text(&inner);
-    assert_eq!(envelope, common::expected_envelope_for_spec_close_only_deferrable());
+    // `closed_at` is dynamic (see ac-10 of
+    // 2026-05-26-scope-discipline-front-loaded) — strip before compare.
+    let envelope_stripped = strip_closed_at(&envelope);
+    assert_eq!(envelope_stripped, common::expected_envelope_for_spec_close_only_deferrable());
 
     let spec_text = std::fs::read_to_string(dir.path().join(".orbit/specs/0001/spec.yaml")).unwrap();
     assert!(spec_text.contains("status: closed"), "spec not closed: {spec_text}");
+}
+
+/// Strip the `closed_at` field from a spec-close envelope JSON string so
+/// parity tests can byte-compare against an envelope whose `closed_at`
+/// is `None`. The field's value is a dynamic UTC timestamp set by
+/// `spec.close` per spec 2026-05-26-scope-discipline-front-loaded ac-10.
+fn strip_closed_at(envelope: &str) -> String {
+    let pattern = r#","closed_at":""#;
+    if let Some(start) = envelope.find(pattern) {
+        let after_open_quote = start + pattern.len();
+        if let Some(rel_end) = envelope[after_open_quote..].find('"') {
+            let end = after_open_quote + rel_end + 1;
+            let mut out = String::with_capacity(envelope.len());
+            out.push_str(&envelope[..start]);
+            out.push_str(&envelope[end..]);
+            return out;
+        }
+    }
+    envelope.to_string()
 }
 
 /// Extract `result.content[0].text` from a JSON-RPC response — that's where

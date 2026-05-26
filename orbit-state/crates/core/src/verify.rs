@@ -406,6 +406,7 @@ mystery_field: ohno
             labels: vec![],
             acceptance_criteria: vec![],
             memories_considered: vec![],
+            closed_at: None,
         };
         write_atomic(
             layout.spec_file(id),
