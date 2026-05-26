@@ -1,6 +1,9 @@
 ---
 name: audit
 description: Audit AC-to-test traceability — find untested ACs, orphaned test prefixes, and coverage gaps
+argument-hint: [spec-id]
+allowed-tools: Bash Read
+disable-model-invocation: true
 ---
 
 # /orb:audit

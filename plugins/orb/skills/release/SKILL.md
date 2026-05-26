@@ -1,6 +1,8 @@
 ---
 name: release
-description: Bump orbit plugin version, commit, push, and reload into Claude Code
+description: Release a new orbit plugin version — bump, commit, push, and reload into Claude Code so /reload-plugins picks up changes.
+allowed-tools: Bash Read Edit Write
+disable-model-invocation: true
 user-invocable: true
 ---
 

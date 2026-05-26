@@ -1,6 +1,8 @@
 ---
 name: code-investigate
 description: Investigate code before changing it — narrow mode for specific queries, broad mode for neighbourhood awareness. Routes to ast-grep, tree-sitter, ripgrep, and rtk-wrapped variants by default.
+when_to_use: "When investigating code structure, finding symbols, locating definitions, or understanding a codebase neighbourhood before making changes."
+allowed-tools: Bash Read Grep Glob
 user-invocable: true
 created_by: human
 created_at: 2026-05-18

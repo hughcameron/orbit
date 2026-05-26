@@ -1,6 +1,8 @@
 ---
 name: keyword-scan
-description: Shared technique — keyword search across orbit artifacts using rg/grep
+description: Keyword search across orbit artifacts (cards, choices, specs, memos, memories) using rg/grep — shared technique.
+when_to_use: "When searching orbit artefacts (cards, choices, specs, memos, memories) by keyword."
+allowed-tools: Bash Read Grep
 user-invocable: false
 ---
 

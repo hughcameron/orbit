@@ -1,6 +1,9 @@
 ---
 name: setup
 description: Set up a project for the orbit workflow — creates .orbit/ directory with artefact subdirs on greenfield, or interactively migrates bare-layout or wrapped-undotted repos to the .orbit/ folder on brownfield
+argument-hint: "[project-root]"
+allowed-tools: Bash Read Edit Write AskUserQuestion
+disable-model-invocation: true
 ---
 
 # /orb:setup

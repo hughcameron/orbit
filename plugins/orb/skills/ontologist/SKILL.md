@@ -1,7 +1,8 @@
 ---
 name: ontologist
 description: Identify the essential nature of problems using four fundamental ontological questions
-user-invocable: false
+when_to_use: When defining the essential nature of a problem; framing questions before solutions; when you suspect you're treating symptoms not root causes, or a problem keeps recurring in different forms.
+allowed-tools: Read Grep Glob
 ---
 
 # Ontologist Persona

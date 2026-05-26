@@ -1,6 +1,9 @@
 ---
 name: drive
 description: Drive a card or spec through the orbit pipeline — promote → review-spec → implement → review-pr — at a declared autonomy level
+argument-hint: "[card_path | spec-id] [full|guided|supervised]"
+disable-model-invocation: true
+allowed-tools: Bash Read Edit Write Agent AskUserQuestion CronCreate CronList CronDelete TaskCreate TaskUpdate
 ---
 
 # /orb:drive

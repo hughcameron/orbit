@@ -1,6 +1,9 @@
 ---
 name: tabletop
-description: Front-loaded thinking before specs are written — one session walks values, trade-offs, halt conditions, escalation triggers, and kill conditions across one card or a cluster, producing one or more aligned specs each carrying a pre-flight contract
+description: Front-loaded pre-spec thinking — walk values, trade-offs, halt conditions and kill conditions across a card or cluster to produce aligned specs
+argument-hint: "[card-id | card-id-1 card-id-2 ... | \"goal string\"]"
+disable-model-invocation: true
+allowed-tools: Bash Read Edit Write AskUserQuestion
 ---
 
 # /orb:tabletop

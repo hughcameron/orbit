@@ -1,7 +1,10 @@
 ---
 name: prioritise
-description: Session-priming synthesis — name the next move live from workflow conformance, the session-prime envelope, and recent memories. One verb, one sentence on why now, a deferred count. Read-only — the author runs the verb.
+description: Name the next move live from workflow conformance, the session-prime envelope, and recent memories. One verb, one sentence on why now, a deferred count. Read-only — the author runs the verb.
+when_to_use: When the author explicitly runs /orb:prioritise at session start (or mid-session) to compress substrate state into one recommended next move.
 user-invocable: true
+disable-model-invocation: true
+allowed-tools: Bash Read
 created_by: claude
 created_at: 2026-05-21
 ---

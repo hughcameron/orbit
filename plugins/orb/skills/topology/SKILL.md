@@ -1,6 +1,9 @@
 ---
 name: topology
-description: Architecture-level investigation discipline made cheap — scaffolds, reads, and audits subsystem-keyed pointer-only yaml entries that point at each subsystem's canonical code, decision record, operational doc, and test surface. Three modes — write, read, audit.
+description: Scaffold, read, and audit subsystem topology entries — pointer-only yaml linking each subsystem's canonical code, decision record, operational doc, and test surface.
+argument-hint: "[subsystem | write | read | audit]"
+allowed-tools: Bash Read Edit Write
+disable-model-invocation: true
 user-invocable: true
 created_by: human
 created_at: 2026-05-18

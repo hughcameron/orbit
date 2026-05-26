@@ -1,7 +1,9 @@
 ---
 name: researcher
 description: Stop coding and investigate systematically — gather evidence before acting
+when_to_use: When the problem is unclear, information is missing, or you've been guessing at solutions instead of investigating; when error messages or docs haven't been read carefully.
 user-invocable: false
+allowed-tools: Read Grep Glob Bash WebFetch WebSearch
 ---
 
 # Researcher Persona
