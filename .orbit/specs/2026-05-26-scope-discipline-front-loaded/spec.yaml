@@ -1,0 +1,201 @@
+id: 2026-05-26-scope-discipline-front-loaded
+goal: |
+  Land four mechanisms that catch ambition-vs-verification gaps upstream of /orb:implement so the
+  default outcome of the pipeline produces work that matches the capability claim that justified
+  it. Implementing agents read pre-verified specs and run without mid-flight scope escalations.
+
+  Four mechanisms shipped together in one spec:
+  1. Tabletop SKILL.md gains a step requiring the agent to state the underlying capability
+     ambition before scope-carving questions begin.
+  2. Tabletop SKILL.md gains a step requiring per-scenario verification classification — each
+     scenario the output spec will cover carries `verifies capability` or `verifies stand-in (real
+     thing is X), accepted because Y` in the tabletop sidecar.
+  3. /orb:spec SKILL.md requires every AC's verification clause to carry the tabletop
+     classification verbatim. Halts and routes to AskUserQuestion with three picks (rescope
+     inline / re-walk tabletop on this scenario / accept-with-rationale captured in a spec note)
+     when an AC arrives without one.
+  4. orbit audit conformance gains a card-coverage finding family — fires on a card with 2+
+     deferred scenarios across closed specs and no open follow-up spec. Audit-window gated so
+     pre-ship specs are not retroactively flagged.
+
+  Approach (from .orbit/specs/2026-05-26-scope-discipline-front-loaded/tabletop.md): front-loading
+  discipline to tabletop + spec rather than per-AC mid-implement check. Halt conditions (rebloat
+  cap, audit overfire cap), escalation triggers, and kill conditions live in the tabletop
+  sidecar.
+
+  Eating own dog food: this spec's ACs were authored manually with the classification convention
+  applied to each verification clause ahead of AC-03 enforcing it. See per-AC `verifies` line
+  embedded in the description.
+
+  Test prefix for this spec: scope.
+cards:
+- 0045-scope-discipline
+status: open
+labels:
+- spec
+acceptance_criteria:
+- id: ac-01
+  description: |
+    Add a step to plugins/orb/skills/tabletop/SKILL.md (in or before the §Design-space
+    classification section) requiring the agent to state the underlying capability ambition of
+    the card cluster in one sentence before scope-carving questions begin. The step must require
+    a defence for any multi-spec carve drawn from the concrete-reasons set (technical dependency,
+    hard budget, operator-bandwidth, parallelism); generic phrases like "manage risk" or "ship
+    incrementally" are explicitly rejected as standalone defences.
+  gate: true
+  checked: false
+  verification: |
+    Grep plugins/orb/skills/tabletop/SKILL.md for prose matching all three of: (a) "underlying
+    capability" or "capability ambition" within a step header or directive line; (b) the named
+    concrete-reasons set (technical dependency / hard budget / operator-bandwidth / parallelism);
+    (c) explicit rejection of generic incrementalism phrases ("manage risk" or "ship
+    incrementally" named as insufficient).
+    verifies: capability — the prose change IS the discipline for doc-band SKILL.md ACs; grep
+    validates the discipline lives in the canonical source.
+  ac_type: doc
+- id: ac-02
+  description: |
+    Add a step to plugins/orb/skills/tabletop/SKILL.md requiring per-scenario verification
+    classification. Each scenario the resulting spec will cover carries one classification line
+    in the tabletop sidecar — either `verifies capability` (the test exercises the underlying
+    capability directly) or `verifies stand-in (real thing is X), accepted because Y`. No third
+    option. The step prose names where the classification lives (the tabletop sidecar's Values
+    or Trade-offs section, or a new dedicated Verification posture section).
+  gate: true
+  checked: false
+  verification: |
+    Grep plugins/orb/skills/tabletop/SKILL.md for the new step's directive prose matching all
+    three of: (a) "verification classification" or "verifies: capability / stand-in" phrasing;
+    (b) the requirement applies to "every scenario" or equivalent universal phrasing; (c)
+    explicit "no third option" or equivalent closure.
+    verifies: capability — the prose change IS the discipline for tabletop sessions.
+  ac_type: doc
+- id: ac-03
+  description: |
+    Add a step to plugins/orb/skills/spec/SKILL.md requiring every AC's verification clause to
+    carry the classification verbatim from the tabletop sidecar. When an AC's source scenario
+    lacks a classification, /orb:spec halts and routes to AskUserQuestion with three picks: (a)
+    rescope the AC inline, (b) re-walk tabletop on this scenario, (c) accept the AC as-is with
+    rationale captured in a spec note. The skill prose names that closed-mode tabletop notes
+    (tabletop-note.md) carry the same classification convention.
+  gate: true
+  checked: false
+  verification: |
+    Grep plugins/orb/skills/spec/SKILL.md for prose matching all three of: (a) directive that AC
+    verification clauses carry the tabletop classification verbatim; (b) halt rule with explicit
+    AskUserQuestion routing on missing classification; (c) the three pick options labelled
+    (rescope inline / re-walk tabletop / accept-with-rationale).
+    verifies: capability — the prose change IS the discipline for /orb:spec write-up.
+  ac_type: doc
+- id: ac-04
+  description: |
+    orbit audit conformance gains a card-coverage finding family. Fires on a card when all three
+    of: (a) the card has one or more closed specs in its specs[] array; (b) the cumulative count
+    of deferred scenarios across those specs (drawn from spec notes matching the deferral
+    pattern) is ≥2; (c) no follow-up spec is currently open against the card. The finding
+    evidence carries the card slug, the deferred scenario names, the cumulative deferral count,
+    and a remediation verb (e.g. `/orb:tabletop <card-id>` to file the follow-up). Severity:
+    medium. Finding state: `card_coverage_gap` or equivalent canonical token.
+  gate: true
+  checked: false
+  verification: |
+    cargo test -p orbit-state passes a new test `scope_emits_card_coverage_finding_on_two_deferrals`
+    that constructs a card with 2 closed specs, each containing a deferral-pattern spec note,
+    then runs the audit and asserts a card-coverage finding fires with the correct subject
+    (card slug), evidence (deferred scenario names + cumulative count), severity (medium), and
+    remediation verb.
+    verifies: capability — the test exercises the finding-family code end-to-end against a
+    constructed fixture.
+- id: ac-05
+  description: |
+    The card-coverage finding family fires only against specs closed AFTER this audit logic
+    ships. A timestamp gate compares each spec's close-date (or the audit-rule's introduction
+    date constant) against the spec's close timestamp; pre-ship specs are excluded by audit-
+    window contract. Per card 0045 scenario 6 — no retroactive spam on historical narrow specs.
+  gate: true
+  checked: false
+  verification: |
+    cargo test -p orbit-state passes a new test `scope_audit_window_excludes_pre_ship_specs`
+    that seeds two specs (one closed BEFORE the audit-rule introduction date constant, one
+    AFTER), each carrying deferral-pattern notes; the audit fires only on the post-window spec.
+    verifies: capability — the test exercises the audit-window code with two timestamp-distinct
+    spec fixtures.
+- id: ac-06
+  description: |
+    All prose changes from AC-01, AC-02, and AC-03 land in canonical plugin source —
+    plugins/orb/skills/tabletop/SKILL.md and plugins/orb/skills/spec/SKILL.md — not in side
+    documents, READMEs, or one-off memos. New sessions inherit the discipline by loading the
+    skill, without manual reminders.
+  gate: false
+  checked: false
+  verification: |
+    Grep for the new discipline directives (the phrases captured in AC-01, AC-02, AC-03
+    verification clauses) ONLY in the two named canonical paths. Assert no copies in
+    .orbit/conventions/, .orbit/memos/, .orbit/METHOD.md, .orbit/STYLE.md, plugins/orb/README.md,
+    or other side documents (excluding the tabletop sidecar at
+    .orbit/specs/2026-05-26-scope-discipline-front-loaded/tabletop.md which is the design
+    source).
+    verifies: stand-in (real thing is "new sessions inherit the discipline without manual
+    reminders"), accepted because the canonical-files conformance check separately catches
+    drift between plugin source and shipped distribution; grep on the source-of-truth location
+    is the practical proxy.
+  ac_type: doc
+- id: ac-07
+  description: |
+    The new finding family carries test coverage. AC-04 and AC-05 each contribute one test
+    minimum; both are prefixed `scope_` and live in the audit conformance test module.
+    Workspace test count rises by ≥2 relative to the pre-change baseline; new tests pass on
+    a clean tree (cargo test --workspace zero failures).
+  gate: true
+  checked: false
+  verification: |
+    cargo test --workspace -- scope_ reports ≥2 tests passing, all under audit conformance.
+    cargo test --workspace passes with zero failures and a test count ≥(baseline+2).
+    verifies: capability — the test suite IS the regression surface for the finding family.
+- id: ac-08
+  description: |
+    Immediately after this spec ships, running `orbit audit conformance --json` against the
+    orbit repo emits no more than 5 card-coverage findings. Per Halt-2 from the tabletop
+    sidecar — if >5 fire, the threshold needs tuning via the halt-2 revert path (raise to 3+
+    deferrals, or restrict to emerging+ cards, or ship behind a config flag) before merge.
+  gate: false
+  checked: false
+  verification: |
+    Post-implementation, run `orbit audit conformance --json` against the orbit repo and
+    extract the card-coverage finding count via jq:
+    `orbit audit conformance --json | jq '[.data.result.findings[] | select(.subsystem == "cards" and (.state | startswith("card_coverage")))] | length'`
+    Acceptable if result ≤5. Record the observed count in a spec note.
+    verifies: capability — the audit run against the real orbit substrate IS the capability
+    check; result count is the operational truth.
+  ac_type: observation
+- id: ac-09
+  description: |
+    After AC-01 and AC-02 land, plugins/orb/skills/tabletop/SKILL.md grows by no more than 30
+    lines net relative to the pre-change baseline of 94 lines (captured at HEAD before this
+    spec's first commit). Per Halt-1 from the tabletop sidecar — rebloat past the cap triggers
+    the revert path (collapse to single-line classification template, drop multi-line per-
+    scenario block).
+  gate: true
+  checked: false
+  verification: |
+    `wc -l plugins/orb/skills/tabletop/SKILL.md` returns ≤124 (baseline 94 + 30 cap).
+    verifies: stand-in (real thing is "tabletop SKILL.md remains compact and readable"),
+    accepted because line count is the empirically calibrated proxy — the recent 361→91 cut
+    established line count as the load-bearing metric for this file.
+  ac_type: doc
+memories_considered:
+- key: drive-substrate-recall-iter1
+  disposition: adopted
+  reason: the motivating failure — PR
+- key: tabletop-q3-cost-as-mis-staging-signal
+  disposition: adopted
+  reason: produced this session's reframe. The original card put scope-adequacy at /orb:implement (per-AC mid-flight escalation); the Q3 cost-framing reaction surfaced the staccato-halt anti-pattern; the discipline moved upstream to tabletop + /orb:spec. The reframe is encoded in the spec's four-mechanism structure.
+- key: tabletop-prose-too-jargony
+  disposition: adopted
+  reason: drives prose discipline on the SKILL.md edits in AC-01, AC-02, AC-03 — the new directive prose stays plain (no methodology-vocabulary stacking) so future agents reading the SKILL.md can act without expanding term-of-art shorthand.
+- key: drive-author-no-longer-merges
+  disposition: adopted
+  reason: under guided autonomy this drive completes through merge after the four-option APPROVE gate, mirroring full-autonomy's §Completion step 5. No PR-creation handoff.
+- key: spec-skill-md-fields-vs-schema
+  disposition: adopted
+  reason: this spec uses only the 7 canonical Spec fields (id/goal/cards/status/labels/acceptance_criteria/memories_considered). Halts, escalations, kill conditions live in the tabletop sidecar; per-AC verification classification is embedded in each AC's description.

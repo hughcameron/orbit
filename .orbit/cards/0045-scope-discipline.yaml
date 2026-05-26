@@ -1,20 +1,25 @@
 id: 0045-scope-discipline
 feature: Substrate-encoded scope discipline — pipeline catches ambition-vs-verification gaps before code ships
 as_a: program owner who can't read every spec
-i_want: tabletop, implement, and conformance audit to surface "is this the real thing or a placeholder?" without requiring my vigilance at each phase
+i_want: tabletop and spec generation to front-load "is this the real thing or a placeholder?" so implementing agents work parallel and uninterrupted, with conformance audit as a post-hoc backstop
 so_that: the recurring failure mode — ambitious capability claim at the card level + narrow AC verifications at the spec level + literal implementation = output narrower than intent — stops being the default outcome; deferred-to-spec-N becomes visible debt instead of invisible deferral
-goal: ambition-vs-verification gaps are caught at three pipeline stages — tabletop (framing posture), implement (per-AC scope check), conformance audit (post-hoc card-coverage surfacing); the operator no longer needs to catch them at PR-creation time
+goal: ambition-vs-verification gaps are caught upstream at tabletop (capability framing + per-scenario verification classification) and enforced at /orb:spec (halt on missing classification), with conformance audit as a post-hoc backstop on card-coverage; implementing agents read pre-verified specs and run without mid-flight scope escalations
 maturity: planned
 scenarios:
-- name: Tabletop names ambition before carving scope
+- name: Tabletop names the underlying capability before carving scope
   given: a tabletop session opens on a card cluster
   when: the session reaches the design-space classification or trade-offs questions
-  then: the skill prose requires the agent to state the underlying ambition first and defend any multi-spec carve with a concrete reason (technical dependency, hard budget, operator-bandwidth, or parallelism); "manage risk" or "ship incrementally" alone is not sufficient; the tabletop output names which scenarios this spec ships and which it explicitly defers, with the carve-defence cited inline
+  then: the skill prose requires the agent to state the underlying capability ambition first and defend any multi-spec carve with a concrete reason (technical dependency, hard budget, operator-bandwidth, or parallelism); "manage risk" or "ship incrementally" alone is not sufficient; the tabletop output names which scenarios this spec ships and which it explicitly defers, with the carve-defence cited inline
   gate: true
-- name: Implement asks scope-adequacy before each AC
-  given: /orb:implement enters an AC's work loop
-  when: the skill reads the AC's verification clause
-  then: the agent writes one sentence naming whether the verification tests the underlying capability or a proxy for it (substring count, ≥N result floor, grep returns N files, smoke test only); if proxy, the agent escalates via AskUserQuestion before writing code — rescope the verification, expand the AC, or accept-with-rationale captured in a spec note
+- name: Tabletop classifies each scenario's verification posture
+  given: a tabletop session is producing one or more output specs
+  when: the session names the scenarios each spec will cover
+  then: every named scenario carries one classification line in the tabletop sidecar — either `verifies capability` (the test exercises the underlying capability directly) or `verifies stand-in (real thing is X), accepted because Y` (a substring count, result-count floor, grep output, or smoke check standing in for the capability test with operator-acknowledged rationale); no third option
+  gate: true
+- name: /orb:spec halts on missing classification at AC write-up
+  given: /orb:spec generates ACs from a tabletop sidecar
+  when: an AC's source scenario arrives without a verification classification
+  then: /orb:spec halts and routes to AskUserQuestion with three picks — (a) rescope the AC inline, (b) re-walk tabletop on this scenario, (c) accept the AC as-is with rationale captured in a spec note; the AC's verification clause carries the classification verbatim once selected
   gate: true
 - name: Conformance audit surfaces card-coverage gaps
   given: a card has one or more closed specs in its specs[] array
@@ -23,8 +28,8 @@ scenarios:
   gate: true
 - name: Posture lands in canonical SKILL.md prose
   given: scope-discipline mechanisms ship across specs
-  when: a future tabletop or implement session loads its SKILL.md
-  then: the prose change is in the canonical plugin source (plugins/orb/skills/tabletop/SKILL.md, plugins/orb/skills/implement/SKILL.md), not in side documents or one-off memos; new sessions inherit the posture without manual reminders
+  when: a future tabletop or /orb:spec session loads its SKILL.md
+  then: the prose change is in the canonical plugin source (plugins/orb/skills/tabletop/SKILL.md, plugins/orb/skills/spec/SKILL.md), not in side documents or one-off memos; new sessions inherit the posture without manual reminders
   gate: false
 - name: Existing closed specs are not retroactively flagged
   given: the conformance audit's card-coverage finding ships
@@ -38,7 +43,7 @@ relations:
   reason: scenario 1's posture flip lives in tabletop's SKILL.md prose; this card extends tabletop's discipline without rewriting the 10-question methodology
 - card: 0003-implement
   type: feeds
-  reason: scenario 2's scope-adequacy gate lives in implement's SKILL.md pre-flight; this card extends implement's per-AC contract
+  reason: this card removes the need for /orb:implement to gate on scope-adequacy mid-flight — pre-verified ACs arrive at implement, which reads the verification classification verbatim and runs without per-AC escalations
 - card: 0039-workflow-conformance
   type: feeds
   reason: scenario 3's card-coverage finding is a new finding family in orbit audit conformance; the audit verb's existing remediation-verb contract carries the follow-up suggestion
