@@ -2,7 +2,6 @@
 name: distill
 description: Extract capability cards from source material — files, directories, or a whole project
 argument-hint: "[file_or_dir]"
-disable-model-invocation: true
 allowed-tools: Bash Read Edit Write AskUserQuestion Glob Grep
 ---
 

@@ -2,7 +2,6 @@
 name: spec
 description: Generate a structured YAML specification with numbered ACs from interview results
 argument-hint: "[interview_file]"
-disable-model-invocation: true
 allowed-tools: Bash Read Edit Write
 ---
 

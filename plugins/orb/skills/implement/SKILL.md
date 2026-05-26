@@ -2,7 +2,6 @@
 name: implement
 description: Drive a single spec from claim to close — pre-flight check, AC tracking, gate enforcement, detour escalation, close-out
 argument-hint: "[spec-id]"
-disable-model-invocation: true
 allowed-tools: Bash Read Edit Write Agent AskUserQuestion TaskCreate TaskUpdate Monitor
 ---
 
