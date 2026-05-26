@@ -2,6 +2,29 @@
 
 All notable changes to orbit are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.4.38] - 2026-05-26
+
+Substrate-encoded scope discipline (card 0045). Pipeline now catches ambition-vs-verification gaps upstream of `/orb:implement` so the default outcome produces work that matches the capability claim that justified it. Motivated by the PR #39 iter-1 NO-GO where six ACs passed both cold-fork reviews but output was narrower than the card's underlying claim. Plugin marketplace version `plugin.json` reconciles 0.4.33 → 0.4.38 in this bump (drift across PRs #32 → #35 where only `orbit-state/Cargo.toml` was tracked).
+
+### Added
+
+- **`Spec.closed_at: Option<DateTime<Utc>>`** — new optional timestamp field on the Spec schema, set by `orbit spec close` to the current UTC time before writing the canonicalised spec.yaml. Serde default `None` keeps existing closed specs parseable without migration; the audit-window gate (below) treats `None` as pre-window so historical specs are excluded by construction.
+- **`card_coverage_gap` finding family** in `orbit audit conformance` at `orbit-state/crates/core/src/verbs.rs`. Fires medium-severity on a card when (a) the card has ≥1 closed spec in its `specs[]` array, (b) cumulative deferred-scenario notes across those specs total ≥2, and (c) no follow-up spec is currently open against the card. Finding evidence carries `{deferred_scenarios: [{card, scenario, rationale, spec_id}], cumulative_count}`; remediation verb is `/orb:tabletop <card-id>`.
+- **Canonical `deferred-scenario:` spec-note convention** — when `/orb:spec` accepts an AC with a stand-in verification (pick (c) of the new halt rule), the spec note is written with prefix `deferred-scenario: <card-id>:<scenario-name> -- <rationale>` so the audit family can parse it. Scenario-name is anchored against `<card-id>.scenarios[].name`. Malformed notes are silently skipped.
+- **Audit-window gate** — `CARD_COVERAGE_INTRODUCTION_DATE` constant in the audit module gates the new finding family. Specs with `closed_at` strictly before the constant are excluded; specs with `closed_at` on or after are included; `closed_at: None` is excluded. Card 0045 scenario 6 (no retroactive spam on historical narrow specs).
+
+### Changed
+
+- **`plugins/orb/skills/tabletop/SKILL.md`** (94 → 102 lines) gains two steps: (a) state the underlying capability ambition of the cluster in one sentence before scope-carving begins, defending any multi-spec carve with a concrete reason from {technical dependency, hard budget, operator-bandwidth, parallelism}; (b) classify every scenario the output spec will cover as either `verifies capability` or `verifies stand-in (real thing is X), accepted because Y`. Generic phrases like "manage risk" or "ship incrementally" are explicitly rejected as standalone carve defences.
+- **`plugins/orb/skills/spec/SKILL.md`** (136 → 152 lines) gains §4: every AC's verification clause carries the tabletop classification verbatim. When an AC's source scenario lacks a classification, `/orb:spec` halts and routes to AskUserQuestion with three picks — (a) rescope the AC inline, (b) re-walk tabletop on this scenario, (c) accept-with-rationale captured in a spec note using the canonical `deferred-scenario:` prefix.
+- **Card 0045-scope-discipline** maturity bumped `planned → emerging` on first spec close.
+
+### Notes
+
+- Tests: 555 → 562 (+7 `scope_` tests across `orbit-state/crates/core/src/verbs.rs`).
+- Pipeline trace: `/orb:tabletop` on card 0045 reframed mid-session (per-AC mid-implement check → front-loaded tabletop+spec gate, memory `tabletop-q3-cost-as-mis-staging-signal`). `/orb:review-spec` REQUEST_CHANGES → REQUEST_CHANGES → APPROVE across three cycles. `/orb:review-pr` APPROVE cycle 1 with two non-blocking polish findings (test helper dedup, stale comment) deferred to a follow-up.
+- Eat-own-dog-food: every AC in this spec's `acceptance_criteria` carries its `verifies:` classification inline ahead of `/orb:spec` enforcing it.
+
 ## [0.4.37] - 2026-05-25
 
 Third (and final-named) opportunistic migration under choice 0020 — `plugins/orb/scripts/setup-method.sh` ports into a native `orbit setup files` verb. The policy's enumerated candidates list now reaches zero; only `code-investigate-mark.sh` (which post-dates the choice and sits on the substrate-vs-tooling boundary) remains as an unresolved discrimination decision.
