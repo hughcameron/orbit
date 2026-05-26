@@ -1,0 +1,51 @@
+id: 0045-scope-discipline
+feature: Substrate-encoded scope discipline — pipeline catches ambition-vs-verification gaps before code ships
+as_a: program owner who can't read every spec
+i_want: tabletop, implement, and conformance audit to surface "is this the real thing or a placeholder?" without requiring my vigilance at each phase
+so_that: the recurring failure mode — ambitious capability claim at the card level + narrow AC verifications at the spec level + literal implementation = output narrower than intent — stops being the default outcome; deferred-to-spec-N becomes visible debt instead of invisible deferral
+goal: ambition-vs-verification gaps are caught at three pipeline stages — tabletop (framing posture), implement (per-AC scope check), conformance audit (post-hoc card-coverage surfacing); the operator no longer needs to catch them at PR-creation time
+maturity: planned
+scenarios:
+- name: Tabletop names ambition before carving scope
+  given: a tabletop session opens on a card cluster
+  when: the session reaches the design-space classification or trade-offs questions
+  then: the skill prose requires the agent to state the underlying ambition first and defend any multi-spec carve with a concrete reason (technical dependency, hard budget, operator-bandwidth, or parallelism); "manage risk" or "ship incrementally" alone is not sufficient; the tabletop output names which scenarios this spec ships and which it explicitly defers, with the carve-defence cited inline
+  gate: true
+- name: Implement asks scope-adequacy before each AC
+  given: /orb:implement enters an AC's work loop
+  when: the skill reads the AC's verification clause
+  then: the agent writes one sentence naming whether the verification tests the underlying capability or a proxy for it (substring count, ≥N result floor, grep returns N files, smoke test only); if proxy, the agent escalates via AskUserQuestion before writing code — rescope the verification, expand the AC, or accept-with-rationale captured in a spec note
+  gate: true
+- name: Conformance audit surfaces card-coverage gaps
+  given: a card has one or more closed specs in its specs[] array
+  when: orbit audit conformance runs
+  then: the audit emits a card-coverage finding when (a) the card's scenarios remain unaddressed across all closed specs OR (b) closed specs' deferred-scenario notes accumulate (2+ deferrals on one card) without follow-up specs landing; each finding names the specific scenarios, the cumulative deferral count, and a remediation verb to file the follow-up
+  gate: true
+- name: Posture lands in canonical SKILL.md prose
+  given: scope-discipline mechanisms ship across specs
+  when: a future tabletop or implement session loads its SKILL.md
+  then: the prose change is in the canonical plugin source (plugins/orb/skills/tabletop/SKILL.md, plugins/orb/skills/implement/SKILL.md), not in side documents or one-off memos; new sessions inherit the posture without manual reminders
+  gate: false
+- name: Existing closed specs are not retroactively flagged
+  given: the conformance audit's card-coverage finding ships
+  when: the audit walks specs that closed before this card's first spec landed
+  then: the finding fires only against specs closed AFTER the audit logic ships; pre-ship specs are out of scope by audit-window contract (no spam from historical narrow specs the new discipline didn't exist for)
+  gate: false
+specs: []
+relations:
+- card: 0019-tabletop
+  type: feeds
+  reason: scenario 1's posture flip lives in tabletop's SKILL.md prose; this card extends tabletop's discipline without rewriting the 10-question methodology
+- card: 0003-implement
+  type: feeds
+  reason: scenario 2's scope-adequacy gate lives in implement's SKILL.md pre-flight; this card extends implement's per-AC contract
+- card: 0039-workflow-conformance
+  type: feeds
+  reason: scenario 3's card-coverage finding is a new finding family in orbit audit conformance; the audit verb's existing remediation-verb contract carries the follow-up suggestion
+- card: 0044-substrate-recall
+  type: depends-on
+  reason: card 0044's first spec is the worked example that motivates this card — six ACs verifying substring counts + grep output against a card claiming "substrate-cite rate rises significantly"; the gap was visible in the AC text, the pipeline didn't catch it, the operator caught it at PR-creation
+references:
+- '.orbit/specs/2026-05-25-recall-verb-and-skill-step/spec.yaml: motivating example — ambition-vs-verification gap that this card targets'
+- '.orbit/specs/2026-05-25-recall-verb-and-skill-step/review-pr-2026-05-26.md: cold-fork review-pr APPROVE that did not catch the gap (verified the ACs, not the underlying capability claim)'
+notes: []
