@@ -32,7 +32,7 @@ goal: |
   Test prefix for this spec: rcall.
 cards:
 - 0044-substrate-recall
-status: open
+status: closed
 labels:
 - spec
 acceptance_criteria:
