@@ -1122,3 +1122,139 @@ fn setup_files_mcp_style_drift_keep_envelope_matches() {
     let envelope = inner_envelope_text(&inner);
     assert_eq!(envelope, common::expected_envelope_for_setup_files_style_keep());
 }
+
+// ---------------------------------------------------------------------------
+// substrate.recall parity test — per spec 2026-05-25-recall-verb-and-skill-step
+// ac-03 (test name `rcall_json_envelope_parity`).
+// ---------------------------------------------------------------------------
+
+/// Populate a substrate with one matching artefact per type so the recall
+/// fan-out has consistent fixture data on both surfaces.
+fn populate_recall_fixture(root: &std::path::Path) {
+    use orbit_state_core::layout::OrbitLayout;
+    use orbit_state_core::{
+        execute, MemoryRememberArgs, VerbRequest,
+    };
+    let layout = OrbitLayout::at(root);
+    layout.ensure_dirs().unwrap();
+
+    // Memory via canonical writer so the timestamp is deterministic.
+    execute(
+        &layout,
+        &VerbRequest::MemoryRemember(MemoryRememberArgs {
+            key: "alpha-memory".into(),
+            body: "alpha mechanism for substrate matching".into(),
+            labels: vec!["recall-fixture".into()],
+            timestamp: Some("2026-05-25T00:00:00Z".into()),
+            no_nudge: false,
+            no_warn: false,
+        }),
+    )
+    .unwrap();
+
+    // Card.
+    let card = serde_yaml::to_string(&serde_yaml::from_str::<serde_yaml::Value>(
+        "id: 0099-alpha\nfeature: alpha capability\ngoal: ship alpha behaviour\nmaturity: planned\n",
+    ).unwrap()).unwrap();
+    std::fs::write(layout.card_file("0099-alpha"), card).unwrap();
+
+    // Choice.
+    let choice = serde_yaml::to_string(&serde_yaml::from_str::<serde_yaml::Value>(
+        "id: '0099'\ntitle: Choose alpha approach\nstatus: accepted\ndate_created: '2026-05-25'\nbody: Alpha is the canonical option here.\n",
+    ).unwrap()).unwrap();
+    std::fs::write(layout.choice_file("0099-alpha"), choice).unwrap();
+
+    // Spec.
+    layout.ensure_spec_dir("2026-05-25-alpha-spec").unwrap();
+    let spec = serde_yaml::to_string(&serde_yaml::from_str::<serde_yaml::Value>(
+        "id: 2026-05-25-alpha-spec\ngoal: ship alpha behaviour against the substrate\nstatus: open\n",
+    ).unwrap()).unwrap();
+    std::fs::write(
+        layout.spec_file("2026-05-25-alpha-spec"),
+        spec,
+    )
+    .unwrap();
+
+    // Memo.
+    std::fs::write(
+        layout.memos_dir().join("2026-05-25-alpha-memo.md"),
+        "# alpha\n\nNotes on the alpha branch of the design.\n",
+    )
+    .unwrap();
+}
+
+#[test]
+fn rcall_json_envelope_parity() {
+    use orbit_state_core::layout::OrbitLayout;
+    use orbit_state_core::{execute, envelope_ok_string, SubstrateRecallArgs, VerbRequest};
+
+    let dir = tempfile::tempdir().unwrap();
+    populate_recall_fixture(dir.path());
+
+    // Run the canonical envelope through orbit_state_core directly — this is
+    // the byte-identical reference both CLI --json and MCP tools/call must
+    // match (per ac-03 and the wider CLI/MCP parity contract owned by
+    // spec 2026-05-24-port-acceptance-shim and predecessors).
+    let layout = OrbitLayout::at(dir.path());
+    let request = VerbRequest::SubstrateRecall(SubstrateRecallArgs {
+        topic: "alpha".into(),
+        types: vec![],
+    });
+    let canonical = envelope_ok_string(&execute(&layout, &request).unwrap()).unwrap();
+
+    // MCP envelope via tools/call.
+    let inner = run_mcp_tools_call(
+        dir.path(),
+        json!({
+            "name": "substrate.recall",
+            "arguments": { "topic": "alpha" }
+        }),
+    );
+    let mcp_envelope = inner_envelope_text(&inner);
+    assert_eq!(
+        mcp_envelope, canonical,
+        "MCP substrate.recall envelope diverged from canonical reference",
+    );
+
+    // --type filter parity: filtered fan-out byte-identical too.
+    let request_filtered = VerbRequest::SubstrateRecall(SubstrateRecallArgs {
+        topic: "alpha".into(),
+        types: vec!["memory".into(), "choice".into()],
+    });
+    let canonical_filtered =
+        envelope_ok_string(&execute(&layout, &request_filtered).unwrap()).unwrap();
+    let inner_filtered = run_mcp_tools_call(
+        dir.path(),
+        json!({
+            "name": "substrate.recall",
+            "arguments": { "topic": "alpha", "types": ["memory", "choice"] }
+        }),
+    );
+    let mcp_envelope_filtered = inner_envelope_text(&inner_filtered);
+    assert_eq!(
+        mcp_envelope_filtered, canonical_filtered,
+        "MCP substrate.recall --type filter envelope diverged from canonical",
+    );
+
+    // tools/list advertises substrate.recall as a verb.
+    let mcp_bin = env!("CARGO_BIN_EXE_orbit-mcp");
+    let list_request = json!({
+        "jsonrpc": "2.0",
+        "id": 7,
+        "method": "tools/list",
+        "params": {},
+    });
+    let list_response = exchange_one(mcp_bin, dir.path(), &list_request);
+    let tools = list_response
+        .pointer("/result/tools")
+        .and_then(Value::as_array)
+        .expect("tools array present");
+    let names: Vec<_> = tools
+        .iter()
+        .filter_map(|t| t.get("name").and_then(Value::as_str))
+        .collect();
+    assert!(
+        names.contains(&"substrate.recall"),
+        "substrate.recall absent from tools/list: {names:?}",
+    );
+}

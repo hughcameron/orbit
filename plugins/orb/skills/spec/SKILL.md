@@ -13,6 +13,32 @@ Generate a validated specification from interview results or conversation contex
 /orb:spec [interview_file]
 ```
 
+## Recall pre-flight
+
+Before crystallising the interview or tabletop note into a spec, surface
+prior substrate touching the topic so the spec doesn't duplicate prior
+decisions or reinvent earlier ACs. This is a **structural step** at
+skill entry, not advice. Per spec
+2026-05-25-recall-verb-and-skill-step ac-05 and card 0044
+(substrate-recall) — the pull-mode counterpart to the substrate-push
+hook surface.
+
+**Scope derivation.** Pick the topic from the input artefact's goal or
+title — the interview.md `Card:` line, the tabletop.md `Cards in
+scope:` set, or the conversation-context summary the agent is acting
+on.
+
+**Invocation.**
+
+```bash
+orbit recall "<topic>" --json | jq -r '.data.result.matches[] | "\(.score) \(.type) \(.id)\t\(.path)\n  \(.snippet)"' | head -20
+```
+
+Quote a 3-5 line summary inline. Cite any prior spec the recall surfaces
+in the new spec's goal or notes so the lineage is explicit. Zero matches
+is a valid outcome — log "recall: no prior substrate on `<topic>`" and
+proceed.
+
 ## Instructions
 
 ### 1. Gather Interview Context

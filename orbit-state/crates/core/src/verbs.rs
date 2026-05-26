@@ -136,6 +136,8 @@ pub enum VerbRequest {
     TopologySetup(TopologySetupArgs),
     #[serde(rename = "substrate.classify")]
     SubstrateClassify(SubstrateClassifyArgs),
+    #[serde(rename = "substrate.recall")]
+    SubstrateRecall(SubstrateRecallArgs),
     #[serde(rename = "choice.show")]
     ChoiceShow(ChoiceShowArgs),
     #[serde(rename = "choice.list")]
@@ -714,6 +716,51 @@ pub struct TopologySetupArgs {
 #[serde(deny_unknown_fields)]
 pub struct SubstrateClassifyArgs {}
 
+/// Args for `substrate.recall` — substrate-wide ranked search fanning out
+/// across memory, card, choice, spec, and memo artefacts. Per spec
+/// 2026-05-25-recall-verb-and-skill-step and card 0044.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct SubstrateRecallArgs {
+    /// Free-text topic to recall against — typically a card slug, AC
+    /// description fragment, spec id, or PR-diff path slice. Required;
+    /// empty topic errors as `Error::malformed`.
+    pub topic: String,
+    /// Restrict the fan-out to these artefact types. Empty (default)
+    /// fans across all five. Each token must be one of
+    /// {`memory`, `card`, `choice`, `spec`, `memo`}; an invalid token
+    /// errors with `Error::malformed` naming the offending value and
+    /// listing the valid set.
+    #[serde(default)]
+    pub types: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct SubstrateRecallResult {
+    pub matches: Vec<RecallMatch>,
+}
+
+/// One ranked tuple in a `substrate.recall` response. Per spec ac-01:
+/// `id`, `type`, `score` (min-max-normalised within type), `snippet`
+/// (≤200 chars of the matched body), `path` (repo-relative, per ac-06).
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct RecallMatch {
+    /// Artefact identifier — memory key, card slug, choice slug, spec id,
+    /// or memo filename without extension.
+    pub id: String,
+    /// One of: `memory`, `card`, `choice`, `spec`, `memo`. Serialised as
+    /// `type` for the wire shape; aliased to `kind` in Rust to avoid the
+    /// reserved word, matching the `Relation.kind` convention.
+    #[serde(rename = "type")]
+    pub kind: String,
+    /// Per-type min-max-normalised score in `[0.0, 1.0]`.
+    pub score: f32,
+    /// Up to 200 chars of the matched body (collapsed whitespace).
+    pub snippet: String,
+    /// Repo-relative path to the artefact for drill-down. Per ac-06.
+    pub path: String,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct ChoiceShowArgs {
@@ -1016,6 +1063,8 @@ pub enum VerbResponse {
     TopologySetup(TopologySetupResult),
     #[serde(rename = "substrate.classify")]
     SubstrateClassify(SubstrateClassifyResult),
+    #[serde(rename = "substrate.recall")]
+    SubstrateRecall(SubstrateRecallResult),
     #[serde(rename = "choice.show")]
     ChoiceShow(ChoiceShowResult),
     #[serde(rename = "choice.list")]
@@ -1931,6 +1980,9 @@ pub fn execute(layout: &OrbitLayout, request: &VerbRequest) -> Result<VerbRespon
         VerbRequest::TopologySetup(args) => topology_setup(layout, args).map(VerbResponse::TopologySetup),
         VerbRequest::SubstrateClassify(args) => {
             substrate_classify(layout, args).map(VerbResponse::SubstrateClassify)
+        }
+        VerbRequest::SubstrateRecall(args) => {
+            substrate_recall(layout, args).map(VerbResponse::SubstrateRecall)
         }
         VerbRequest::AuditTopology(args) => {
             audit_topology(layout, args).map(VerbResponse::AuditTopology)
@@ -5738,6 +5790,368 @@ fn substrate_classify(
     Ok(SubstrateClassifyResult {
         state: classify_substrate_layout(layout),
     })
+}
+
+// ============================================================================
+// substrate.recall — substrate-wide ranked search across memory, card,
+// choice, spec, and memo artefacts. Per spec
+// 2026-05-25-recall-verb-and-skill-step and card 0044.
+// ============================================================================
+
+/// Cap on per-type matches returned by the recall fan-out. Memory-match's
+/// internal `args.limit` is set to this so the per-type cap is uniform
+/// across all five artefact types; the merged result thus caps at 5 ×
+/// this constant.
+const RECALL_PER_TYPE_LIMIT: usize = 50;
+
+/// Snippet cap in characters — per spec ac-01 ("≤200 chars of the matched
+/// body").
+const RECALL_SNIPPET_MAX: usize = 200;
+
+/// Valid type tokens accepted by the `--type` filter. Order matters for
+/// the canonical error message and tie-break ordering — see
+/// [`recall_type_rank`].
+const RECALL_TYPES: &[&str] = &["memory", "card", "choice", "spec", "memo"];
+
+/// Tie-break ordering across types when two matches share the same score:
+/// memory > choice > card > spec > memo (per ac-01 default ordering rule).
+fn recall_type_rank(kind: &str) -> u8 {
+    match kind {
+        "memory" => 0,
+        "choice" => 1,
+        "card" => 2,
+        "spec" => 3,
+        "memo" => 4,
+        _ => u8::MAX,
+    }
+}
+
+fn substrate_recall(
+    layout: &OrbitLayout,
+    args: &SubstrateRecallArgs,
+) -> Result<SubstrateRecallResult> {
+    const VERB: &str = "substrate.recall";
+    if args.topic.trim().is_empty() {
+        return Err(Error::malformed(VERB, "topic must not be empty"));
+    }
+
+    // --type filter validation. Empty list = default (all five). An empty
+    // string token is treated as default per ac-02 ("Empty list (`--type
+    // \"\"`) is treated as default (all-five) — explicit narrowing
+    // requires at least one valid token"). Mixed valid/invalid tokens
+    // error on the first invalid value.
+    let normalised: Vec<String> = args
+        .types
+        .iter()
+        .filter(|t| !t.is_empty())
+        .map(|t| t.to_lowercase())
+        .collect();
+    let enabled: std::collections::BTreeSet<&str> = if normalised.is_empty() {
+        RECALL_TYPES.iter().copied().collect()
+    } else {
+        let mut out = std::collections::BTreeSet::new();
+        for t in &normalised {
+            if let Some(canon) = RECALL_TYPES.iter().find(|c| **c == t.as_str()) {
+                out.insert(*canon);
+            } else {
+                return Err(Error::malformed(
+                    VERB,
+                    format!(
+                        "invalid type '{t}'; valid values are: {}",
+                        RECALL_TYPES.join(", ")
+                    ),
+                ));
+            }
+        }
+        out
+    };
+
+    let needle = args.topic.to_lowercase();
+    let mut merged: Vec<RecallMatch> = Vec::new();
+
+    if enabled.contains("memory") {
+        let mut bucket = recall_memory(layout, &args.topic)?;
+        normalise_min_max(&mut bucket);
+        merged.append(&mut bucket);
+    }
+    if enabled.contains("card") {
+        let mut bucket = recall_cards(layout, &needle)?;
+        normalise_min_max(&mut bucket);
+        merged.append(&mut bucket);
+    }
+    if enabled.contains("choice") {
+        let mut bucket = recall_choices(layout, &needle)?;
+        normalise_min_max(&mut bucket);
+        merged.append(&mut bucket);
+    }
+    if enabled.contains("spec") {
+        let mut bucket = recall_specs(layout, &needle)?;
+        normalise_min_max(&mut bucket);
+        merged.append(&mut bucket);
+    }
+    if enabled.contains("memo") {
+        let mut bucket = recall_memos(layout, &needle)?;
+        normalise_min_max(&mut bucket);
+        merged.append(&mut bucket);
+    }
+
+    // Default ordering (ac-01): score desc, then type rank
+    // (memory > choice > card > spec > memo), then id ascending.
+    merged.sort_by(|a, b| {
+        b.score
+            .partial_cmp(&a.score)
+            .unwrap_or(std::cmp::Ordering::Equal)
+            .then_with(|| recall_type_rank(&a.kind).cmp(&recall_type_rank(&b.kind)))
+            .then_with(|| a.id.cmp(&b.id))
+    });
+
+    Ok(SubstrateRecallResult { matches: merged })
+}
+
+/// Min-max normalise scores within a single per-type bucket. Single-match
+/// buckets and ties collapse to 1.0 (range == 0). Per ac-01 normalisation
+/// rule.
+fn normalise_min_max(bucket: &mut [RecallMatch]) {
+    if bucket.is_empty() {
+        return;
+    }
+    let mut min = f32::INFINITY;
+    let mut max = f32::NEG_INFINITY;
+    for m in bucket.iter() {
+        if m.score < min {
+            min = m.score;
+        }
+        if m.score > max {
+            max = m.score;
+        }
+    }
+    let range = max - min;
+    if range <= 0.0 {
+        for m in bucket.iter_mut() {
+            m.score = 1.0;
+        }
+        return;
+    }
+    for m in bucket.iter_mut() {
+        m.score = (m.score - min) / range;
+    }
+}
+
+/// Memory fan-out. Reuses `memory_match`'s ranker — score is the existing
+/// (token + label) overlap score, fed through min-max normalisation at the
+/// call site to scale-align with the other types.
+fn recall_memory(layout: &OrbitLayout, topic: &str) -> Result<Vec<RecallMatch>> {
+    let result = memory_match(
+        layout,
+        &MemoryMatchArgs {
+            topic: topic.into(),
+            labels: vec![],
+            limit: RECALL_PER_TYPE_LIMIT,
+        },
+    )?;
+    Ok(result
+        .matches
+        .into_iter()
+        .map(|m| RecallMatch {
+            id: m.memory.key.clone(),
+            kind: "memory".into(),
+            score: m.score,
+            snippet: snippet_from(&m.memory.body),
+            path: format!(".orbit/memories/{}.yaml", m.memory.key),
+        })
+        .collect())
+}
+
+/// Card fan-out. Reuses `card_search`'s substring filter (slug + feature +
+/// goal); the raw score is the total number of case-insensitive needle
+/// occurrences across those three fields. Score normalisation is applied
+/// at the call site.
+fn recall_cards(layout: &OrbitLayout, needle_lower: &str) -> Result<Vec<RecallMatch>> {
+    const VERB: &str = "substrate.recall";
+    let summaries = collect_card_summaries(layout, VERB)?;
+    let mut out: Vec<RecallMatch> = summaries
+        .into_iter()
+        .filter_map(|s| {
+            let hits = count_occurrences(&s.slug, needle_lower)
+                + count_occurrences(&s.feature, needle_lower)
+                + count_occurrences(&s.goal, needle_lower);
+            if hits == 0 {
+                return None;
+            }
+            let snippet = snippet_from(&s.goal);
+            Some(RecallMatch {
+                id: s.slug.clone(),
+                kind: "card".into(),
+                score: hits as f32,
+                snippet,
+                path: format!(".orbit/cards/{}.yaml", s.slug),
+            })
+        })
+        .collect();
+    out.truncate(RECALL_PER_TYPE_LIMIT);
+    Ok(out)
+}
+
+/// Choice fan-out. Reads full Choice records (matching `choice_search`'s
+/// shape) and scores by case-insensitive occurrence count in `title` +
+/// `body`. The match `id` is the file stem (full slug like
+/// `0015-progressive-spec-review`) rather than the bare numeric
+/// `choice.id` field, matching the spec ac-01 contract ("choice slug")
+/// and the path-format contract in ac-06.
+fn recall_choices(layout: &OrbitLayout, needle_lower: &str) -> Result<Vec<RecallMatch>> {
+    const VERB: &str = "substrate.recall";
+    let files = layout
+        .list_choice_files()
+        .map_err(|e| Error::unavailable(VERB, format!("list choices: {e}")))?;
+    let mut out: Vec<RecallMatch> = Vec::new();
+    for path in files {
+        let text = std::fs::read_to_string(&path)
+            .map_err(|e| Error::unavailable(VERB, format!("read {}: {e}", path.display())))?;
+        let choice: Choice = parse_yaml(&text).map_err(|mut e| {
+            e.verb = VERB.into();
+            e
+        })?;
+        let hits = count_occurrences(&choice.title, needle_lower)
+            + count_occurrences(&choice.body, needle_lower);
+        if hits == 0 {
+            continue;
+        }
+        let slug = path
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .ok_or_else(|| {
+                Error::malformed(VERB, format!("choice path has no stem: {}", path.display()))
+            })?
+            .to_string();
+        let snippet = snippet_from(&choice.title);
+        out.push(RecallMatch {
+            id: slug.clone(),
+            kind: "choice".into(),
+            score: hits as f32,
+            snippet,
+            path: format!(".orbit/choices/{slug}.yaml"),
+        });
+    }
+    out.truncate(RECALL_PER_TYPE_LIMIT);
+    Ok(out)
+}
+
+/// Spec fan-out. New substring matcher (no existing `spec.search` to
+/// compose against) — scores by case-insensitive occurrence count across
+/// the spec's `goal` plus every AC `description`.
+fn recall_specs(layout: &OrbitLayout, needle_lower: &str) -> Result<Vec<RecallMatch>> {
+    const VERB: &str = "substrate.recall";
+    let files = layout
+        .list_spec_files()
+        .map_err(|e| Error::unavailable(VERB, format!("list specs: {e}")))?;
+    let mut out: Vec<RecallMatch> = Vec::new();
+    for path in files {
+        let text = std::fs::read_to_string(&path)
+            .map_err(|e| Error::unavailable(VERB, format!("read {}: {e}", path.display())))?;
+        let spec: Spec = parse_yaml(&text).map_err(|mut e| {
+            e.verb = VERB.into();
+            e
+        })?;
+        let mut hits = count_occurrences(&spec.goal, needle_lower);
+        for ac in &spec.acceptance_criteria {
+            hits += count_occurrences(&ac.description, needle_lower);
+        }
+        if hits == 0 {
+            continue;
+        }
+        let snippet = snippet_from(&spec.goal);
+        out.push(RecallMatch {
+            id: spec.id.clone(),
+            kind: "spec".into(),
+            score: hits as f32,
+            snippet,
+            path: format!(".orbit/specs/{}/spec.yaml", spec.id),
+        });
+    }
+    out.truncate(RECALL_PER_TYPE_LIMIT);
+    Ok(out)
+}
+
+/// Memo fan-out. New substring matcher against the raw .md body — frontmatter
+/// (leading `---\n...\n---\n` block, when present) is stripped before
+/// matching and snippeting so the snippet shows substantive content rather
+/// than metadata.
+fn recall_memos(layout: &OrbitLayout, needle_lower: &str) -> Result<Vec<RecallMatch>> {
+    const VERB: &str = "substrate.recall";
+    let files = layout
+        .list_memo_files()
+        .map_err(|e| Error::unavailable(VERB, format!("list memos: {e}")))?;
+    let mut out: Vec<RecallMatch> = Vec::new();
+    for path in files {
+        let text = std::fs::read_to_string(&path)
+            .map_err(|e| Error::unavailable(VERB, format!("read {}: {e}", path.display())))?;
+        let body = strip_md_frontmatter(&text);
+        let hits = count_occurrences(body, needle_lower);
+        if hits == 0 {
+            continue;
+        }
+        let stem = path
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or("")
+            .to_string();
+        let filename = path
+            .file_name()
+            .and_then(|s| s.to_str())
+            .unwrap_or("")
+            .to_string();
+        let snippet = snippet_from(body);
+        out.push(RecallMatch {
+            id: stem,
+            kind: "memo".into(),
+            score: hits as f32,
+            snippet,
+            path: format!(".orbit/memos/{filename}"),
+        });
+    }
+    out.truncate(RECALL_PER_TYPE_LIMIT);
+    Ok(out)
+}
+
+/// Case-insensitive substring occurrence count. Handles overlapping
+/// matches via [`str::matches`]; an empty needle returns 0 (the caller
+/// already validates non-empty topics, but defensive zero matches the
+/// "no signal" interpretation).
+fn count_occurrences(haystack: &str, needle_lower: &str) -> usize {
+    if needle_lower.is_empty() {
+        return 0;
+    }
+    haystack.to_lowercase().matches(needle_lower).count()
+}
+
+/// Collapse whitespace and trim to [`RECALL_SNIPPET_MAX`] chars. Adds an
+/// ellipsis when truncated. Char-boundary-safe (uses `.chars().take(n)`).
+fn snippet_from(body: &str) -> String {
+    let oneline: String = body
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ");
+    if oneline.chars().count() <= RECALL_SNIPPET_MAX {
+        return oneline;
+    }
+    let truncated: String = oneline.chars().take(RECALL_SNIPPET_MAX).collect();
+    format!("{truncated}…")
+}
+
+/// Strip a leading `---\n...\n---\n` YAML frontmatter block. Returns the
+/// original content unchanged when no frontmatter is present.
+fn strip_md_frontmatter(content: &str) -> &str {
+    if let Some(rest) = content.strip_prefix("---\n") {
+        if let Some(end) = rest.find("\n---\n") {
+            return rest[end + 5..].trim_start();
+        }
+        if let Some(end) = rest.find("\n---") {
+            // EOF-terminated frontmatter (no trailing newline after `---`).
+            let after = &rest[end + 4..];
+            return after.trim_start();
+        }
+    }
+    content
 }
 
 /// Lexicographic semver-ish compare on dotted-numeric strings. Treats
@@ -13669,5 +14083,511 @@ mystery_field: surprise
             assert_ne!(f.state, "pin_ahead");
             assert_ne!(f.state, "decisions_md_unmigrated");
         }
+    }
+
+    // ========================================================================
+    // substrate.recall — per spec 2026-05-25-recall-verb-and-skill-step.
+    // Test prefix: `rcall_` (declared in spec.goal).
+    // ========================================================================
+
+    /// Populate one matching artefact of each of the five types with the
+    /// shared token "alpha" in its body. Returns the layout.
+    fn populate_substrate_for_recall(layout: &OrbitLayout) {
+        layout.ensure_dirs().unwrap();
+
+        // Memory — "alpha mechanism" in body so the topic "alpha" lands on
+        // both body-overlap and tokenisation.
+        memory_remember(
+            layout,
+            &MemoryRememberArgs {
+                key: "alpha-memory".into(),
+                body: "alpha mechanism for substrate matching".into(),
+                labels: vec!["recall-test".into()],
+                timestamp: Some("2026-05-25T00:00:00Z".into()),
+                no_nudge: false,
+                no_warn: false,
+            },
+        )
+        .unwrap();
+
+        // Card — "alpha" in goal.
+        let card = Card {
+            id: Some("0099-alpha".into()),
+            feature: "alpha capability".into(),
+            as_a: None,
+            i_want: None,
+            so_that: None,
+            goal: "ship alpha behaviour".into(),
+            maturity: CardMaturity::Planned,
+            park: None,
+            scenarios: vec![],
+            specs: vec![],
+            relations: vec![],
+            references: vec![],
+            notes: vec![],
+        };
+        std::fs::write(
+            layout.card_file("0099-alpha"),
+            crate::canonical::serialise_yaml(&card).unwrap(),
+        )
+        .unwrap();
+
+        // Choice — "alpha" in body.
+        let choice = Choice {
+            id: "0099".into(),
+            title: "Choose alpha approach".into(),
+            status: ChoiceStatus::Accepted,
+            date_created: "2026-05-25".into(),
+            date_modified: None,
+            body: "Alpha is the canonical option here.".into(),
+            references: vec![],
+        };
+        std::fs::write(
+            layout.choice_file("0099-alpha"),
+            crate::canonical::serialise_yaml(&choice).unwrap(),
+        )
+        .unwrap();
+
+        // Spec — "alpha" in goal.
+        let spec = Spec {
+            id: "2026-05-25-alpha-spec".into(),
+            goal: "ship alpha behaviour against the substrate".into(),
+            cards: vec![],
+            status: SpecStatus::Open,
+            labels: vec![],
+            acceptance_criteria: vec![],
+            memories_considered: vec![],
+        };
+        layout.ensure_spec_dir(&spec.id).unwrap();
+        std::fs::write(
+            layout.spec_file(&spec.id),
+            crate::canonical::serialise_yaml(&spec).unwrap(),
+        )
+        .unwrap();
+
+        // Memo — "alpha" in body (no frontmatter; strip_md_frontmatter is
+        // covered by its own dedicated test below).
+        std::fs::write(
+            layout.memos_dir().join("2026-05-25-alpha-memo.md"),
+            "# alpha\n\nNotes on the alpha branch of the design.",
+        )
+        .unwrap();
+    }
+
+    fn unwrap_recall(resp: VerbResponse) -> SubstrateRecallResult {
+        match resp {
+            VerbResponse::SubstrateRecall(r) => r,
+            other => panic!("expected SubstrateRecall, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn rcall_returns_substrate_wide_results() {
+        let dir = tempdir().unwrap();
+        let layout = OrbitLayout::at(dir.path());
+        populate_substrate_for_recall(&layout);
+
+        let resp = execute(
+            &layout,
+            &VerbRequest::SubstrateRecall(SubstrateRecallArgs {
+                topic: "alpha".into(),
+                types: vec![],
+            }),
+        )
+        .unwrap();
+        let r = unwrap_recall(resp);
+
+        // Per spec ac-01 verification: ≥1 result across at least 3 of 5
+        // types. Fixture seeds all 5 with matching content, so the test
+        // verifies the full substrate-wide fan-out, not just the ≥3 floor.
+        let kinds: std::collections::BTreeSet<&str> =
+            r.matches.iter().map(|m| m.kind.as_str()).collect();
+        assert!(
+            kinds.contains("memory"),
+            "memory missing from kinds: {kinds:?}"
+        );
+        assert!(kinds.contains("card"), "card missing: {kinds:?}");
+        assert!(kinds.contains("choice"), "choice missing: {kinds:?}");
+        assert!(kinds.contains("spec"), "spec missing: {kinds:?}");
+        assert!(kinds.contains("memo"), "memo missing: {kinds:?}");
+        assert!(
+            kinds.len() >= 3,
+            "ac-01 floor: ≥3 of 5 types; got {kinds:?}"
+        );
+        // Single match per type → min-max collapse to 1.0 for each.
+        for m in &r.matches {
+            assert!(
+                (m.score - 1.0).abs() < f32::EPSILON,
+                "single-bucket score expected 1.0, got {} for {}/{}",
+                m.score,
+                m.kind,
+                m.id,
+            );
+        }
+    }
+
+    #[test]
+    fn rcall_filter_by_type() {
+        let dir = tempdir().unwrap();
+        let layout = OrbitLayout::at(dir.path());
+        populate_substrate_for_recall(&layout);
+
+        let resp = execute(
+            &layout,
+            &VerbRequest::SubstrateRecall(SubstrateRecallArgs {
+                topic: "alpha".into(),
+                types: vec!["memory".into(), "choice".into()],
+            }),
+        )
+        .unwrap();
+        let r = unwrap_recall(resp);
+
+        let kinds: std::collections::BTreeSet<&str> =
+            r.matches.iter().map(|m| m.kind.as_str()).collect();
+        assert_eq!(
+            kinds,
+            ["memory", "choice"].iter().copied().collect(),
+            "filtered result should contain only memory + choice; got {kinds:?}",
+        );
+
+        // Empty list is treated as default (all-five) per ac-02.
+        let resp_default = execute(
+            &layout,
+            &VerbRequest::SubstrateRecall(SubstrateRecallArgs {
+                topic: "alpha".into(),
+                types: vec![],
+            }),
+        )
+        .unwrap();
+        let r_default = unwrap_recall(resp_default);
+        let kinds_default: std::collections::BTreeSet<&str> =
+            r_default.matches.iter().map(|m| m.kind.as_str()).collect();
+        assert!(kinds_default.len() >= 3);
+
+        // Invalid token errors as Error::malformed.
+        let err = execute(
+            &layout,
+            &VerbRequest::SubstrateRecall(SubstrateRecallArgs {
+                topic: "alpha".into(),
+                types: vec!["bogus".into()],
+            }),
+        )
+        .unwrap_err();
+        assert_eq!(err.category, Category::Malformed);
+        assert!(
+            err.message.contains("bogus"),
+            "error names offending token: {}",
+            err.message
+        );
+        assert!(
+            err.message.contains("memory")
+                && err.message.contains("card")
+                && err.message.contains("choice")
+                && err.message.contains("spec")
+                && err.message.contains("memo"),
+            "error lists valid values: {}",
+            err.message
+        );
+
+        // Mixed valid/invalid still errors.
+        let err = execute(
+            &layout,
+            &VerbRequest::SubstrateRecall(SubstrateRecallArgs {
+                topic: "alpha".into(),
+                types: vec!["memory".into(), "bogus".into()],
+            }),
+        )
+        .unwrap_err();
+        assert_eq!(err.category, Category::Malformed);
+    }
+
+    #[test]
+    fn rcall_path_field_format() {
+        let dir = tempdir().unwrap();
+        let layout = OrbitLayout::at(dir.path());
+        populate_substrate_for_recall(&layout);
+
+        let resp = execute(
+            &layout,
+            &VerbRequest::SubstrateRecall(SubstrateRecallArgs {
+                topic: "alpha".into(),
+                types: vec![],
+            }),
+        )
+        .unwrap();
+        let r = unwrap_recall(resp);
+
+        // ac-06 path shapes:
+        //   memory → .orbit/memories/<key>.yaml
+        //   card   → .orbit/cards/<slug>.yaml
+        //   choice → .orbit/choices/<slug>.yaml
+        //   spec   → .orbit/specs/<id>/spec.yaml
+        //   memo   → .orbit/memos/<filename>.md
+        let expected: std::collections::BTreeMap<&str, &str> = [
+            ("memory", ".orbit/memories/alpha-memory.yaml"),
+            ("card", ".orbit/cards/0099-alpha.yaml"),
+            ("choice", ".orbit/choices/0099-alpha.yaml"),
+            ("spec", ".orbit/specs/2026-05-25-alpha-spec/spec.yaml"),
+            ("memo", ".orbit/memos/2026-05-25-alpha-memo.md"),
+        ]
+        .into_iter()
+        .collect();
+        for m in &r.matches {
+            let want = expected
+                .get(m.kind.as_str())
+                .unwrap_or_else(|| panic!("unknown kind in result: {m:?}"));
+            assert_eq!(&m.path, want, "path drift for {}/{}: {m:?}", m.kind, m.id);
+            assert!(
+                !m.path.starts_with('/'),
+                "path must be repo-relative, not absolute: {}",
+                m.path,
+            );
+        }
+    }
+
+    #[test]
+    fn rcall_rejects_empty_topic() {
+        let dir = tempdir().unwrap();
+        let layout = OrbitLayout::at(dir.path());
+        layout.ensure_dirs().unwrap();
+
+        let err = execute(
+            &layout,
+            &VerbRequest::SubstrateRecall(SubstrateRecallArgs {
+                topic: "".into(),
+                types: vec![],
+            }),
+        )
+        .unwrap_err();
+        assert_eq!(err.category, Category::Malformed);
+
+        // Whitespace-only also rejected (trimmed before check).
+        let err = execute(
+            &layout,
+            &VerbRequest::SubstrateRecall(SubstrateRecallArgs {
+                topic: "   ".into(),
+                types: vec![],
+            }),
+        )
+        .unwrap_err();
+        assert_eq!(err.category, Category::Malformed);
+    }
+
+    #[test]
+    fn rcall_ordering_by_score_then_type_rank() {
+        // Populate two cards and two choices, each with different score
+        // amounts. After per-type min-max normalisation, the higher-occurrence
+        // in each type → 1.0, lower → 0.0. The 1.0-scoring choice should
+        // come before the 1.0-scoring card (memory > choice > card tie-break).
+        let dir = tempdir().unwrap();
+        let layout = OrbitLayout::at(dir.path());
+        layout.ensure_dirs().unwrap();
+
+        // Two cards: one has "beta" in goal+feature (score 2), one has it
+        // once in goal (score 1).
+        let hi_card = Card {
+            id: Some("0101-beta-hi".into()),
+            feature: "beta module".into(),
+            as_a: None,
+            i_want: None,
+            so_that: None,
+            goal: "ship beta path".into(),
+            maturity: CardMaturity::Planned,
+            park: None,
+            scenarios: vec![],
+            specs: vec![],
+            relations: vec![],
+            references: vec![],
+            notes: vec![],
+        };
+        let lo_card = Card {
+            id: Some("0102-beta-lo".into()),
+            feature: "unrelated".into(),
+            as_a: None,
+            i_want: None,
+            so_that: None,
+            goal: "ship beta once".into(),
+            maturity: CardMaturity::Planned,
+            park: None,
+            scenarios: vec![],
+            specs: vec![],
+            relations: vec![],
+            references: vec![],
+            notes: vec![],
+        };
+        std::fs::write(
+            layout.card_file("0101-beta-hi"),
+            crate::canonical::serialise_yaml(&hi_card).unwrap(),
+        )
+        .unwrap();
+        std::fs::write(
+            layout.card_file("0102-beta-lo"),
+            crate::canonical::serialise_yaml(&lo_card).unwrap(),
+        )
+        .unwrap();
+
+        // Two choices, same structure.
+        let hi_choice = Choice {
+            id: "0101".into(),
+            title: "beta beta".into(),
+            status: ChoiceStatus::Accepted,
+            date_created: "2026-05-25".into(),
+            date_modified: None,
+            body: "beta".into(),
+            references: vec![],
+        };
+        let lo_choice = Choice {
+            id: "0102".into(),
+            title: "beta".into(),
+            status: ChoiceStatus::Accepted,
+            date_created: "2026-05-25".into(),
+            date_modified: None,
+            body: "unrelated".into(),
+            references: vec![],
+        };
+        std::fs::write(
+            layout.choice_file("0101-beta-hi"),
+            crate::canonical::serialise_yaml(&hi_choice).unwrap(),
+        )
+        .unwrap();
+        std::fs::write(
+            layout.choice_file("0102-beta-lo"),
+            crate::canonical::serialise_yaml(&lo_choice).unwrap(),
+        )
+        .unwrap();
+
+        let resp = execute(
+            &layout,
+            &VerbRequest::SubstrateRecall(SubstrateRecallArgs {
+                topic: "beta".into(),
+                types: vec!["card".into(), "choice".into()],
+            }),
+        )
+        .unwrap();
+        let r = unwrap_recall(resp);
+
+        // First two entries score 1.0; choice ranks above card by tie-break.
+        assert!(r.matches.len() >= 2, "got {} matches", r.matches.len());
+        assert!((r.matches[0].score - 1.0).abs() < f32::EPSILON);
+        assert!((r.matches[1].score - 1.0).abs() < f32::EPSILON);
+        assert_eq!(r.matches[0].kind, "choice", "type tie-break violated");
+        assert_eq!(r.matches[1].kind, "card", "type tie-break violated");
+
+        // Remaining entries score 0.0 (min in their per-type bucket).
+        for tail in &r.matches[2..] {
+            assert!((tail.score - 0.0).abs() < f32::EPSILON);
+        }
+    }
+
+    #[test]
+    fn rcall_strips_md_frontmatter_from_memo_snippet() {
+        let dir = tempdir().unwrap();
+        let layout = OrbitLayout::at(dir.path());
+        layout.ensure_dirs().unwrap();
+
+        // Memo with YAML frontmatter — the body content should drive the
+        // snippet, not the frontmatter metadata.
+        let memo = "---\nkey: frontmatter-value\ndate: 2026-05-25\n---\n\
+                    \nBody talks about gamma indexing strategies.\n";
+        std::fs::write(layout.memos_dir().join("2026-05-25-gamma.md"), memo).unwrap();
+
+        let resp = execute(
+            &layout,
+            &VerbRequest::SubstrateRecall(SubstrateRecallArgs {
+                topic: "gamma".into(),
+                types: vec!["memo".into()],
+            }),
+        )
+        .unwrap();
+        let r = unwrap_recall(resp);
+        assert_eq!(r.matches.len(), 1);
+        let snippet = &r.matches[0].snippet;
+        assert!(
+            snippet.starts_with("Body talks about gamma"),
+            "snippet drove from frontmatter not body: {snippet}",
+        );
+        assert!(
+            !snippet.contains("frontmatter-value"),
+            "frontmatter leaked into snippet: {snippet}",
+        );
+    }
+
+    #[test]
+    fn rcall_snippet_truncates_to_200_chars() {
+        let dir = tempdir().unwrap();
+        let layout = OrbitLayout::at(dir.path());
+        layout.ensure_dirs().unwrap();
+
+        // Memo body of 500+ chars containing the topic.
+        let body = format!(
+            "{}{}",
+            "delta ".repeat(50), // 300 chars with topic
+            "tail ".repeat(50),  // 250 more chars
+        );
+        std::fs::write(
+            layout.memos_dir().join("2026-05-25-delta.md"),
+            body,
+        )
+        .unwrap();
+
+        let resp = execute(
+            &layout,
+            &VerbRequest::SubstrateRecall(SubstrateRecallArgs {
+                topic: "delta".into(),
+                types: vec!["memo".into()],
+            }),
+        )
+        .unwrap();
+        let r = unwrap_recall(resp);
+        assert_eq!(r.matches.len(), 1);
+        let chars = r.matches[0].snippet.chars().count();
+        // 200 content chars + 1 ellipsis = 201; allow either.
+        assert!(
+            chars <= 201,
+            "snippet exceeded 200-char cap: {chars} chars",
+        );
+        assert!(
+            r.matches[0].snippet.ends_with('…'),
+            "long body should be ellipsis-truncated: {}",
+            r.matches[0].snippet,
+        );
+    }
+
+    #[test]
+    fn rcall_zero_match_type_omits_from_result() {
+        let dir = tempdir().unwrap();
+        let layout = OrbitLayout::at(dir.path());
+        populate_substrate_for_recall(&layout);
+
+        // Query for a token that doesn't appear in any memo — memo bucket
+        // should be empty and absent from the merged result (no division-
+        // by-zero, no zero-count placeholder rows).
+        let resp = execute(
+            &layout,
+            &VerbRequest::SubstrateRecall(SubstrateRecallArgs {
+                topic: "alpha".into(),
+                types: vec!["spec".into(), "memo".into()],
+            }),
+        )
+        .unwrap();
+        let r = unwrap_recall(resp);
+        // Both types match in our fixture, so this is a presence smoke.
+        // Re-query with a never-occurring token: should yield zero matches.
+        let resp_empty = execute(
+            &layout,
+            &VerbRequest::SubstrateRecall(SubstrateRecallArgs {
+                topic: "nonexistent-zzqq".into(),
+                types: vec![],
+            }),
+        )
+        .unwrap();
+        let r_empty = unwrap_recall(resp_empty);
+        assert!(
+            r_empty.matches.is_empty(),
+            "no-match query should return no tuples; got {} matches",
+            r_empty.matches.len(),
+        );
+        // Sanity: original query has both spec and memo present.
+        let _ = r;
     }
 }

@@ -26,6 +26,34 @@ Agent prose follows the discipline in `.orbit/STYLE.md` (see card 0026 — `.orb
 - **Goal-scoped work** where the cluster of cards isn't pre-determined ("ship X" with no card list)
 - **Lightweight pre-flight** where the approach is already decided — use closed mode (§ Closed mode below)
 
+## Recall pre-flight
+
+Before classifying the design space or walking the questions, surface
+prior substrate that touches this tabletop's card cluster so the
+session doesn't re-litigate decisions already encoded in memories,
+cards, choices, prior specs, or memos. This is a **structural step**
+at skill entry, not advice. Per spec
+2026-05-25-recall-verb-and-skill-step ac-05 and card 0044
+(substrate-recall) — the pull-mode counterpart to the substrate-push
+hook surface. Mirrors the structural-investigation pattern at Q8.
+
+**Scope derivation.** Iterate the cluster cards (the `Cards in scope:`
+set named at session open). For each card, run a recall on the card's
+slug; if the card's `references[]` field carries non-pointer entries
+that hint at additional topic strings (subsystem names, decisions, prior
+session keys), recall on those too.
+
+**Invocation.**
+
+```bash
+orbit recall "<card-slug-or-topic>" --json | jq -r '.data.result.matches[] | "\(.score) \(.type) \(.id)\t\(.path)\n  \(.snippet)"' | head -20
+```
+
+Quote a 3-5 line summary of the top hits per card inline. The `path`
+field on each match resolves to a file you can read in full when a
+snippet earns a deeper look. Zero matches is a valid outcome — log
+"recall: no prior substrate on `<topic>`" and proceed.
+
 ## Trivial-skip advisory
 
 When the work appears trivial — single-line change, typo fix, single-AC scope — the skill surfaces a prose nudge at session open:

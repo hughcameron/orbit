@@ -15,6 +15,34 @@ Stop coding and start investigating when the problem is unclear. Most bugs and b
 - Error messages haven't been read carefully
 - The docs haven't been checked
 
+## Recall pre-flight
+
+Before opening the research thread or invoking code-investigate,
+surface prior substrate that touches the topic so the research doesn't
+re-derive answers already encoded in memories, cards, choices, prior
+specs, or memos. This is a **structural step** at skill entry, not
+advice — runs alongside the existing code-investigate orchestration
+below, not in place of it. Per spec
+2026-05-25-recall-verb-and-skill-step ac-05 and card 0044
+(substrate-recall) — the pull-mode counterpart to the substrate-push
+hook surface.
+
+**Scope derivation.** The topic argument passed at invocation IS the
+recall topic. `/orb:researcher <topic>` carries it directly; if no
+argument was passed, use the bypass path described in the orchestration
+section below.
+
+**Invocation.**
+
+```bash
+orbit recall "<topic>" --json | jq -r '.data.result.matches[] | "\(.score) \(.type) \(.id)\t\(.path)\n  \(.snippet)"' | head -20
+```
+
+Quote a 3-5 line summary inline. The `path` field on each match
+resolves to a file you can read in full when a snippet earns a deeper
+look. Zero matches is a valid outcome — log "recall: no prior
+substrate on `<topic>`" and proceed to code-investigate.
+
 ## Your Approach
 
 **Orchestrate `/orb:code-investigate` (broad mode) BEFORE the research thread opens.** Per choice 0029 (pipeline-orchestrates-investigation), researcher is a pipeline-stage moment where investigation must fire structurally, not as advice. The orchestrated invocation seeds the research thread with empirical context rather than working-memory inference.

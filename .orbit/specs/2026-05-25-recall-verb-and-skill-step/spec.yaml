@@ -78,7 +78,7 @@ acceptance_criteria:
     passes; manual smoke test `orbit recall recall` returns ≥1 result across
     at least 3 of the 5 types against this repo's substrate.
   gate: true
-  checked: false
+  checked: true
 - id: ac-02
   description: |
     `orbit recall <topic> --type <list>` filters results to the named
@@ -92,7 +92,7 @@ acceptance_criteria:
     smoke test `orbit recall recall --type memory,choice` returns only
     memory + choice results against this repo.
   gate: true
-  checked: false
+  checked: true
 - id: ac-03
   description: |
     `orbit recall <topic> --json` returns the canonical JSON envelope
@@ -107,7 +107,7 @@ acceptance_criteria:
     passes; smoke test `orbit --json recall recall | jq .data.result`
     returns a parseable object with `matches` array.
   gate: true
-  checked: false
+  checked: true
 - id: ac-04
   description: |
     No regression on existing per-type verbs. `orbit memory match`,
@@ -121,7 +121,7 @@ acceptance_criteria:
     Specifically, the existing memory-match / card-search / choice-search
     test modules pass with no test removed or modified.
   gate: true
-  checked: false
+  checked: true
 - id: ac-05
   description: |
     Six pipeline SKILL.md files gain a "Recall pre-flight" section
@@ -157,7 +157,7 @@ acceptance_criteria:
     test argument loads cleanly (no broken prose, no dangling section
     headers).
   gate: true
-  checked: false
+  checked: true
   ac_type: doc
 - id: ac-06
   description: |
@@ -172,4 +172,4 @@ acceptance_criteria:
     Verification: `cargo test --workspace rcall_path_field_format` passes,
     asserting each type's path shape matches the above pattern via fixture.
   gate: false
-  checked: false
+  checked: true

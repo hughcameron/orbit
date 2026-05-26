@@ -569,6 +569,26 @@ fn tool_descriptors() -> Vec<Value> {
             }
         }),
         json!({
+            "name": "substrate.recall",
+            "description": "Substrate-wide ranked search across memory, card, choice, spec, and memo artefacts. Returns tuples (id, type, score, snippet, path) sorted by score desc, type rank (memory > choice > card > spec > memo), then id asc. Per spec 2026-05-25-recall-verb-and-skill-step and card 0044.",
+            "inputSchema": {
+                "type": "object",
+                "required": ["topic"],
+                "properties": {
+                    "topic": { "type": "string", "description": "Free-text recall topic." },
+                    "types": {
+                        "type": "array",
+                        "items": {
+                            "type": "string",
+                            "enum": ["memory", "card", "choice", "spec", "memo"]
+                        },
+                        "description": "Optional fan-out filter. Empty (default) = all five."
+                    }
+                },
+                "additionalProperties": false
+            }
+        }),
+        json!({
             "name": "choice.show",
             "description": "Show a choice by id.",
             "inputSchema": {

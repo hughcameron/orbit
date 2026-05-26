@@ -27,6 +27,33 @@ The skill takes an orbit-state spec id (e.g. `orbit-state-v0.1`, `0042`) — the
 
 A reviewer who watched you build something has confirmation bias. A fresh agent reads the spec cold via `orbit spec show`. Context-separated review catches problems that same-session review misses.
 
+## Recall pre-flight
+
+Before reading the spec or forming a verdict, surface prior substrate
+that touches this spec's topic so the review can identify prior
+decisions the spec contradicts, predecessors it should cite, or
+constraints from earlier iterations it should honour. This is a
+**structural step** at skill entry, not advice. Per spec
+2026-05-25-recall-verb-and-skill-step ac-05 and card 0044
+(substrate-recall) — the pull-mode counterpart to the substrate-push
+hook surface.
+
+**Scope derivation.** Pick the topic from the spec's `goal` plus each
+AC's `description`. For a focused review, recall once on the goal; for
+broad-surface specs (multiple cards, ≥5 ACs), recall additionally on
+the first sentence of each AC description.
+
+**Invocation.**
+
+```bash
+orbit recall "<topic>" --json | jq -r '.data.result.matches[] | "\(.score) \(.type) \(.id)\t\(.path)\n  \(.snippet)"' | head -20
+```
+
+Quote a 3-5 line summary inline. Any prior spec or choice the recall
+surfaces is a candidate review finding (REQUEST_CHANGES if the new spec
+contradicts it without rationale). Zero matches is a valid outcome —
+log "recall: no prior substrate on `<topic>`" and proceed.
+
 ## Instructions
 
 ### 1. Gather the Spec

@@ -89,6 +89,33 @@ This skill does not attempt to manage concurrent in-progress specs —
 multi-claim is out of scope. If the agent is juggling multiple specs,
 it must invoke this skill once per spec with the explicit ID.
 
+## Recall pre-flight
+
+Before reading the spec or writing any code, surface prior substrate
+touching the AC at hand so implementation doesn't re-invent decisions
+encoded in memories, cards, choices, prior specs, or memos. This is a
+**structural step**, not advice — `orbit recall <topic>` runs at every
+skill entry. Per spec 2026-05-25-recall-verb-and-skill-step ac-05 and
+card 0044 (substrate-recall) — the pull-mode counterpart to the
+substrate-push hook surface.
+
+**Scope derivation.** Pick the topic from the AC description text plus
+the tabletop sidecar at `.orbit/specs/<spec-id>/tabletop.md` (when
+present). For the first AC, run one recall on the AC description; for
+subsequent ACs, run an additional recall only if the next AC's text
+introduces a meaningfully different topic.
+
+**Invocation.**
+
+```bash
+orbit recall "<topic>" --json | jq -r '.data.result.matches[] | "\(.score) \(.type) \(.id)\t\(.path)\n  \(.snippet)"' | head -20
+```
+
+Quote a 3-5 line summary of the top hits inline before starting the AC's
+work. The `path` field on each match resolves to a file you can read in
+full when a snippet earns a deeper look. Zero matches is a valid
+outcome — log "recall: no prior substrate on `<topic>`" and proceed.
+
 ## Pre-flight
 
 Before any code is written, the agent runs the following sequence:

@@ -21,6 +21,33 @@ Agent prose follows the discipline in `.orbit/STYLE.md` (see also card 0026 — 
 
 The skill takes an orbit-state spec id — the spec's `acceptance_criteria` are the implementation contract. The branch/PR argument is optional; if omitted the current branch is used.
 
+## Recall pre-flight
+
+Before running tests or evaluating the diff, surface prior substrate
+that touches the changed surface so the review can flag regressions
+against decisions encoded in memories, choices, or prior specs. This is
+a **structural step** at skill entry, not advice. Per spec
+2026-05-25-recall-verb-and-skill-step ac-05 and card 0044
+(substrate-recall) — the pull-mode counterpart to the substrate-push
+hook surface.
+
+**Scope derivation.** Pick the topic from the PR's changed paths
+(strip extension + leading directories, e.g. `crates/core/src/verbs.rs`
+→ topic `verbs` or `core verbs`) and the spec id under review. Recall
+once on the spec id, and once per distinct subsystem touched by the
+diff.
+
+**Invocation.**
+
+```bash
+orbit recall "<topic>" --json | jq -r '.data.result.matches[] | "\(.score) \(.type) \(.id)\t\(.path)\n  \(.snippet)"' | head -20
+```
+
+Quote a 3-5 line summary inline. Any prior choice the recall surfaces
+on a changed surface is a candidate review finding (REQUEST_CHANGES if
+the implementation contradicts it). Zero matches is a valid outcome —
+log "recall: no prior substrate on `<topic>`" and proceed.
+
 ## Instructions
 
 ### 1. Identify What to Review

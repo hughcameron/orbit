@@ -28,7 +28,8 @@ use orbit_state_core::{
     AuditTopologyArgs, AuditTopologyResult, SubstrateClassifyArgs, SubstrateClassifyResult,
     TopologySetupArgs, TopologySetupResult,
     CardListArgs, CardSearchArgs, CardShowArgs, CardShowResult,
-    CardSpecsArgs, CardSpecsResult, CardTreeArgs, CardTreeEdge, CardTreeResult, ChoiceListArgs,
+    CardSpecsArgs, CardSpecsResult, CardTreeArgs, CardTreeEdge, CardTreeResult,
+    SubstrateRecallArgs, SubstrateRecallResult, ChoiceListArgs,
     ChoiceListResult, GraphArgs, GraphFormat, GraphResult, OverviewArgs, OverviewResult,
     ChoiceSearchArgs, ChoiceShowArgs, ChoiceShowResult, MemoryListArgs, MemoryListResult,
     MemoryMatchArgs, MemoryMatchResult, MemoryRememberArgs, MemoryRememberResult,
@@ -162,6 +163,21 @@ enum Command {
     Substrate {
         #[command(subcommand)]
         action: SubstrateAction,
+    },
+    /// Substrate-wide ranked search across memory, card, choice, spec, and
+    /// memo artefacts. Returns ranked tuples `(id, type, score, snippet,
+    /// path)` so the agent can drill into the relevant prior artefact at
+    /// the moment that matters. Per spec
+    /// 2026-05-25-recall-verb-and-skill-step and card 0044.
+    Recall {
+        /// Free-text topic to recall against — typically a card slug, AC
+        /// description fragment, spec id, or PR-diff path slice.
+        topic: String,
+        /// Restrict the fan-out to these artefact types. Comma-separated;
+        /// values from {memory, card, choice, spec, memo}. Default (omitted)
+        /// fans across all five.
+        #[arg(long = "type")]
+        types: Option<String>,
     },
     /// Substrate hygiene check — round-trip every canonical file (ac-16) and
     /// rebuild the index from files (ac-17). Exits non-zero on any drift.
@@ -1485,6 +1501,25 @@ fn build_request(_layout: &OrbitLayout, command: &Command) -> Result<VerbRequest
                 VerbRequest::SubstrateClassify(SubstrateClassifyArgs::default())
             }
         },
+        Command::Recall { topic, types } => {
+            // Comma-separated `--type memory,choice` is the operator surface;
+            // the wire arg is a `Vec<String>` of canonical tokens. Empty
+            // string is folded into the default (all-five) at the verb layer
+            // per ac-02.
+            let types: Vec<String> = types
+                .as_deref()
+                .map(|s| {
+                    s.split(',')
+                        .map(|t| t.trim().to_string())
+                        .filter(|t| !t.is_empty())
+                        .collect()
+                })
+                .unwrap_or_default();
+            VerbRequest::SubstrateRecall(SubstrateRecallArgs {
+                topic: topic.clone(),
+                types,
+            })
+        }
         Command::Graph { card, depth, format } => {
             let parsed_format = match format.as_str() {
                 "mermaid" => GraphFormat::Mermaid,
@@ -1558,6 +1593,7 @@ fn render_human(response: &VerbResponse) {
         VerbResponse::AuditConformance(result) => render_audit_conformance(result),
         VerbResponse::TopologySetup(result) => render_topology_setup(result),
         VerbResponse::SubstrateClassify(result) => render_substrate_classify(result),
+        VerbResponse::SubstrateRecall(result) => render_substrate_recall(result),
         VerbResponse::ChoiceShow(result) => render_choice_show(result),
         VerbResponse::ChoiceList(result) | VerbResponse::ChoiceSearch(result) => {
             render_choice_list(result)
@@ -1920,6 +1956,25 @@ fn render_substrate_classify(result: &SubstrateClassifyResult) {
         orbit_state_core::SubstrateLayoutState::MixedUndotted => "mixed-undotted",
     };
     println!("substrate.classify: {kebab}");
+}
+
+fn render_substrate_recall(result: &SubstrateRecallResult) {
+    if result.matches.is_empty() {
+        println!("substrate.recall: no matches");
+        return;
+    }
+    println!(
+        "substrate.recall: {} match{}",
+        result.matches.len(),
+        if result.matches.len() == 1 { "" } else { "es" },
+    );
+    for m in &result.matches {
+        println!(
+            "  {:.3}  {:6}  {}\t{}",
+            m.score, m.kind, m.id, m.path,
+        );
+        println!("        {}", m.snippet);
+    }
 }
 
 fn render_topology_setup(result: &TopologySetupResult) {
