@@ -4,7 +4,7 @@ as_a: program owner who can't read every spec
 i_want: tabletop and spec generation to front-load "is this the real thing or a placeholder?" so implementing agents work parallel and uninterrupted, with conformance audit as a post-hoc backstop
 so_that: the recurring failure mode — ambitious capability claim at the card level + narrow AC verifications at the spec level + literal implementation = output narrower than intent — stops being the default outcome; deferred-to-spec-N becomes visible debt instead of invisible deferral
 goal: ambition-vs-verification gaps are caught upstream at tabletop (capability framing + per-scenario verification classification) and enforced at /orb:spec (halt on missing classification), with conformance audit as a post-hoc backstop on card-coverage; implementing agents read pre-verified specs and run without mid-flight scope escalations
-maturity: planned
+maturity: emerging
 scenarios:
 - name: Tabletop names the underlying capability before carving scope
   given: a tabletop session opens on a card cluster
