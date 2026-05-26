@@ -36,7 +36,8 @@ scenarios:
   when: the audit walks specs that closed before this card's first spec landed
   then: the finding fires only against specs closed AFTER the audit logic ships; pre-ship specs are out of scope by audit-window contract (no spam from historical narrow specs the new discipline didn't exist for)
   gate: false
-specs: []
+specs:
+- .orbit/specs/2026-05-26-scope-discipline-front-loaded/spec.yaml
 relations:
 - card: 0019-tabletop
   type: feeds

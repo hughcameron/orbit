@@ -30,7 +30,7 @@ goal: |
   Test prefix for this spec: scope.
 cards:
 - 0045-scope-discipline
-status: open
+status: closed
 labels:
 - spec
 acceptance_criteria:
