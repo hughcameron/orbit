@@ -1,0 +1,17 @@
+id: fc34d746-49b3-44c3-a44c-7e29f5e8c4d9
+started_at: 2026-05-26T11:19:52.813902229Z
+ended_at: 2026-05-26T11:19:52.813902229Z
+distillate: |-
+  Top of the queue, deterministic order:
+
+  1. **`/orb:distill .orbit/memos/2026-05-16-verify-swallows-future-version.md`** — 10 days stale, oldest of two memos past the 7-day threshold. This is the algorithm's pick.
+  2. **`/orb:distill .orbit/memos/2026-05-17-read-the-cited-source`** — second stale memo, same staleness tiebreaker.
+  3. **Two `ready_for_tabletop` cards** behind the memos in rank. Last session's carry-forward flagged card **0044 (unified search + FTS5/BM25)** as the natural first R&D dogfood of the new tabletop/spec scope discipline shipped in 0.4.38.
+
+  Background context worth knowing:
+  - One **open spec** carries over: `2026-05-20-memory-match-bm25` — likely subsumed by the card 0044 work, so probably folded rather than driven on its own.
+  - **CLI verb-surface cull** is queued as a single-agent task (55 → ~45 verbs, drop routine subsystem + unused verbs).
+  - Two **non-blocking polish findings** from last session's review-pr (strip_closed_at dedup + stale alphabetical-field-order comment).
+
+  My recommendation: take the algorithm's pick — distill the 10-day memo first. It's a one-shot, clears the staleness, and unblocks the two `ready_for_tabletop` cards under the rank.
+labels: []

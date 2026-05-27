@@ -1,0 +1,16 @@
+id: 9f214961-8237-4077-bc5b-6898be3ef702
+started_at: 2026-05-26T01:54:59.675085323Z
+ended_at: 2026-05-26T01:54:59.675085323Z
+distillate: |-
+  Drive complete. PR #39 is yours to merge when ready — guided autonomy stops here.
+
+  **What shipped**
+  - `orbit recall <topic>` / `substrate.recall` MCP wire verb with per-type min-max normalisation
+  - Six pipeline SKILL.md files gained "Recall pre-flight" sections
+  - Card 0044 maturity bumped `planned → emerging`
+  - 9 new tests (8 `rcall_` unit + 1 parity); 564/564 workspace tests passing
+  - Spec closed; drive at `stage: complete`
+
+  **Memory captured**
+  - Stale prose in `/orb:implement` SKILL.md referencing the long-ported `plugins/orb/scripts/orbit-acceptance.sh` — worth a small cleanup spec.
+labels: []

@@ -1,0 +1,12 @@
+id: 94231059-5c2c-42a3-950d-4210fd8dcd8c
+started_at: 2026-05-26T03:41:59.940888488Z
+ended_at: 2026-05-26T03:41:59.940888488Z
+distillate: |-
+  /orb:distill .orbit/memos/2026-05-16-verify-swallows-future-version.md
+
+  Oldest of two stale memos (10 days, past the 7-day threshold), promoted ahead of the two `ready_for_tabletop` cards by the staleness tiebreaker — both memos outrank both cards under the ranking algorithm.
+
+  + 3 other items deferred — ask if you want them.
+
+  Note: your prompt directs to `/orb:tabletop 45` (card 0045) as the queued move. That's the third-ranked item by the deterministic algorithm, behind both stale memos. Confirm which to take.
+labels: []
