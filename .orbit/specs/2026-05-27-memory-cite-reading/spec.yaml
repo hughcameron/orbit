@@ -27,7 +27,7 @@ goal: |
   Test prefix for this spec: cite.
 cards:
 - 0037-memory-gates-decisions
-status: open
+status: closed
 labels:
 - spec
 acceptance_criteria:

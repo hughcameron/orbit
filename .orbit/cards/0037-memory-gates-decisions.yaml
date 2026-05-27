@@ -38,6 +38,7 @@ scenarios:
   gate: false
 specs:
 - .orbit/specs/2026-05-19-memory-gates-decisions/spec.yaml
+- .orbit/specs/2026-05-27-memory-cite-reading/spec.yaml
 relations:
 - card: 0023-memory-loop
   type: depends-on
