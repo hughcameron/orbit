@@ -598,6 +598,7 @@ pub fn expected_envelope_for_spec_close_force() -> String {
         forced_unchecked: vec!["ac-02".into()],
         deferrable_open: vec!["ac-03".into()],
         forced_unreconciled: vec![],
+        forced_uncited_evidence: vec![],
         topology_warnings: vec![],
     });
     envelope_ok_string(&response).expect("infallible")
@@ -714,6 +715,7 @@ pub fn expected_envelope_for_spec_close_only_deferrable() -> String {
         forced_unchecked: vec![],
         deferrable_open: vec!["ac-02".into()],
         forced_unreconciled: vec![],
+        forced_uncited_evidence: vec![],
         topology_warnings: vec![],
     });
     envelope_ok_string(&response).expect("infallible")

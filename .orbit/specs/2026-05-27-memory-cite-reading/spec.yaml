@@ -53,7 +53,7 @@ acceptance_criteria:
     `cites: []` via serde default; re-serialising it does NOT write `cites: []` to disk so
     the file remains byte-identical. Test prefix: cite.
   gate: true
-  checked: false
+  checked: true
 - id: ac-02
   description: |
     `orbit memory match` exposes cite-shape on every returned memory in its JSON output.
@@ -65,7 +65,7 @@ acceptance_criteria:
     memories with cites, some without) carries the cites field on each result; empty array
     on cite-less memories, populated array on memories with cites. Test prefix: cite.
   gate: true
-  checked: false
+  checked: true
 - id: ac-03
   description: |
     `Spec.memories_considered` entry gains an optional `cite_evidence` shape carrying a list
@@ -78,7 +78,7 @@ acceptance_criteria:
     rejected with type-checked error when shape is wrong (e.g. missing read_at, non-string
     excerpt). Existing specs without the field load unchanged. Test prefix: cite.
   gate: true
-  checked: false
+  checked: true
 - id: ac-04
   description: |
     `orbit spec close` pre-flight gains a second pass that iterates entries in
@@ -99,7 +99,7 @@ acceptance_criteria:
     cites; succeeds when both cites have evidence; succeeds unchanged on memories without
     cites. Test prefix: cite.
   gate: true
-  checked: false
+  checked: true
 - id: ac-05
   description: |
     plugins/orb/skills/spec/SKILL.md gains prose naming the cite-read step. For each memory
@@ -119,7 +119,7 @@ acceptance_criteria:
     tabletop halt-condition #2 (cite-read evidence must include a content-derived value, not
     a boolean). Test prefix: cite.
   gate: true
-  checked: false
+  checked: true
   ac_type: doc
 - id: ac-06
   description: |
@@ -131,7 +131,7 @@ acceptance_criteria:
     via MCP with two cites; (b) match via MCP and assert cites field; (c) remember via MCP
     without --cite; (d) match via MCP and assert empty cites field. Test prefix: cite.
   gate: true
-  checked: false
+  checked: true
 - id: ac-07
   description: |
     Regression suite — existing cite-less memories in the current `.orbit/memories/` corpus
@@ -142,7 +142,7 @@ acceptance_criteria:
 
     Verification: capability. Test prefix: cite.
   gate: true
-  checked: false
+  checked: true
 memories_considered:
 - key: spec-skill-md-fields-vs-schema
   disposition: adopted

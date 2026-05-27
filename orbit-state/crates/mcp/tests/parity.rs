@@ -1148,3 +1148,133 @@ fn setup_files_mcp_style_drift_keep_envelope_matches() {
     let envelope = inner_envelope_text(&inner);
     assert_eq!(envelope, common::expected_envelope_for_setup_files_style_keep());
 }
+
+// ----- ac-06: memory.remember --cite + memory.match cites parity -----
+//
+// Per spec 2026-05-27-memory-cite-reading ac-06: the MCP server exposes
+// the new `cites` argument on memory.remember and the new `cites` field on
+// memory.match output. These tests exercise both surfaces via the live
+// MCP binary to assert state-mutation parity (cites land on disk via MCP
+// identically to the CLI path) and wire-shape parity (memory.match output
+// carries `cites` on every match result).
+
+#[test]
+fn cite_remember_via_mcp_with_two_cites_writes_cites_field() {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::create_dir_all(dir.path().join(".orbit")).unwrap();
+    let inner = run_mcp_tools_call(
+        dir.path(),
+        json!({
+            "name": "memory.remember",
+            "arguments": {
+                "key": "mcp-cite",
+                "body": "cited body",
+                "labels": ["card-x"],
+                "cites": ["docs/a.md", "docs/b.md"],
+            }
+        }),
+    );
+    let envelope_text = inner_envelope_text(&inner);
+    let envelope: Value = serde_json::from_str(&envelope_text).unwrap();
+    let memory = &envelope["data"]["result"]["memory"];
+    let cites = memory["cites"].as_array().expect("cites array");
+    assert_eq!(cites.len(), 2);
+    assert_eq!(cites[0]["path"].as_str(), Some("docs/a.md"));
+    assert_eq!(cites[1]["path"].as_str(), Some("docs/b.md"));
+    // On-disk: the YAML carries both cites.
+    let yaml = std::fs::read_to_string(dir.path().join(".orbit/memories/mcp-cite.yaml")).unwrap();
+    assert!(yaml.contains("docs/a.md"), "first cite missing on disk: {yaml}");
+    assert!(yaml.contains("docs/b.md"), "second cite missing on disk: {yaml}");
+}
+
+#[test]
+fn cite_remember_via_mcp_without_cites_omits_cites_field_on_disk() {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::create_dir_all(dir.path().join(".orbit")).unwrap();
+    let inner = run_mcp_tools_call(
+        dir.path(),
+        json!({
+            "name": "memory.remember",
+            "arguments": {
+                "key": "mcp-no-cite",
+                "body": "plain body",
+                "labels": [],
+            }
+        }),
+    );
+    let envelope_text = inner_envelope_text(&inner);
+    let envelope: Value = serde_json::from_str(&envelope_text).unwrap();
+    // On the wire (`remember` result), the on-disk Memory shape is echoed —
+    // empty cites are omitted via `skip_serializing_if`.
+    let memory = &envelope["data"]["result"]["memory"];
+    assert!(
+        memory.get("cites").is_none(),
+        "cite-less memory must omit `cites` on remember response: {memory}",
+    );
+    let yaml = std::fs::read_to_string(dir.path().join(".orbit/memories/mcp-no-cite.yaml")).unwrap();
+    assert!(
+        !yaml.contains("cites:"),
+        "cite-less memory must omit `cites:` on disk: {yaml}",
+    );
+}
+
+#[test]
+fn cite_match_via_mcp_exposes_cites_on_every_result() {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::create_dir_all(dir.path().join(".orbit")).unwrap();
+    // Plant a cited memory.
+    run_mcp_tools_call(
+        dir.path(),
+        json!({
+            "name": "memory.remember",
+            "arguments": {
+                "key": "match-cited",
+                "body": "decision-moment mechanism for the parity test",
+                "labels": ["card-parity"],
+                "cites": ["docs/cited.md"],
+            }
+        }),
+    );
+    // Plant a cite-less memory with overlapping shape.
+    run_mcp_tools_call(
+        dir.path(),
+        json!({
+            "name": "memory.remember",
+            "arguments": {
+                "key": "match-uncited",
+                "body": "decision-moment mechanism for the parity test",
+                "labels": ["card-parity"],
+            }
+        }),
+    );
+    let inner = run_mcp_tools_call(
+        dir.path(),
+        json!({
+            "name": "memory.match",
+            "arguments": {
+                "topic": "decision mechanism parity",
+                "labels": ["card-parity"],
+            }
+        }),
+    );
+    let envelope_text = inner_envelope_text(&inner);
+    let envelope: Value = serde_json::from_str(&envelope_text).unwrap();
+    let matches = envelope["data"]["result"]["matches"]
+        .as_array()
+        .expect("matches array");
+    assert_eq!(matches.len(), 2, "both memories must match: {envelope}");
+    for m in matches {
+        let memory = &m["memory"];
+        let cites = memory
+            .get("cites")
+            .and_then(Value::as_array)
+            .expect("every match.memory must carry cites field");
+        let key = memory["key"].as_str().unwrap();
+        if key == "match-cited" {
+            assert_eq!(cites.len(), 1);
+            assert_eq!(cites[0]["path"].as_str(), Some("docs/cited.md"));
+        } else {
+            assert!(cites.is_empty(), "uncited match must have empty cites");
+        }
+    }
+}

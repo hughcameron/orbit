@@ -586,6 +586,7 @@ mod tests {
             body: "recut at Claude-pace".into(),
             timestamp: "2026-05-07T00:00:00Z".into(),
             labels: vec![],
+            cites: vec![],
         };
         write_yaml(
             layout.memory_file("estimate-inflation-guard"),

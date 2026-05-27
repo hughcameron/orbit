@@ -527,6 +527,7 @@ fn run_migration_b(repo: &Path, verify_only: bool) -> anyhow::Result<()> {
             body,
             timestamp,
             labels: mem.labels(),
+            cites: vec![],
         };
         if !verify_only {
             std::fs::create_dir_all(&memories_dir)?;
