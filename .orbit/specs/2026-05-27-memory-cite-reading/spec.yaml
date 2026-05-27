@@ -33,18 +33,25 @@ labels:
 acceptance_criteria:
 - id: ac-01
   description: |
-    Memory record gains an optional `cites` field carrying a list of cite entries
-    (`{ path: String }`) representing local file paths to authoritative sources. The
-    `orbit memory remember --cite <path>` CLI flag accepts repeated occurrences. The field
-    round-trips through remember -> SQLite -> show -> match without loss. Memories created
-    without --cite store `cites: []` and continue to operate exactly as before this spec
-    (backward-compat per spec goal).
+    Memory record (`Memory` struct in orbit-state/crates/core/src/schema.rs) gains an optional
+    `cites` field carrying a list of cite entries (`{ path: String }`) representing local file
+    paths to authoritative sources. The `orbit memory remember --cite <path>` CLI flag accepts
+    repeated occurrences. The field round-trips through remember -> .orbit/memories/<key>.yaml
+    file -> show -> match without loss. Memories created without --cite store `cites: []` and
+    continue to operate exactly as before this spec (backward-compat per spec goal). Substrate
+    note: memories are YAML files at `.orbit/memories/<key>.yaml` (see layout.rs:126
+    memory_file resolver, verbs.rs memory_remember writes via write_atomic) — there is no
+    SQLite memory table to migrate. Backward-compat is achieved via `#[serde(default)]` on
+    the new field plus `#[serde(skip_serializing_if = "Vec::is_empty")]` so existing
+    cite-less memory files stay byte-identical on disk after round-trip.
 
     Verification: capability. Unit test in orbit-state covers (a) `orbit memory remember
-    --cite a.md --cite b.md "key" "body"` writes both cites; (b) `orbit memory show key`
-    reads both back verbatim; (c) `orbit memory remember "key" "body"` with no --cite stores
-    `cites: []` and loads cleanly; (d) database migration applies to a fixture DB whose
-    schema predates this field without data loss. Test prefix: cite.
+    --cite a.md --cite b.md "key" "body"` writes both cites into the YAML file; (b) `orbit
+    memory show key` reads both back verbatim; (c) `orbit memory remember "key" "body"` with
+    no --cite stores `cites: []` (omitted from on-disk YAML via skip_serializing_if) and
+    loads cleanly; (d) a fixture memory file lacking the `cites` field deserialises as
+    `cites: []` via serde default; re-serialising it does NOT write `cites: []` to disk so
+    the file remains byte-identical. Test prefix: cite.
   gate: true
   checked: false
 - id: ac-02
@@ -74,15 +81,18 @@ acceptance_criteria:
   checked: false
 - id: ac-04
   description: |
-    `orbit spec close` pre-flight refuses closure when the spec's `memories_considered`
-    references a memory that carries `cites` AND the corresponding `cite_evidence` does not
-    cover every cite on that memory. The refusal message names the memory key, the missing
-    cite_path(s), and the actionable next step ("read <path> and record an excerpt in
-    cite_evidence"). Extends the existing close-time memory reconciliation check from spec
-    2026-05-19-memory-gates-decisions ac-04 — does not refactor it; runs alongside as a
-    second pass over `memories_considered`. If implementation reveals the existing pre-flight
-    shape blocks clean extension, escalation per tabletop sidecar (kill condition #3 —
-    separate pass).
+    `orbit spec close` pre-flight gains a second pass that iterates entries in
+    `spec.memories_considered`, loads each referenced memory, and for any whose `cites` field
+    is non-empty, asserts every cite_path appears in that entry's `cite_evidence` list. On
+    failure, refusal message names the memory key, the missing cite_path(s), and the actionable
+    next step ("read <path> and record an excerpt in cite_evidence"). Runs AFTER the existing
+    corpus-vs-considered pre-flight at orbit-state/crates/core/src/verbs.rs:2317-2363 (which
+    iterates `memory_match` corpus and asserts each match above threshold appears in
+    `memories_considered`); does not modify that existing loop. The new pass iterates a
+    different collection (`memories_considered`, not `memory_match` results) and checks a
+    different invariant (cite_evidence coverage, not entry presence). If implementation
+    reveals the existing pre-flight shape blocks the new pass from registering cleanly,
+    escalation per tabletop sidecar (kill condition #3 — separate pass).
 
     Verification: capability. Integration test creates a fixture spec referencing a fixture
     memory with two cites; spec.close refuses when cite_evidence covers zero or one of two
@@ -102,9 +112,12 @@ acceptance_criteria:
     evidence-of-read is the most we can structurally enforce — internalisation is a
     downstream behavioural concern outside this spec's gate; see tabletop sidecar
     Verification posture section. Verification mechanic: grep plugins/orb/skills/spec/SKILL.md
-    for prose matching all three of (a) "cites" / "cite_evidence" within a directive line,
+    for prose matching all four of (a) "cites" / "cite_evidence" within a directive line,
     (b) reference to the spec.close pre-flight gate, (c) reference to the excerpt + read_at
-    shape. Test prefix: cite.
+    shape, (d) explicit direction that the excerpt MUST be drawn from the file contents at
+    `cite_path` — not paraphrased from the memory body or synthesised. The (d) target closes
+    tabletop halt-condition #2 (cite-read evidence must include a content-derived value, not
+    a boolean). Test prefix: cite.
   gate: true
   checked: false
   ac_type: doc
@@ -117,7 +130,7 @@ acceptance_criteria:
     Verification: capability. Parity test in the cli-mcp-parity suite exercises (a) remember
     via MCP with two cites; (b) match via MCP and assert cites field; (c) remember via MCP
     without --cite; (d) match via MCP and assert empty cites field. Test prefix: cite.
-  gate: false
+  gate: true
   checked: false
 - id: ac-07
   description: |
@@ -128,7 +141,7 @@ acceptance_criteria:
     without cite_evidence (because the memories carry no cites).
 
     Verification: capability. Test prefix: cite.
-  gate: false
+  gate: true
   checked: false
 memories_considered:
 - key: spec-skill-md-fields-vs-schema
