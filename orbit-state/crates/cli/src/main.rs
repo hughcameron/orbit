@@ -339,6 +339,11 @@ enum MemoryAction {
         /// 2026-05-19-memory-gates-decisions ac-05 (D5b).
         #[arg(long = "no-warn")]
         no_warn: bool,
+        /// Local file path to an authoritative source this memory cites
+        /// (repeatable). Stored on the memory's `cites:` field. Per spec
+        /// 2026-05-27-memory-cite-reading ac-01.
+        #[arg(long = "cite")]
+        cites: Vec<String>,
     },
     /// List all memories.
     List,
@@ -1319,6 +1324,7 @@ fn build_request(_layout: &OrbitLayout, command: &Command) -> Result<VerbRequest
                 timestamp,
                 no_nudge,
                 no_warn,
+                cites,
             } => VerbRequest::MemoryRemember(MemoryRememberArgs {
                 key: key.clone(),
                 body: body.clone(),
@@ -1326,6 +1332,7 @@ fn build_request(_layout: &OrbitLayout, command: &Command) -> Result<VerbRequest
                 timestamp: timestamp.clone(),
                 no_nudge: *no_nudge,
                 no_warn: *no_warn,
+                cites: cites.clone(),
             }),
             MemoryAction::List => VerbRequest::MemoryList(MemoryListArgs::default()),
             MemoryAction::Search { query } => VerbRequest::MemorySearch(MemorySearchArgs {

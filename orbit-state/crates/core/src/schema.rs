@@ -114,7 +114,15 @@ impl Choice {
 }
 
 impl Memory {
-    pub const FIELDS: &'static [&'static str] = &["key", "body", "timestamp", "labels"];
+    pub const FIELDS: &'static [&'static str] = &["key", "body", "timestamp", "labels", "cites"];
+}
+
+impl Cite {
+    pub const FIELDS: &'static [&'static str] = &["path"];
+}
+
+impl CiteEvidence {
+    pub const FIELDS: &'static [&'static str] = &["cite_path", "excerpt", "read_at"];
 }
 
 impl SkillInvocation {
@@ -324,6 +332,15 @@ pub struct MemoryReconciliation {
     /// One-sentence rationale — why the memory was adopted, partially
     /// adopted, or considered not applicable.
     pub reason: String,
+    /// Evidence that the spec author read the memory's cited sources. One
+    /// entry per cite on the matched memory (cite_path + excerpt drawn
+    /// from the cite's file contents + RFC3339 read_at). Empty or absent
+    /// on entries for memories without cites. `spec.close`'s second-pass
+    /// pre-flight (per spec 2026-05-27-memory-cite-reading ac-04) refuses
+    /// closure when any cite_path on a referenced memory lacks a
+    /// corresponding evidence entry here.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub cite_evidence: Vec<CiteEvidence>,
 }
 
 /// Adoption status for one reconciled memory.
@@ -670,6 +687,48 @@ pub struct Memory {
     pub timestamp: String,
     #[serde(default)]
     pub labels: Vec<String>,
+    /// Authoritative local files this memory cites as load-bearing for the
+    /// fix it describes. Opt-in additive: cite-less memories store no
+    /// entries here and operate exactly as before this field shipped (per
+    /// spec 2026-05-27-memory-cite-reading ac-01). `#[serde(default)]` lets
+    /// existing on-disk YAMLs deserialise as `cites: vec![]` without a
+    /// migration; `skip_serializing_if = "Vec::is_empty"` keeps those same
+    /// files byte-identical on round-trip — `cites: []` never materialises
+    /// on disk.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub cites: Vec<Cite>,
+}
+
+/// One cite entry on a [`Memory`]. Names a local file path that carries the
+/// mechanical detail the memory body summarised. Read by `/orb:spec`'s
+/// cite-read step and enforced by `spec.close`'s second-pass pre-flight
+/// (per spec 2026-05-27-memory-cite-reading ac-04).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Cite {
+    /// Repo-relative path to the authoritative source the memory cites.
+    /// V1 carries the string verbatim — no resolution at parse time; the
+    /// caller (spec.close pre-flight, /orb:spec cite-read step) reads the
+    /// file when it needs the contents.
+    pub path: String,
+}
+
+/// One cite-read evidence entry on a [`MemoryReconciliation`]. The spec
+/// author records what the cite said (1-3 line `excerpt` drawn from the
+/// file at `cite_path`) and when they read it (`read_at`, RFC3339).
+/// Per spec 2026-05-27-memory-cite-reading ac-03.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CiteEvidence {
+    /// The cite path this evidence covers — matches one of the memory's
+    /// `cites[].path` entries.
+    pub cite_path: String,
+    /// Verbatim 1-3 line excerpt drawn from the file at `cite_path`. The
+    /// content-derived value closes tabletop halt-condition #2 (cite-read
+    /// evidence must carry a content-derived value, not a boolean).
+    pub excerpt: String,
+    /// RFC3339 timestamp recording when the cite was read.
+    pub read_at: String,
 }
 
 // ============================================================================
@@ -913,6 +972,11 @@ unknown_field: oops
                 key: "k".into(),
                 disposition: ReconciliationDisposition::Adopted,
                 reason: "r".into(),
+                cite_evidence: vec![CiteEvidence {
+                    cite_path: "docs/foo.md".into(),
+                    excerpt: "load-bearing line".into(),
+                    read_at: "2026-05-27T00:00:00Z".into(),
+                }],
             }],
             closed_at: Some("2026-05-26T00:00:00Z".into()),
         };
@@ -1107,6 +1171,9 @@ park:
             body: "b".into(),
             timestamp: "2026-05-12T00:00:00Z".into(),
             labels: vec!["l".into()],
+            cites: vec![Cite {
+                path: "docs/foo.md".into(),
+            }],
         };
         let value = serde_yaml::to_value(&memory).unwrap();
         let got = top_level_keys(&value);
@@ -1850,6 +1917,141 @@ docs:
         assert!(
             msg.contains("string") || msg.contains("sequence") || msg.contains("expected"),
             "expected a type-mismatch error, got: {msg}"
+        );
+    }
+
+    // ========================================================================
+    // memory cite_evidence shape tests — spec 2026-05-27-memory-cite-reading
+    // ac-03: MemoryReconciliation gains an optional `cite_evidence` field.
+    // ========================================================================
+
+    /// AC-03: a spec.yaml carrying `cite_evidence` on a memories_considered
+    /// entry parses cleanly and round-trips byte-identically. The shape:
+    /// `[{ cite_path, excerpt, read_at }]`.
+    #[test]
+    fn cite_spec_with_cite_evidence_parses_and_round_trips() {
+        let yaml = r#"id: 2026-05-27-test
+goal: g
+cards: []
+status: open
+memories_considered:
+- key: m
+  disposition: adopted
+  reason: r
+  cite_evidence:
+  - cite_path: docs/a.md
+    excerpt: a load-bearing line
+    read_at: 2026-05-27T00:00:00Z
+"#;
+        let spec: Spec = crate::canonical::parse_yaml(yaml).unwrap();
+        assert_eq!(spec.memories_considered.len(), 1);
+        let entry = &spec.memories_considered[0];
+        assert_eq!(entry.cite_evidence.len(), 1);
+        assert_eq!(entry.cite_evidence[0].cite_path, "docs/a.md");
+        assert_eq!(entry.cite_evidence[0].excerpt, "a load-bearing line");
+        assert_eq!(entry.cite_evidence[0].read_at, "2026-05-27T00:00:00Z");
+        let reserialised = crate::canonical::serialise_yaml(&spec).unwrap();
+        let reparsed: Spec = crate::canonical::parse_yaml(&reserialised).unwrap();
+        assert_eq!(spec, reparsed);
+    }
+
+    /// AC-03: missing `read_at` on a cite_evidence entry fails parse.
+    #[test]
+    fn cite_evidence_missing_read_at_rejected() {
+        let yaml = r#"id: x
+goal: g
+cards: []
+status: open
+memories_considered:
+- key: m
+  disposition: adopted
+  reason: r
+  cite_evidence:
+  - cite_path: docs/a.md
+    excerpt: ex
+"#;
+        let err = crate::canonical::parse_yaml::<Spec>(yaml).unwrap_err();
+        assert!(
+            err.message.contains("read_at") || err.message.contains("missing"),
+            "expected missing-field error on read_at, got: {err}",
+        );
+    }
+
+    /// AC-03: non-string excerpt on a cite_evidence entry fails parse with
+    /// a type-mismatch error.
+    #[test]
+    fn cite_evidence_non_string_excerpt_rejected() {
+        let yaml = r#"id: x
+goal: g
+cards: []
+status: open
+memories_considered:
+- key: m
+  disposition: adopted
+  reason: r
+  cite_evidence:
+  - cite_path: docs/a.md
+    excerpt: [not, a, string]
+    read_at: 2026-05-27T00:00:00Z
+"#;
+        let err = crate::canonical::parse_yaml::<Spec>(yaml).unwrap_err();
+        let msg = err.message.clone();
+        assert!(
+            msg.contains("string") || msg.contains("sequence") || msg.contains("expected"),
+            "expected type-mismatch on excerpt, got: {msg}",
+        );
+    }
+
+    /// AC-03: a spec.yaml without `cite_evidence` (the dominant case for
+    /// memories without cites) parses unchanged and the field defaults to
+    /// an empty vec. Backward-compat: existing specs in the corpus that
+    /// have memories_considered entries without cite_evidence load cleanly.
+    #[test]
+    fn cite_legacy_memories_considered_entry_loads_with_empty_cite_evidence() {
+        let yaml = r#"id: legacy
+goal: g
+cards: []
+status: open
+memories_considered:
+- key: m
+  disposition: adopted
+  reason: r
+"#;
+        let spec: Spec = crate::canonical::parse_yaml(yaml).unwrap();
+        assert_eq!(spec.memories_considered.len(), 1);
+        assert!(spec.memories_considered[0].cite_evidence.is_empty());
+        // Reserialise: cite_evidence must not appear on disk (empty Vec
+        // skipped via skip_serializing_if).
+        let reserialised = crate::canonical::serialise_yaml(&spec).unwrap();
+        assert!(
+            !reserialised.contains("cite_evidence"),
+            "empty cite_evidence must not materialise on disk: {reserialised}",
+        );
+    }
+
+    /// AC-03 / unknown field guard: an extra key on a cite_evidence entry
+    /// fails parse via `deny_unknown_fields`. Closes the lossy-parse
+    /// failure mode for the new shape.
+    #[test]
+    fn cite_evidence_rejects_unknown_field() {
+        let yaml = r#"id: x
+goal: g
+cards: []
+status: open
+memories_considered:
+- key: m
+  disposition: adopted
+  reason: r
+  cite_evidence:
+  - cite_path: docs/a.md
+    excerpt: ex
+    read_at: 2026-05-27T00:00:00Z
+    bogus: field
+"#;
+        let err = crate::canonical::parse_yaml::<Spec>(yaml).unwrap_err();
+        assert!(
+            err.message.contains("unknown"),
+            "expected unknown-field rejection, got: {err}",
         );
     }
 }

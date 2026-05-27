@@ -2,7 +2,6 @@
 name: tabletop
 description: Front-loaded pre-spec thinking — walk values, trade-offs, halt conditions and kill conditions across a card or cluster to produce aligned specs
 argument-hint: "[card-id | card-id-1 card-id-2 ... | \"goal string\"]"
-disable-model-invocation: true
 allowed-tools: Bash Read Edit Write AskUserQuestion
 ---
 

@@ -2,7 +2,6 @@
 name: interviewer
 description: Socratic requirements interviewer — ask questions to clarify vague ideas into actionable requirements
 argument-hint: "[topic]"
-disable-model-invocation: true
 user-invocable: false
 allowed-tools: AskUserQuestion Read Glob Grep WebFetch
 ---

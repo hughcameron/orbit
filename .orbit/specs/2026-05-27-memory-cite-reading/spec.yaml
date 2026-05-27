@@ -1,0 +1,178 @@
+id: 2026-05-27-memory-cite-reading
+goal: |
+  When a memory cites an external authoritative source as the load-bearing fix, the agent reads
+  that source before reconciling the memory — and the substrate makes both the citation and the
+  read structurally detectable.
+
+  Extends card 0037's closed first spec (2026-05-19-memory-gates-decisions) — that spec
+  hardened how memories surface and block at decision moments but assumed the memory body
+  carries everything actionable. This spec addresses the compression-artefact failure: a
+  memory's summary alone can mislead the agent into the wrong fix when the cited doc carried
+  the mechanical detail the summary couldn't fit.
+
+  Approach (from .orbit/specs/2026-05-27-memory-cite-reading/tabletop.md):
+  - Load-bearing value: diagnostic honesty under memory compression.
+  - Structural over behavioural — prose nudges lose to momentum (closed ac-06 of 2026-05-19).
+  - Backward-compat: cite-less memories operate exactly as before; cite-shape is opt-in
+    additive.
+  - Forward-only convention: existing memories are not retro-migrated.
+
+  Halt conditions (cite-shape exists but reconciler doesn't read it; cite-read evidence not
+  actually captured; backward-compat break; scope creep into write-time hygiene), escalation
+  triggers (unreadable cite, ambiguous applicability, fakeable excerpts, field shape can't
+  carry cite-evidence cleanly), and kill conditions (structured field not distinct from prose;
+  excerpt insufficient — pivot to hash; pre-flight extension blocked — pivot to separate pass;
+  one-spec scope wrong — carve) live in the tabletop sidecar.
+
+  Test prefix for this spec: cite.
+cards:
+- 0037-memory-gates-decisions
+status: open
+labels:
+- spec
+acceptance_criteria:
+- id: ac-01
+  description: |
+    Memory record (`Memory` struct in orbit-state/crates/core/src/schema.rs) gains an optional
+    `cites` field carrying a list of cite entries (`{ path: String }`) representing local file
+    paths to authoritative sources. The `orbit memory remember --cite <path>` CLI flag accepts
+    repeated occurrences. The field round-trips through remember -> .orbit/memories/<key>.yaml
+    file -> show -> match without loss. Memories created without --cite store `cites: []` and
+    continue to operate exactly as before this spec (backward-compat per spec goal). Substrate
+    note: memories are YAML files at `.orbit/memories/<key>.yaml` (see layout.rs:126
+    memory_file resolver, verbs.rs memory_remember writes via write_atomic) — there is no
+    SQLite memory table to migrate. Backward-compat is achieved via `#[serde(default)]` on
+    the new field plus `#[serde(skip_serializing_if = "Vec::is_empty")]` so existing
+    cite-less memory files stay byte-identical on disk after round-trip.
+
+    Verification: capability. Unit test in orbit-state covers (a) `orbit memory remember
+    --cite a.md --cite b.md "key" "body"` writes both cites into the YAML file; (b) `orbit
+    memory show key` reads both back verbatim; (c) `orbit memory remember "key" "body"` with
+    no --cite stores `cites: []` (omitted from on-disk YAML via skip_serializing_if) and
+    loads cleanly; (d) a fixture memory file lacking the `cites` field deserialises as
+    `cites: []` via serde default; re-serialising it does NOT write `cites: []` to disk so
+    the file remains byte-identical. Test prefix: cite.
+  gate: true
+  checked: true
+- id: ac-02
+  description: |
+    `orbit memory match` exposes cite-shape on every returned memory in its JSON output.
+    Each result carries a `cites` array (empty for cite-less memories, populated for memories
+    with cites). Callers (skill prose, agents, parity tests) can detect "this memory has a
+    cite" without parsing the memory body.
+
+    Verification: capability. Unit test asserts that match output on a mixed corpus (some
+    memories with cites, some without) carries the cites field on each result; empty array
+    on cite-less memories, populated array on memories with cites. Test prefix: cite.
+  gate: true
+  checked: true
+- id: ac-03
+  description: |
+    `Spec.memories_considered` entry gains an optional `cite_evidence` shape carrying a list
+    of `{ cite_path: String, excerpt: String, read_at: RFC3339 timestamp }`. Empty or absent
+    on entries for memories without cites. Each entry in `cite_evidence` corresponds to one
+    cite on the matched memory; the spec author records what the cite says (1-3 line excerpt)
+    and when it was read.
+
+    Verification: capability. Schema test asserts the field is accepted on a spec.yaml,
+    rejected with type-checked error when shape is wrong (e.g. missing read_at, non-string
+    excerpt). Existing specs without the field load unchanged. Test prefix: cite.
+  gate: true
+  checked: true
+- id: ac-04
+  description: |
+    `orbit spec close` pre-flight gains a second pass that iterates entries in
+    `spec.memories_considered`, loads each referenced memory, and for any whose `cites` field
+    is non-empty, asserts every cite_path appears in that entry's `cite_evidence` list. On
+    failure, refusal message names the memory key, the missing cite_path(s), and the actionable
+    next step ("read <path> and record an excerpt in cite_evidence"). Runs AFTER the existing
+    corpus-vs-considered pre-flight at orbit-state/crates/core/src/verbs.rs:2317-2363 (which
+    iterates `memory_match` corpus and asserts each match above threshold appears in
+    `memories_considered`); does not modify that existing loop. The new pass iterates a
+    different collection (`memories_considered`, not `memory_match` results) and checks a
+    different invariant (cite_evidence coverage, not entry presence). If implementation
+    reveals the existing pre-flight shape blocks the new pass from registering cleanly,
+    escalation per tabletop sidecar (kill condition #3 — separate pass).
+
+    Verification: capability. Integration test creates a fixture spec referencing a fixture
+    memory with two cites; spec.close refuses when cite_evidence covers zero or one of two
+    cites; succeeds when both cites have evidence; succeeds unchanged on memories without
+    cites. Test prefix: cite.
+  gate: true
+  checked: true
+- id: ac-05
+  description: |
+    plugins/orb/skills/spec/SKILL.md gains prose naming the cite-read step. For each memory
+    in `memories_considered` whose record carries `cites`, the spec author MUST read each
+    cited source and record `cite_evidence` (cite_path + 1-3 line excerpt drawn from the
+    cite + read_at timestamp). The prose addition cites the spec.close pre-flight gate
+    (ac-04) so the workflow consequence is named at the authoring site, not only at close.
+
+    Verification: stand-in (real thing is agent internalising the cite), accepted because
+    evidence-of-read is the most we can structurally enforce — internalisation is a
+    downstream behavioural concern outside this spec's gate; see tabletop sidecar
+    Verification posture section. Verification mechanic: grep plugins/orb/skills/spec/SKILL.md
+    for prose matching all four of (a) "cites" / "cite_evidence" within a directive line,
+    (b) reference to the spec.close pre-flight gate, (c) reference to the excerpt + read_at
+    shape, (d) explicit direction that the excerpt MUST be drawn from the file contents at
+    `cite_path` — not paraphrased from the memory body or synthesised. The (d) target closes
+    tabletop halt-condition #2 (cite-read evidence must include a content-derived value, not
+    a boolean). Test prefix: cite.
+  gate: true
+  checked: true
+  ac_type: doc
+- id: ac-06
+  description: |
+    MCP server exposes the new `--cite` flag on `memory.remember` and the new `cites` field
+    on `memory.match` output. CLI/MCP parity tests cover both surfaces — calling either
+    through the MCP server produces the same observable as calling the CLI directly.
+
+    Verification: capability. Parity test in the cli-mcp-parity suite exercises (a) remember
+    via MCP with two cites; (b) match via MCP and assert cites field; (c) remember via MCP
+    without --cite; (d) match via MCP and assert empty cites field. Test prefix: cite.
+  gate: true
+  checked: true
+- id: ac-07
+  description: |
+    Regression suite — existing cite-less memories in the current `.orbit/memories/` corpus
+    load, match, and close-against without spurious "cite-required" flagging. Single
+    regression test scans the corpus, asserts every memory loads with `cites: []` (or absent),
+    and asserts spec.close pre-flight against a fixture spec referencing each memory passes
+    without cite_evidence (because the memories carry no cites).
+
+    Verification: capability. Test prefix: cite.
+  gate: true
+  checked: true
+memories_considered:
+- key: spec-skill-md-fields-vs-schema
+  disposition: adopted
+  reason: |
+    This spec uses only the 7 canonical Spec fields (id/goal/cards/status/labels/
+    acceptance_criteria/memories_considered). Halts, escalations, kill conditions live in
+    the tabletop sidecar; per-AC verification classification is embedded in each AC's
+    description.
+- key: tabletop-prose-too-jargony
+  disposition: adopted
+  reason: |
+    AC prose stays plain — no methodology-vocabulary stacking. SKILL.md prose addition in
+    ac-05 follows the same discipline (the cite-read step is named in plain words, not as
+    "load-bearing substrate reconciliation").
+- key: tabletop-q3-cost-as-mis-staging-signal
+  disposition: adopted
+  reason: |
+    Scope-adequacy gate runs at /orb:spec (per 0.4.38 mechanism 3); this spec was authored
+    with that gate applied — each AC carries a verification classification inline. No
+    mid-implement halts on classification.
+- key: drive-author-no-longer-merges
+  disposition: adopted
+  reason: |
+    When this spec enters /orb:drive, the agent merges through after the review-pr APPROVE
+    gate. No PR-creation handoff.
+- key: drive-substrate-recall-iter1
+  disposition: adopted
+  reason: |
+    Motivating context. The PR-39 NO-GO showed that ACs technically passing doesn't mean
+    output matches the capability claim. The scope discipline shipped in 0.4.38 catches this
+    upstream; this spec must hold the same line — every AC's verification classification is
+    inline, every scenario the spec covers is named in the tabletop sidecar with its
+    classification (none deferred).

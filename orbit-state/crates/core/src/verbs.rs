@@ -26,7 +26,7 @@ use crate::error::{Error, Result};
 use crate::layout::OrbitLayout;
 use crate::locks;
 use crate::schema::{
-    AcType, AcceptanceCriterion, Card, Choice, InvocationOutcome, Memory, NoteEvent, Session,
+    AcType, AcceptanceCriterion, Card, Choice, Cite, InvocationOutcome, Memory, NoteEvent, Session,
     SkillInvocation, Spec, SpecStatus, TaskEvent, TaskEventKind,
 };
 use crate::session::{read_session_card, read_session_id};
@@ -539,6 +539,11 @@ pub struct MemoryRememberArgs {
     /// Defaults to false; mirrors `--no-nudge`.
     #[serde(default)]
     pub no_warn: bool,
+    /// Local file paths to authoritative sources this memory cites. CLI
+    /// surface is `--cite <path>` (repeatable). Stored on the memory's
+    /// `cites:` field. Per spec 2026-05-27-memory-cite-reading ac-01.
+    #[serde(default)]
+    pub cites: Vec<String>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
@@ -1164,6 +1169,14 @@ pub struct SpecCloseResult {
     /// 2026-05-19-memory-gates-decisions ac-04 (D4).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub forced_unreconciled: Vec<String>,
+    /// Memory keys whose cite_evidence coverage was bypassed via `--force`
+    /// at the close-time cite-evidence gate (second pass, after the
+    /// existing memory-match gate). Each entry carries the memory key
+    /// and the missing cite paths. Empty (and `skip_serializing_if`-
+    /// omitted) when no bypass occurred. Per spec
+    /// 2026-05-27-memory-cite-reading ac-04.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub forced_uncited_evidence: Vec<String>,
     /// Topology drift entries for subsystems the closing spec text touched.
     /// Word-boundary match (regex `\b<regex::escape(subsystem)>\b`,
     /// case-insensitive) of subsystem names ≥ 5 characters against the
@@ -1312,11 +1325,39 @@ pub struct MemoryMatchResult {
 /// One ranked match returned by `memory.match`. The score is normalised
 /// (0.0..=1.0) and `reason` is a short phrase explaining the overlap
 /// (e.g. `"label overlap on 'drive'"`).
+///
+/// `memory` is serialised via [`serialize_memory_for_match`] so the wire
+/// output always carries a `cites:` array on every match — empty for
+/// cite-less memories, populated for memories that carry cites. This
+/// projection diverges from the on-disk `Memory` shape (which omits an
+/// empty `cites:` via `skip_serializing_if` for byte-identical
+/// backward-compat per spec 2026-05-27-memory-cite-reading ac-01) — the
+/// wire contract under ac-02 is that callers can detect cite presence
+/// without parsing the body.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct MemoryMatch {
+    #[serde(serialize_with = "serialize_memory_for_match")]
     pub memory: Memory,
     pub score: f32,
     pub reason: String,
+}
+
+/// Serialise a `Memory` for the `memory.match` wire shape: every field
+/// present, including `cites` even when empty. Per spec
+/// 2026-05-27-memory-cite-reading ac-02 — callers must be able to detect
+/// cite presence on every match without parsing the memory body.
+fn serialize_memory_for_match<S>(memory: &Memory, serializer: S) -> std::result::Result<S::Ok, S::Error>
+where
+    S: serde::Serializer,
+{
+    use serde::ser::SerializeStruct;
+    let mut state = serializer.serialize_struct("Memory", 5)?;
+    state.serialize_field("key", &memory.key)?;
+    state.serialize_field("body", &memory.body)?;
+    state.serialize_field("timestamp", &memory.timestamp)?;
+    state.serialize_field("labels", &memory.labels)?;
+    state.serialize_field("cites", &memory.cites)?;
+    state.end()
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -2362,6 +2403,79 @@ fn spec_close(layout: &OrbitLayout, args: &SpecCloseArgs) -> Result<SpecCloseRes
         Vec::new()
     };
 
+    // Memory-cite-evidence gate (spec 2026-05-27-memory-cite-reading ac-04).
+    // Runs as a SECOND, SEPARATE pass after the corpus-vs-considered loop
+    // above — different collection (`memories_considered`, not match
+    // results), different invariant (cite_evidence coverage, not entry
+    // presence). For every entry in `memories_considered`, load the
+    // referenced memory; if the memory carries cites, every `cites[].path`
+    // MUST appear in this entry's `cite_evidence`. Refuse closure when
+    // coverage is incomplete; the refusal message names the memory key,
+    // the missing cite paths, and the actionable next step. `--force`
+    // bypasses; bypassed entries land in `forced_uncited_evidence` on the
+    // response.
+    let mut uncited_evidence: Vec<String> = Vec::new();
+    for considered in &spec.memories_considered {
+        let memory_path = layout.memory_file(&considered.key);
+        if !memory_path.exists() {
+            // Referenced memory doesn't exist on disk — out of scope for
+            // the cite-evidence gate. The author may have referenced a
+            // memory that hasn't been written yet, or the key is wrong;
+            // either way, skip (the existing corpus-vs-considered pass
+            // covers the inverse direction).
+            continue;
+        }
+        let memory_text = std::fs::read_to_string(&memory_path).map_err(|e| {
+            Error::unavailable(
+                VERB,
+                format!("read memory {}: {e}", memory_path.display()),
+            )
+        })?;
+        let memory: Memory = parse_yaml(&memory_text).map_err(|mut e| {
+            e.verb = VERB.into();
+            e
+        })?;
+        if memory.cites.is_empty() {
+            continue;
+        }
+        let evidenced_paths: BTreeSet<&str> = considered
+            .cite_evidence
+            .iter()
+            .map(|e| e.cite_path.as_str())
+            .collect();
+        let missing: Vec<String> = memory
+            .cites
+            .iter()
+            .filter(|c| !evidenced_paths.contains(c.path.as_str()))
+            .map(|c| c.path.clone())
+            .collect();
+        if !missing.is_empty() {
+            uncited_evidence.push(format!(
+                "memory '{}' missing cite_evidence for: {} — read {} and record an excerpt in cite_evidence",
+                considered.key,
+                missing.join(", "),
+                missing.join(", "),
+            ));
+        }
+    }
+    if !uncited_evidence.is_empty() && !args.force {
+        return Err(Error::conflict(
+            VERB,
+            format!(
+                "{} memor{} with incomplete cite_evidence in spec '{}': {}",
+                uncited_evidence.len(),
+                if uncited_evidence.len() == 1 { "y" } else { "ies" },
+                spec.id,
+                uncited_evidence.join("; "),
+            ),
+        ));
+    }
+    let forced_uncited_evidence: Vec<String> = if args.force && !uncited_evidence.is_empty() {
+        uncited_evidence
+    } else {
+        Vec::new()
+    };
+
     // Per ac-06: spec.close requires every child task to be in state `done`.
     // Read the task stream once; reduce per task; reject if any non-done.
     let task_events = read_task_events(layout, &spec.id).map_err(|mut e| {
@@ -2508,6 +2622,7 @@ fn spec_close(layout: &OrbitLayout, args: &SpecCloseArgs) -> Result<SpecCloseRes
         forced_unchecked,
         deferrable_open,
         forced_unreconciled,
+        forced_uncited_evidence,
         topology_warnings,
     })
 }
@@ -3954,6 +4069,11 @@ fn memory_remember(layout: &OrbitLayout, args: &MemoryRememberArgs) -> Result<Me
         body: args.body.clone(),
         timestamp,
         labels: args.labels.clone(),
+        cites: args
+            .cites
+            .iter()
+            .map(|path| Cite { path: path.clone() })
+            .collect(),
     };
     let yaml = serialise_yaml(&memory).map_err(|mut e| {
         e.verb = VERB.into();
@@ -9422,6 +9542,7 @@ mod tests {
             body: body.into(),
             timestamp: "2026-05-07T12:00:00Z".into(),
             labels: vec![],
+            cites: vec![],
         };
         std::fs::write(
             layout.memory_file(key),
@@ -9465,6 +9586,7 @@ mod tests {
                 timestamp: Some("2026-05-07T12:00:00Z".into()),
                 no_nudge: false,
                 no_warn: false,
+                cites: vec![],
             }),
         )
         .unwrap();
@@ -9488,6 +9610,7 @@ mod tests {
                 timestamp: Some("2026-05-07T12:00:00Z".into()),
                 no_nudge: false,
                 no_warn: false,
+                cites: vec![],
             }),
         )
         .unwrap();
@@ -9500,6 +9623,7 @@ mod tests {
                 timestamp: Some("2026-05-07T12:00:01Z".into()),
                 no_nudge: false,
                 no_warn: false,
+                cites: vec![],
             }),
         )
         .unwrap();
@@ -9548,6 +9672,196 @@ mod tests {
     }
 
     // ============================================================================
+    // memory cite tests — spec 2026-05-27-memory-cite-reading ac-01 / ac-02
+    // ============================================================================
+
+    /// AC-01 (a): `orbit memory remember --cite a.md --cite b.md` writes both
+    /// cite paths onto the memory's `cites:` field, in order.
+    #[test]
+    fn cite_remember_writes_cites_into_yaml_file() {
+        let dir = tempdir().unwrap();
+        let layout = OrbitLayout::at(dir.path());
+        let resp = execute(
+            &layout,
+            &VerbRequest::MemoryRemember(MemoryRememberArgs {
+                key: "with-cites".into(),
+                body: "see the linked docs".into(),
+                labels: vec![],
+                timestamp: Some("2026-05-27T00:00:00Z".into()),
+                no_nudge: false,
+                no_warn: false,
+                cites: vec!["docs/a.md".into(), "docs/b.md".into()],
+            }),
+        )
+        .unwrap();
+        let VerbResponse::MemoryRemember(r) = resp else {
+            panic!()
+        };
+        // In-memory result carries cites in input order.
+        assert_eq!(r.memory.cites.len(), 2);
+        assert_eq!(r.memory.cites[0].path, "docs/a.md");
+        assert_eq!(r.memory.cites[1].path, "docs/b.md");
+        // On-disk YAML carries the cites: block with both entries.
+        let yaml = std::fs::read_to_string(layout.memory_file("with-cites")).unwrap();
+        assert!(yaml.contains("cites:"), "cites: block missing from yaml: {yaml}");
+        assert!(yaml.contains("docs/a.md"), "first cite missing: {yaml}");
+        assert!(yaml.contains("docs/b.md"), "second cite missing: {yaml}");
+    }
+
+    /// AC-01 (b): the canonical writer round-trips a memory with cites
+    /// byte-identically — parse, re-serialise, compare.
+    #[test]
+    fn cite_memory_round_trips_byte_identical() {
+        let dir = tempdir().unwrap();
+        let layout = OrbitLayout::at(dir.path());
+        memory_remember(
+            &layout,
+            &MemoryRememberArgs {
+                key: "rt".into(),
+                body: "body".into(),
+                labels: vec!["lbl".into()],
+                timestamp: Some("2026-05-27T00:00:00Z".into()),
+                no_nudge: false,
+                no_warn: false,
+                cites: vec!["docs/x.md".into()],
+            },
+        )
+        .unwrap();
+        let yaml = std::fs::read_to_string(layout.memory_file("rt")).unwrap();
+        let parsed: Memory = parse_yaml(&yaml).unwrap();
+        assert_eq!(parsed.cites.len(), 1);
+        assert_eq!(parsed.cites[0].path, "docs/x.md");
+        let reserialised = serialise_yaml(&parsed).unwrap();
+        assert_eq!(yaml, reserialised, "round-trip not byte-identical");
+    }
+
+    /// AC-01 (c): a memory remembered with no --cite stores an empty cites
+    /// vec at runtime AND omits the `cites:` key entirely on disk (via
+    /// `skip_serializing_if = "Vec::is_empty"`). This is the byte-identity
+    /// half of the backward-compat contract.
+    #[test]
+    fn cite_remember_without_cites_omits_cites_key_on_disk() {
+        let dir = tempdir().unwrap();
+        let layout = OrbitLayout::at(dir.path());
+        let resp = execute(
+            &layout,
+            &VerbRequest::MemoryRemember(MemoryRememberArgs {
+                key: "no-cites".into(),
+                body: "body".into(),
+                labels: vec![],
+                timestamp: Some("2026-05-27T00:00:00Z".into()),
+                no_nudge: false,
+                no_warn: false,
+                cites: vec![],
+            }),
+        )
+        .unwrap();
+        let VerbResponse::MemoryRemember(r) = resp else {
+            panic!()
+        };
+        assert!(r.memory.cites.is_empty());
+        let yaml = std::fs::read_to_string(layout.memory_file("no-cites")).unwrap();
+        assert!(
+            !yaml.contains("cites:"),
+            "cites: key must not appear on disk for cite-less memory: {yaml}",
+        );
+    }
+
+    /// AC-01 (d): an on-disk YAML file lacking the `cites:` field
+    /// deserialises as `cites: vec![]` (serde default) and re-serialising
+    /// it does NOT introduce the field — the file stays byte-identical.
+    /// This is the load-existing-corpus half of backward-compat. Uses a
+    /// fixture that matches the real `.orbit/memories/` corpus shape
+    /// (every existing memory carries `labels:`); the load-the-actual-
+    /// corpus regression lives in ac-07.
+    #[test]
+    fn cite_legacy_memory_file_without_cites_field_round_trips_byte_identical() {
+        let dir = tempdir().unwrap();
+        let layout = OrbitLayout::at(dir.path());
+        layout.ensure_dirs().unwrap();
+        // Pre-spec on-disk shape — no `cites:` line. Mirrors the real
+        // memory corpus, which always writes `labels:` (even when empty).
+        let legacy = "key: legacy\nbody: pre-spec\ntimestamp: 2026-05-19T00:00:00Z\nlabels:\n- pillars\n";
+        std::fs::write(layout.memory_file("legacy"), legacy).unwrap();
+        let parsed: Memory = parse_yaml(legacy).unwrap();
+        assert!(parsed.cites.is_empty(), "default must give empty cites");
+        let reserialised = serialise_yaml(&parsed).unwrap();
+        assert_eq!(
+            legacy, reserialised,
+            "legacy file must round-trip byte-identical",
+        );
+    }
+
+    /// AC-02: `memory.match` JSON output exposes `cites` on every result.
+    /// Mixed corpus — some memories carry cites, some don't. Each result
+    /// carries the field; cite-less memories carry `[]`, cited memories
+    /// carry their entries.
+    #[test]
+    fn cite_match_exposes_cites_on_each_result() {
+        let dir = tempdir().unwrap();
+        let layout = OrbitLayout::at(dir.path());
+        layout.ensure_dirs().unwrap();
+        memory_remember(
+            &layout,
+            &MemoryRememberArgs {
+                key: "cited".into(),
+                body: "decision-moment mechanism".into(),
+                labels: vec!["card-foo".into()],
+                timestamp: Some("2026-05-27T00:00:00Z".into()),
+                no_nudge: false,
+                no_warn: false,
+                cites: vec!["docs/cited.md".into()],
+            },
+        )
+        .unwrap();
+        memory_remember(
+            &layout,
+            &MemoryRememberArgs {
+                key: "uncited".into(),
+                body: "decision-moment mechanism".into(),
+                labels: vec!["card-foo".into()],
+                timestamp: Some("2026-05-27T00:00:00Z".into()),
+                no_nudge: false,
+                no_warn: false,
+                cites: vec![],
+            },
+        )
+        .unwrap();
+        let resp = execute(
+            &layout,
+            &VerbRequest::MemoryMatch(MemoryMatchArgs {
+                topic: "decision mechanism".into(),
+                labels: vec!["card-foo".into()],
+                limit: 10,
+            }),
+        )
+        .unwrap();
+        let VerbResponse::MemoryMatch(r) = resp else {
+            panic!()
+        };
+        // Serialise via canonical envelope-shape JSON to assert the wire shape.
+        let json = serde_json::to_value(&r).unwrap();
+        let matches = json["matches"].as_array().expect("matches array");
+        assert_eq!(matches.len(), 2);
+        // Each match's memory carries a cites field (array, possibly empty).
+        for m in matches {
+            let mem = &m["memory"];
+            assert!(
+                mem.get("cites").is_some(),
+                "every match.memory must carry cites field: {m}",
+            );
+            let cites = mem["cites"].as_array().expect("cites is array");
+            let key = mem["key"].as_str().unwrap();
+            if key == "cited" {
+                assert_eq!(cites.len(), 1);
+                assert_eq!(cites[0]["path"].as_str(), Some("docs/cited.md"));
+            } else {
+                assert!(cites.is_empty(), "uncited memory must carry empty cites");
+            }
+        }
+    }
+
+    // ============================================================================
     // memory.match tests — spec 2026-05-19-memory-gates-decisions D1 (ac-01/ac-02)
     // ============================================================================
 
@@ -9569,6 +9883,7 @@ mod tests {
                 timestamp: Some("2026-05-19T00:00:00Z".into()),
                 no_nudge: false,
                 no_warn: false,
+                cites: vec![],
             },
         )
         .unwrap();
@@ -9581,6 +9896,7 @@ mod tests {
                 timestamp: Some("2026-05-19T00:00:00Z".into()),
                 no_nudge: false,
                 no_warn: false,
+                cites: vec![],
             },
         )
         .unwrap();
@@ -9593,6 +9909,7 @@ mod tests {
                 timestamp: Some("2026-05-19T00:00:00Z".into()),
                 no_nudge: false,
                 no_warn: false,
+                cites: vec![],
             },
         )
         .unwrap();
@@ -9656,6 +9973,7 @@ mod tests {
                     timestamp: Some("2026-05-19T00:00:00Z".into()),
                     no_nudge: false,
                     no_warn: false,
+                    cites: vec![],
                 },
             )
             .unwrap();
@@ -9692,6 +10010,7 @@ mod tests {
                 timestamp: Some("2026-05-19T00:00:00Z".into()),
                 no_nudge: false,
                 no_warn: false,
+                cites: vec![],
             },
         )
         .unwrap();
@@ -9713,6 +10032,7 @@ mod tests {
                 timestamp: Some("2026-05-19T00:00:00Z".into()),
                 no_nudge: false,
                 no_warn: false,
+                cites: vec![],
             },
         )
         .unwrap();
@@ -9732,6 +10052,7 @@ mod tests {
                 timestamp: Some("2026-05-19T00:00:00Z".into()),
                 no_nudge: false,
                 no_warn: true,
+                cites: vec![],
             },
         )
         .unwrap();
@@ -9753,6 +10074,7 @@ mod tests {
                 timestamp: Some("2026-05-19T00:00:00Z".into()),
                 no_nudge: false,
                 no_warn: false,
+                cites: vec![],
             },
         )
         .unwrap();
@@ -9800,6 +10122,7 @@ mod tests {
                 timestamp: Some("2026-05-19T00:00:00Z".into()),
                 no_nudge: false,
                 no_warn: false,
+                cites: vec![],
             },
         )
         .unwrap();
@@ -9868,6 +10191,7 @@ mod tests {
                 timestamp: Some("2026-05-19T00:00:00Z".into()),
                 no_nudge: false,
                 no_warn: false,
+                cites: vec![],
             },
         )
         .unwrap();
@@ -9882,6 +10206,7 @@ mod tests {
                 key: "matching-memory".into(),
                 disposition: ReconciliationDisposition::Adopted,
                 reason: "wired the close-time gate as described".into(),
+                cite_evidence: vec![],
             }],
             closed_at: None,
         };
@@ -9934,6 +10259,7 @@ mod tests {
                 timestamp: Some("2026-05-19T00:00:00Z".into()),
                 no_nudge: false,
                 no_warn: false,
+                cites: vec![],
             },
         )
         .unwrap();
@@ -10010,6 +10336,409 @@ mod tests {
         )
         .unwrap();
         assert!(result.forced_unreconciled.is_empty());
+    }
+
+    // ========================================================================
+    // spec.close cite-evidence gate tests — spec 2026-05-27-memory-cite-reading
+    // ac-04: second pre-flight pass over `memories_considered` refuses on
+    // missing cite_evidence for any cite on the matched memory.
+    // ========================================================================
+
+    /// Plant a card + a memory carrying two cites + a spec that lists the
+    /// memory under `memories_considered`. Returns the spec id; the caller
+    /// populates `cite_evidence` and triggers close.
+    fn cite_plant_spec_with_two_cite_memory(
+        layout: &OrbitLayout,
+        spec_id: &str,
+        cite_evidence: Vec<crate::schema::CiteEvidence>,
+    ) -> Spec {
+        use crate::schema::{
+            Card, CardMaturity, MemoryReconciliation, ReconciliationDisposition,
+        };
+        layout.ensure_dirs().unwrap();
+        let card = Card {
+            id: Some("0037-memory-gates".into()),
+            feature: "memory gates".into(),
+            as_a: None,
+            i_want: None,
+            so_that: None,
+            goal: "g".into(),
+            maturity: CardMaturity::Planned,
+            park: None,
+            scenarios: vec![],
+            specs: vec![],
+            relations: vec![],
+            references: vec![],
+            notes: vec![],
+        };
+        std::fs::write(
+            layout.card_file("0037-memory-gates"),
+            serialise_yaml(&card).unwrap(),
+        )
+        .unwrap();
+        memory_remember(
+            layout,
+            &MemoryRememberArgs {
+                key: "two-cite-memory".into(),
+                body: "the fix is described in the cited docs".into(),
+                labels: vec!["0037-memory-gates".into()],
+                timestamp: Some("2026-05-27T00:00:00Z".into()),
+                no_nudge: false,
+                no_warn: false,
+                cites: vec!["docs/a.md".into(), "docs/b.md".into()],
+            },
+        )
+        .unwrap();
+        let spec = Spec {
+            id: spec_id.into(),
+            goal: "wire cite-evidence gate".into(),
+            cards: vec!["0037-memory-gates".into()],
+            status: SpecStatus::Open,
+            labels: vec![],
+            acceptance_criteria: vec![],
+            memories_considered: vec![MemoryReconciliation {
+                key: "two-cite-memory".into(),
+                disposition: ReconciliationDisposition::Adopted,
+                reason: "evidence drawn from the cited docs".into(),
+                cite_evidence,
+            }],
+            closed_at: None,
+        };
+        layout.ensure_spec_dir(&spec.id).unwrap();
+        std::fs::write(layout.spec_file(&spec.id), serialise_yaml(&spec).unwrap()).unwrap();
+        spec
+    }
+
+    /// AC-04: zero cite_evidence entries against a two-cite memory → close
+    /// refused; refusal message names the memory key and the missing cite
+    /// paths and the actionable next step.
+    #[test]
+    fn cite_spec_close_refuses_when_cite_evidence_covers_zero_of_two_cites() {
+        let dir = tempdir().unwrap();
+        let layout = OrbitLayout::at(dir.path());
+        let spec = cite_plant_spec_with_two_cite_memory(
+            &layout,
+            "2026-05-27-cite-zero",
+            vec![],
+        );
+        let err = spec_close(
+            &layout,
+            &SpecCloseArgs {
+                id: spec.id.clone(),
+                force: false,
+            },
+        )
+        .unwrap_err();
+        let msg = err.message.clone();
+        assert!(msg.contains("two-cite-memory"), "memory key in msg: {msg}");
+        assert!(msg.contains("docs/a.md"), "first cite in msg: {msg}");
+        assert!(msg.contains("docs/b.md"), "second cite in msg: {msg}");
+        assert!(
+            msg.contains("read") && msg.contains("cite_evidence"),
+            "actionable next step in msg: {msg}",
+        );
+    }
+
+    /// AC-04: one of two cites evidenced → still refused (every cite_path
+    /// must be covered).
+    #[test]
+    fn cite_spec_close_refuses_when_cite_evidence_covers_one_of_two_cites() {
+        use crate::schema::CiteEvidence;
+        let dir = tempdir().unwrap();
+        let layout = OrbitLayout::at(dir.path());
+        let spec = cite_plant_spec_with_two_cite_memory(
+            &layout,
+            "2026-05-27-cite-one",
+            vec![CiteEvidence {
+                cite_path: "docs/a.md".into(),
+                excerpt: "load-bearing line from a".into(),
+                read_at: "2026-05-27T00:00:00Z".into(),
+            }],
+        );
+        let err = spec_close(
+            &layout,
+            &SpecCloseArgs {
+                id: spec.id.clone(),
+                force: false,
+            },
+        )
+        .unwrap_err();
+        let msg = err.message.clone();
+        assert!(msg.contains("docs/b.md"), "missing cite must surface: {msg}");
+        // The already-evidenced cite must NOT appear in the missing list.
+        // The refusal message format embeds "missing cite_evidence for: <list>"
+        // — assert docs/a.md does not appear inside the missing portion. The
+        // message also names the memory key; allow that occurrence by
+        // splitting on the canonical separator.
+        let missing_section = msg
+            .split("missing cite_evidence for:")
+            .nth(1)
+            .unwrap_or("");
+        assert!(
+            !missing_section.contains("docs/a.md"),
+            "already-evidenced cite must NOT be in missing list: {msg}",
+        );
+    }
+
+    /// AC-04: both cites evidenced → close succeeds.
+    #[test]
+    fn cite_spec_close_succeeds_when_cite_evidence_covers_both_cites() {
+        use crate::schema::CiteEvidence;
+        let dir = tempdir().unwrap();
+        let layout = OrbitLayout::at(dir.path());
+        let spec = cite_plant_spec_with_two_cite_memory(
+            &layout,
+            "2026-05-27-cite-both",
+            vec![
+                CiteEvidence {
+                    cite_path: "docs/a.md".into(),
+                    excerpt: "line drawn from a.md".into(),
+                    read_at: "2026-05-27T00:00:00Z".into(),
+                },
+                CiteEvidence {
+                    cite_path: "docs/b.md".into(),
+                    excerpt: "line drawn from b.md".into(),
+                    read_at: "2026-05-27T00:00:00Z".into(),
+                },
+            ],
+        );
+        let result = spec_close(
+            &layout,
+            &SpecCloseArgs {
+                id: spec.id.clone(),
+                force: false,
+            },
+        )
+        .unwrap();
+        assert!(result.forced_uncited_evidence.is_empty());
+    }
+
+    /// AC-04: a memories_considered entry pointing at a memory with NO cites
+    /// passes the gate unchanged — the new pass only fires when the
+    /// referenced memory carries cites.
+    #[test]
+    fn cite_spec_close_unchanged_when_referenced_memory_has_no_cites() {
+        use crate::schema::{
+            Card, CardMaturity, MemoryReconciliation, ReconciliationDisposition,
+        };
+        let dir = tempdir().unwrap();
+        let layout = OrbitLayout::at(dir.path());
+        layout.ensure_dirs().unwrap();
+        let card = Card {
+            id: Some("0037-memory-gates".into()),
+            feature: "memory gates".into(),
+            as_a: None,
+            i_want: None,
+            so_that: None,
+            goal: "g".into(),
+            maturity: CardMaturity::Planned,
+            park: None,
+            scenarios: vec![],
+            specs: vec![],
+            relations: vec![],
+            references: vec![],
+            notes: vec![],
+        };
+        std::fs::write(
+            layout.card_file("0037-memory-gates"),
+            serialise_yaml(&card).unwrap(),
+        )
+        .unwrap();
+        memory_remember(
+            &layout,
+            &MemoryRememberArgs {
+                key: "no-cite-memory".into(),
+                body: "no cites here".into(),
+                labels: vec!["0037-memory-gates".into()],
+                timestamp: Some("2026-05-27T00:00:00Z".into()),
+                no_nudge: false,
+                no_warn: false,
+                cites: vec![],
+            },
+        )
+        .unwrap();
+        let spec = Spec {
+            id: "2026-05-27-no-cite".into(),
+            goal: "no cites needed".into(),
+            cards: vec!["0037-memory-gates".into()],
+            status: SpecStatus::Open,
+            labels: vec![],
+            acceptance_criteria: vec![],
+            memories_considered: vec![MemoryReconciliation {
+                key: "no-cite-memory".into(),
+                disposition: ReconciliationDisposition::Adopted,
+                reason: "no cites — gate inert".into(),
+                cite_evidence: vec![],
+            }],
+            closed_at: None,
+        };
+        layout.ensure_spec_dir(&spec.id).unwrap();
+        std::fs::write(layout.spec_file(&spec.id), serialise_yaml(&spec).unwrap()).unwrap();
+        let result = spec_close(
+            &layout,
+            &SpecCloseArgs {
+                id: spec.id.clone(),
+                force: false,
+            },
+        )
+        .unwrap();
+        assert!(result.forced_uncited_evidence.is_empty());
+    }
+
+    /// AC-04: `--force` bypasses the cite-evidence gate and the bypassed
+    /// memory key surfaces in `forced_uncited_evidence` on the result.
+    #[test]
+    fn cite_spec_close_force_bypasses_and_records_forced_uncited_evidence() {
+        let dir = tempdir().unwrap();
+        let layout = OrbitLayout::at(dir.path());
+        let spec = cite_plant_spec_with_two_cite_memory(
+            &layout,
+            "2026-05-27-cite-force",
+            vec![],
+        );
+        let result = spec_close(
+            &layout,
+            &SpecCloseArgs {
+                id: spec.id.clone(),
+                force: true,
+            },
+        )
+        .unwrap();
+        assert_eq!(result.forced_uncited_evidence.len(), 1);
+        assert!(
+            result.forced_uncited_evidence[0].contains("two-cite-memory"),
+            "bypassed entry must name the memory: {:?}",
+            result.forced_uncited_evidence,
+        );
+    }
+
+    /// AC-07: regression against the real `.orbit/memories/` corpus in this
+    /// repo. Every existing memory MUST load with empty `cites` (the
+    /// pre-spec on-disk shape does not carry the field) AND spec.close's
+    /// cite-evidence pre-flight MUST pass without `cite_evidence` against
+    /// a fixture spec referencing each — because cite-less memories
+    /// short-circuit the second-pass loop (per the
+    /// `if memory.cites.is_empty() { continue; }` check in `spec_close`).
+    /// Closes the backward-compat halt condition #3 from the tabletop
+    /// sidecar: "Backward-compat break. Old cite-less memories fail to
+    /// load or get spuriously flagged."
+    #[test]
+    fn cite_existing_corpus_loads_with_empty_cites_and_passes_close_gate() {
+        use crate::schema::{
+            Card, CardMaturity, MemoryReconciliation, ReconciliationDisposition,
+        };
+        // Locate the repo's `.orbit/memories/` directory. CARGO_MANIFEST_DIR
+        // points at `crates/core`; the orbit repo root is three levels up
+        // (`crates/core` → `crates` → `orbit-state` → repo root). If the
+        // expected path isn't there (test running outside the dev repo
+        // checkout), skip rather than fail — this is a local regression
+        // detector, not a portable CI gate.
+        let manifest_dir = env!("CARGO_MANIFEST_DIR");
+        let memories_dir = std::path::PathBuf::from(manifest_dir)
+            .join("../../../.orbit/memories");
+        if !memories_dir.is_dir() {
+            eprintln!(
+                "skipping corpus regression: .orbit/memories/ not found at {}",
+                memories_dir.display(),
+            );
+            return;
+        }
+
+        // Phase 1: every existing memory file parses, and `cites` is empty.
+        let entries = std::fs::read_dir(&memories_dir).expect("read memories dir");
+        let mut corpus_keys: Vec<String> = Vec::new();
+        let mut corpus_yamls: Vec<(String, String)> = Vec::new();
+        for entry in entries {
+            let path = entry.expect("entry").path();
+            if path.extension().and_then(|e| e.to_str()) != Some("yaml") {
+                continue;
+            }
+            let text = std::fs::read_to_string(&path).expect("read memory yaml");
+            let memory: Memory = parse_yaml(&text).unwrap_or_else(|e| {
+                panic!("corpus memory {} failed to parse: {e}", path.display())
+            });
+            assert!(
+                memory.cites.is_empty(),
+                "corpus memory `{}` loaded with non-empty cites — pre-spec corpus should carry none",
+                memory.key,
+            );
+            corpus_keys.push(memory.key.clone());
+            corpus_yamls.push((memory.key, text));
+        }
+        // The corpus must have at least one memory (sanity — guards
+        // against a silently-empty directory passing the test).
+        assert!(
+            !corpus_keys.is_empty(),
+            "no memory files found in corpus at {}",
+            memories_dir.display(),
+        );
+
+        // Phase 2: replicate the corpus into a tempdir layout, plant a
+        // fixture spec referencing each corpus memory under
+        // memories_considered (no cite_evidence — these memories carry
+        // no cites), and assert spec.close's pre-flight passes the
+        // cite-evidence gate.
+        let dir = tempdir().unwrap();
+        let layout = OrbitLayout::at(dir.path());
+        layout.ensure_dirs().unwrap();
+        for (key, yaml) in &corpus_yamls {
+            std::fs::write(layout.memory_file(key), yaml).expect("write corpus memory");
+        }
+        // Plant a placeholder card to satisfy the linked-card check.
+        let card = Card {
+            id: Some("0037-memory-gates".into()),
+            feature: "memory gates".into(),
+            as_a: None,
+            i_want: None,
+            so_that: None,
+            goal: "g".into(),
+            maturity: CardMaturity::Planned,
+            park: None,
+            scenarios: vec![],
+            specs: vec![],
+            relations: vec![],
+            references: vec![],
+            notes: vec![],
+        };
+        std::fs::write(
+            layout.card_file("0037-memory-gates"),
+            serialise_yaml(&card).unwrap(),
+        )
+        .unwrap();
+        let memories_considered: Vec<MemoryReconciliation> = corpus_keys
+            .iter()
+            .map(|key| MemoryReconciliation {
+                key: key.clone(),
+                disposition: ReconciliationDisposition::NotApplicable,
+                reason: "corpus regression — no cites, no evidence needed".into(),
+                cite_evidence: vec![],
+            })
+            .collect();
+        let spec = Spec {
+            id: "2026-05-27-cite-corpus-regression".into(),
+            goal: "corpus regression — every existing memory passes the cite-evidence gate".into(),
+            cards: vec!["0037-memory-gates".into()],
+            status: SpecStatus::Open,
+            labels: vec![],
+            acceptance_criteria: vec![],
+            memories_considered,
+            closed_at: None,
+        };
+        layout.ensure_spec_dir(&spec.id).unwrap();
+        std::fs::write(layout.spec_file(&spec.id), serialise_yaml(&spec).unwrap()).unwrap();
+        let result = spec_close(
+            &layout,
+            &SpecCloseArgs {
+                id: spec.id.clone(),
+                force: false,
+            },
+        )
+        .expect("corpus regression: spec.close must not refuse on cite-evidence for cite-less memories");
+        assert!(
+            result.forced_uncited_evidence.is_empty(),
+            "corpus regression: cite-evidence gate spuriously flagged memories: {:?}",
+            result.forced_uncited_evidence,
+        );
     }
 
     #[test]
@@ -11510,6 +12239,7 @@ mod tests {
                 timestamp: Some("2026-05-01T00:00:00Z".into()),
                 no_nudge: false,
                 no_warn: false,
+                cites: vec![],
             },
         )
         .unwrap();
@@ -11522,6 +12252,7 @@ mod tests {
                 timestamp: Some("2026-05-14T00:00:00Z".into()),
                 no_nudge: false,
                 no_warn: false,
+                cites: vec![],
             },
         )
         .unwrap();
@@ -11562,6 +12293,7 @@ mod tests {
                 timestamp: Some("2026-05-01T00:00:00Z".into()),
                 no_nudge: false,
                 no_warn: false,
+                cites: vec![],
             },
         )
         .unwrap();
@@ -11574,6 +12306,7 @@ mod tests {
                 timestamp: Some("2026-05-14T00:00:00Z".into()),
                 no_nudge: false,
                 no_warn: false,
+                cites: vec![],
             },
         )
         .unwrap();
@@ -11611,6 +12344,7 @@ mod tests {
                 timestamp: Some("2026-05-01T00:00:00Z".into()),
                 no_nudge: false,
                 no_warn: false,
+                cites: vec![],
             },
         )
         .unwrap();
@@ -11623,6 +12357,7 @@ mod tests {
                 timestamp: Some("2026-05-14T00:00:00Z".into()),
                 no_nudge: false,
                 no_warn: false,
+                cites: vec![],
             },
         )
         .unwrap();
@@ -12205,6 +12940,7 @@ canonical_code:
                 timestamp: Some("2026-05-18T00:00:00Z".into()),
                 no_nudge: false,
                 no_warn: false,
+                cites: vec![],
             },
         )
         .unwrap();
@@ -12232,6 +12968,7 @@ canonical_code:
                 timestamp: Some("2026-05-18T00:00:00Z".into()),
                 no_nudge: false,
                 no_warn: false,
+                cites: vec![],
             },
         )
         .unwrap();
@@ -12255,6 +12992,7 @@ canonical_code:
                 timestamp: Some("2026-05-18T00:00:00Z".into()),
                 no_nudge: true,
                 no_warn: false,
+                cites: vec![],
             },
         )
         .unwrap();

@@ -3,7 +3,6 @@ name: review-pr
 description: Verify an implementation before merge — runs tests, checks AC coverage, reads diff cold
 argument-hint: [spec-id]
 allowed-tools: Bash Read Edit Write Grep AskUserQuestion
-disable-model-invocation: true
 context: fork
 agent: general-purpose
 ---

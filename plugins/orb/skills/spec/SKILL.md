@@ -2,7 +2,6 @@
 name: spec
 description: Generate a structured YAML specification with numbered ACs from interview results
 argument-hint: "[interview_file]"
-disable-model-invocation: true
 allowed-tools: Bash Read Edit Write
 ---
 
@@ -127,6 +126,30 @@ memories_considered:
 ```
 
 Per spec 2026-05-19-memory-gates-decisions ac-03 (D3a): `memories_considered` is a top-level `Spec` field — uniform across the spec, not per-AC. `spec.close` reads this field at close time and refuses closure for any matching memory whose key is absent. If the tabletop session found no matching memories, omit the field; it is `skip_serializing_if = "Vec::is_empty"` so absent specs stay byte-identical on disk.
+
+### 5a. Read cited sources and record `cite_evidence`
+
+For each memory in `memories_considered` whose record carries `cites:`, the spec author MUST read each cited source and record `cite_evidence` on that memory's reconciliation entry. The shape is a list of `{ cite_path, excerpt, read_at }`:
+
+```yaml
+memories_considered:
+  - key: load-bearing-cited-memory
+    disposition: adopted
+    reason: "evidence drawn from the cited docs, not the body summary"
+    cite_evidence:
+      - cite_path: docs/the-load-bearing-doc.md
+        excerpt: |
+          the 1-3 line passage that carries the mechanical detail
+          the memory body summarised
+        read_at: 2026-05-27T12:34:56Z
+```
+
+Four directives, all gated by the `spec.close` pre-flight (per spec 2026-05-27-memory-cite-reading ac-04 — the second-pass cite-evidence gate refuses closure when any cite on a referenced memory lacks evidence):
+
+- One `cite_evidence` entry per cite on the matched memory — each entry MUST carry `cite_path`, `excerpt`, AND `read_at` (RFC3339 timestamp). Empty or absent on memories without `cites:`.
+- The `excerpt` MUST be drawn verbatim from the file contents at `cite_path` — not paraphrased from the memory body, not synthesised, not summarised. The whole point of the cite-read step is to defeat memory-compression artefacts; an excerpt that doesn't come from the cited file is evidence that nobody opened the file.
+- `read_at` is the RFC3339 timestamp at the moment of read — it pins the evidence in time so a later reviewer can audit which version of the cited file was the source.
+- `spec.close` blocks closure when any `cites[].path` on a referenced memory lacks a matching `cite_evidence.cite_path` entry. The refusal message names the memory key, the missing cite paths, and prompts the reader to read the file and record an excerpt.
 
 ### 6. Save the Spec
 

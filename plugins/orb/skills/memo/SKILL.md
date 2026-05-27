@@ -2,7 +2,6 @@
 name: memo
 description: Quickly jot a rough idea and file it in `.orbit/memos/`
 argument-hint: "[slug]"
-disable-model-invocation: true
 allowed-tools: Bash Read Write AskUserQuestion
 ---
 

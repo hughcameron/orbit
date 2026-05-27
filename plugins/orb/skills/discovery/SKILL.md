@@ -2,7 +2,6 @@
 name: discovery
 description: Explore a vague idea through Q&A — capture what good looks like as an interview record for /orb:spec
 argument-hint: "[topic]"
-disable-model-invocation: true
 allowed-tools: AskUserQuestion Read Edit Write Glob Grep
 ---
 

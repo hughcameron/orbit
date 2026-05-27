@@ -3,7 +3,6 @@ name: review-spec
 description: Progressive spec review — depth scales with findings, not upfront classification
 argument-hint: [spec-id]
 allowed-tools: Bash Read Edit Write AskUserQuestion
-disable-model-invocation: true
 context: fork
 agent: general-purpose
 ---

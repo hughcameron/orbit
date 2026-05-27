@@ -2,7 +2,6 @@
 name: rally
 description: Coordinate multiple cards through the orbit pipeline as one delivery — proposal → design → implementation → review
 argument-hint: "[card-id-1 card-id-2 ...] [autonomy]"
-disable-model-invocation: true
 allowed-tools: Bash Read Edit Write Agent AskUserQuestion TaskCreate TaskUpdate CronCreate CronList CronDelete
 ---
 

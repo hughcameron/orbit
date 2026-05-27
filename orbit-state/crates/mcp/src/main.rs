@@ -415,7 +415,11 @@ fn tool_descriptors() -> Vec<Value> {
                     "labels":    { "type": "array", "items": { "type": "string" } },
                     "timestamp": { "type": "string" },
                     "no_nudge":  { "type": "boolean" },
-                    "no_warn":   { "type": "boolean" }
+                    "no_warn":   { "type": "boolean" },
+                    // Local file paths to authoritative sources this memory cites
+                    // (repeatable). Stored on the memory's `cites:` field. Per
+                    // spec 2026-05-27-memory-cite-reading ac-01 / ac-06.
+                    "cites":     { "type": "array", "items": { "type": "string" } }
                 },
                 "additionalProperties": false
             }

@@ -1340,6 +1340,156 @@ fn memory_remember_cli_human_mode_renders_nudge_to_stderr() {
     );
 }
 
+// ----- memory.remember --cite + memory.match cites CLI parity (ac-06) -----
+//
+// Per spec 2026-05-27-memory-cite-reading ac-06: the --cite flag and the
+// cites field are exposed on both CLI and MCP. These tests exercise the
+// CLI surface and the matching MCP parity tests live in
+// `crates/mcp/tests/parity.rs`. State-mutation parity (same on-disk YAML
+// regardless of surface) is asserted by the in-MCP `match-cited` flow.
+
+#[test]
+fn cite_remember_cli_with_two_cite_flags_writes_cites_field() {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::create_dir_all(dir.path().join(".orbit")).unwrap();
+    let cli_bin = env!("CARGO_BIN_EXE_orbit");
+    let output = Command::new(cli_bin)
+        .args([
+            "--root",
+            dir.path().to_str().unwrap(),
+            "--json",
+            "memory",
+            "remember",
+            "cli-cite",
+            "body",
+            "--cite",
+            "docs/a.md",
+            "--cite",
+            "docs/b.md",
+        ])
+        .stdin(Stdio::null())
+        .output()
+        .expect("run cli");
+    assert!(output.status.success(), "stderr: {}", String::from_utf8_lossy(&output.stderr));
+    let stdout = String::from_utf8(output.stdout).expect("utf-8");
+    let envelope: serde_json::Value =
+        serde_json::from_str(stdout.trim_end_matches('\n')).expect("json");
+    let memory = &envelope["data"]["result"]["memory"];
+    let cites = memory["cites"].as_array().expect("cites array");
+    assert_eq!(cites.len(), 2);
+    assert_eq!(cites[0]["path"].as_str(), Some("docs/a.md"));
+    assert_eq!(cites[1]["path"].as_str(), Some("docs/b.md"));
+    let yaml = std::fs::read_to_string(dir.path().join(".orbit/memories/cli-cite.yaml")).unwrap();
+    assert!(yaml.contains("docs/a.md"));
+    assert!(yaml.contains("docs/b.md"));
+}
+
+#[test]
+fn cite_remember_cli_without_cite_flag_omits_cites_field_on_disk() {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::create_dir_all(dir.path().join(".orbit")).unwrap();
+    let cli_bin = env!("CARGO_BIN_EXE_orbit");
+    let output = Command::new(cli_bin)
+        .args([
+            "--root",
+            dir.path().to_str().unwrap(),
+            "--json",
+            "memory",
+            "remember",
+            "cli-no-cite",
+            "body",
+        ])
+        .stdin(Stdio::null())
+        .output()
+        .expect("run cli");
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).expect("utf-8");
+    let envelope: serde_json::Value =
+        serde_json::from_str(stdout.trim_end_matches('\n')).expect("json");
+    let memory = &envelope["data"]["result"]["memory"];
+    assert!(
+        memory.get("cites").is_none(),
+        "cite-less memory remember response must omit cites: {memory}",
+    );
+    let yaml = std::fs::read_to_string(dir.path().join(".orbit/memories/cli-no-cite.yaml")).unwrap();
+    assert!(!yaml.contains("cites:"), "yaml must omit cites: {yaml}");
+}
+
+#[test]
+fn cite_match_cli_exposes_cites_on_every_result() {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::create_dir_all(dir.path().join(".orbit")).unwrap();
+    let cli_bin = env!("CARGO_BIN_EXE_orbit");
+    // Plant cited memory.
+    let _ = Command::new(cli_bin)
+        .args([
+            "--root",
+            dir.path().to_str().unwrap(),
+            "memory",
+            "remember",
+            "cli-match-cited",
+            "decision-moment mechanism for cli parity",
+            "--label",
+            "card-cli-parity",
+            "--cite",
+            "docs/cited.md",
+        ])
+        .stdin(Stdio::null())
+        .output()
+        .expect("run cli");
+    // Plant uncited memory.
+    let _ = Command::new(cli_bin)
+        .args([
+            "--root",
+            dir.path().to_str().unwrap(),
+            "memory",
+            "remember",
+            "cli-match-uncited",
+            "decision-moment mechanism for cli parity",
+            "--label",
+            "card-cli-parity",
+        ])
+        .stdin(Stdio::null())
+        .output()
+        .expect("run cli");
+    let output = Command::new(cli_bin)
+        .args([
+            "--root",
+            dir.path().to_str().unwrap(),
+            "--json",
+            "memory",
+            "match",
+            "decision mechanism parity",
+            "--label",
+            "card-cli-parity",
+        ])
+        .stdin(Stdio::null())
+        .output()
+        .expect("run cli");
+    assert!(output.status.success(), "stderr: {}", String::from_utf8_lossy(&output.stderr));
+    let stdout = String::from_utf8(output.stdout).expect("utf-8");
+    let envelope: serde_json::Value =
+        serde_json::from_str(stdout.trim_end_matches('\n')).expect("json");
+    let matches = envelope["data"]["result"]["matches"]
+        .as_array()
+        .expect("matches array");
+    assert_eq!(matches.len(), 2);
+    for m in matches {
+        let memory = &m["memory"];
+        let cites = memory
+            .get("cites")
+            .and_then(serde_json::Value::as_array)
+            .expect("every match.memory must carry cites field");
+        let key = memory["key"].as_str().unwrap();
+        if key == "cli-match-cited" {
+            assert_eq!(cites.len(), 1);
+            assert_eq!(cites[0]["path"].as_str(), Some("docs/cited.md"));
+        } else {
+            assert!(cites.is_empty(), "uncited match must have empty cites");
+        }
+    }
+}
+
 // ----- topology setup CLI parity (spec 2026-05-18-topology-substrate-migration ac-05) -----
 
 /// Set up a fixture that exercises the plugin-repo branch of
